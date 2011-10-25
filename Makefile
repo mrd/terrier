@@ -33,7 +33,7 @@ $(IMGNAME).elf: init/init.o init/startup.o ldscripts/$(IMGNAME).ld
 .PHONY: clean test
 
 clean:
-	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin init/startup.o init/init.o
+	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin init/startup.o init/init.o ucmd ukermit
 	(cd util; make clean)
 	(cd omap-u-boot-utils; make clean V=1)
 

@@ -37,6 +37,7 @@ distclean: clean
 	rm -f $(IMGNAME)-nand.bin
 
 test: $(IMGNAME)-nand.bin
+	@echo "***** To quit QEMU type: Ctrl-a x"
 	qemu-system-arm -M beagle -m 128M -nographic -mtdblock $<
 
 util/bb_nandflash_ecc: util/bb_nandflash_ecc.c

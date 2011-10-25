@@ -96,3 +96,5 @@ ukermit:
 
 init/startup.o: init/startup.S
 init/init.o: init/init.c
+
+# vi: set noexpandtab sts=8 sw=8:

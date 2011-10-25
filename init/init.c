@@ -58,7 +58,7 @@ volatile unsigned int * const UART3 = (unsigned int *)0x49020000;
  *   bit 6 TX_SR_E   -- TX hold (FIFO) and shift regs: 0=not empty, 1=empty *
  *   bit 5 TX_FIFO_E -- TX hold (FIFO) reg: 0=not empty, 1=empty            *
  ****************************************************************************/
-	 
+
 void print_uart3(const char *s) {
   while(*s != '\0') { /* Loop until end of string */
     while ((UART3[LSR_REG_IDX] & (1<<6)) == 0);
@@ -66,7 +66,18 @@ void print_uart3(const char *s) {
     s++; /* Next char */
   }
 }
-	 
+
 void c_entry() {
   print_uart3("Hello world!\n");
 }
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: nil
+ * mode: C
+ * c-file-style: "gnu"
+ * c-basic-offset: 2
+ * End:
+ */
+
+/* vi: set et sw=2 sts=2: */

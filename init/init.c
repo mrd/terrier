@@ -37,11 +37,29 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-volatile unsigned int * const UART3 = (unsigned int *)0x49020000;
-#define THR_REG_IDX 0
-#define LSR_REG_IDX 5
+#include "types.h"
+
+#define NS16650_REG(x) u8 x; u8 _unused_##x[3];
+
+struct ns16650_regs {
+  NS16650_REG(thr);
+  NS16650_REG(ier);
+  NS16650_REG(fcr);
+  NS16650_REG(lcr);
+  NS16650_REG(mcr);
+  NS16650_REG(lsr);
 #define LSR_REG_TX_SR_E   (1<<6)
 #define LSR_REG_TX_FIFO_E (1<<5)
+  NS16650_REG(msr);
+  NS16650_REG(spr);
+  NS16650_REG(mdr1);
+};
+#define dll thr
+#define dlh ier
+
+typedef volatile struct ns16650_regs *ns16650_regs_t;
+
+ns16650_regs_t UART3 = (ns16650_regs_t) 0x49020000;
 
 /***************************************************************************
  * THR_REG (offset 0x0)                                                    *
@@ -61,15 +79,49 @@ volatile unsigned int * const UART3 = (unsigned int *)0x49020000;
  *   bit 5 TX_FIFO_E -- TX hold (FIFO) reg: 0=not empty, 1=empty            *
  ****************************************************************************/
 
-void print_uart3(const char *s) {
+#define LCRVAL_8N1 0x3
+#define LCR_BKSE 0x80           /* bank select enable */
+
+#define LCRVAL LCRVAL_8N1
+#define MCRVAL 0x3              /* DTR|RTS */
+#define FCRVAL 0x7              /* EN|RX_CLR|TX_CLR */
+
+/* Reset UART3 and configure it for 8N1 115200 operation. */
+void reset_uart3(void)
+{
+  u16 divisor = 0x001A;         /* 115200 baud */
+
+  UART3->ier = 0x00;            /* disable interrupts */
+
+  UART3->mdr1 = 0x7;            /* disable */
+
+  UART3->lcr = LCR_BKSE | LCRVAL;
+  UART3->dll = 0;
+  UART3->dlh = 0;
+  UART3->lcr = LCRVAL;
+  UART3->mcr = MCRVAL;
+  UART3->fcr = FCRVAL;
+  UART3->lcr = LCR_BKSE | LCRVAL;
+  UART3->dll = divisor & 0xFF;
+  UART3->dlh = (divisor >> 8) & 0xFF;
+  UART3->lcr = LCRVAL;
+
+  UART3->mdr1 = 0;              /* UART 16x mode */
+}
+
+void print_uart3(const char *s)
+{
   while(*s != '\0') { /* Loop until end of string */
-    while ((UART3[LSR_REG_IDX] & LSR_REG_TX_SR_E) == 0);
-    UART3[THR_REG_IDX] = (unsigned int)(*s); /* Transmit char */
+    while ((UART3->lsr & LSR_REG_TX_SR_E) == 0);
+    UART3->thr = (unsigned int)(*s); /* Transmit char */
     s++; /* Next char */
   }
 }
 
-void c_entry() {
+void c_entry()
+{
+  reset_uart3();
+
   print_uart3("Hello world!\n");
 }
 

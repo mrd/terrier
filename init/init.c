@@ -53,7 +53,7 @@ struct ns16650_regs {
   NS16650_REG(msr);
   NS16650_REG(spr);
   NS16650_REG(mdr1);
-};
+} PACKED;
 #define dll thr
 #define dlh ier
 

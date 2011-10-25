@@ -40,6 +40,12 @@
 #ifndef _TYPES_H_
 #define _TYPES_H_
 
+#ifdef __GNUC__
+#define PACKED __attribute__((packed))
+#else
+#error "PACKED unsupported"
+#endif
+
 typedef unsigned char u8;
 typedef unsigned short u16;
 

@@ -1,0 +1,6 @@
+/**
+@page ub_caveats Known Caveats
+The following lists the known issues with omap U-Boot utils
+@li pusb does not yet work on windows. This is still a work in progress
+@li ukermit is cranky when used with large packets - it is disabled at the moment
+*/

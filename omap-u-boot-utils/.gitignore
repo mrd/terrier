@@ -1,0 +1,16 @@
+# Ignore libraries
+*.a
+*.o
+# Ignore swap files
+.*.swp
+# Ignore documentation
+docs/html/*
+docs/latex/*
+# Ignore generated exes
+*.exe
+pusb
+pserial
+ukermit
+ucmd
+gpsign
+tagger

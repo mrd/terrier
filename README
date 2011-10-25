@@ -1,0 +1,69 @@
+DESCRIPTION
+-----------
+
+Beginnings of a barebones application or operating system using the
+Beagle Board (OMAP3).
+
+COMPILATION
+-----------
+
+To generate a U-boot image (.uimg) file:
+
+    make
+
+To assemble a NAND flash image and test it with QEMU/Meego:
+
+    make test
+
+There are also 'clean' and 'distclean' targets available.
+
+TESTING
+-------
+
+Besides the 'make test' target above, take a look at the 'boot.sh'
+script. It can be used to load the U-boot image over the serial port
+onto a Beagle Board.
+
+For example:
+
+- Plug in and power on a Beagle Board with a serial cable to /dev/ttyS0
+- Run 'make && sh boot.sh'
+- Expected output:
+
+    Output:
+    Die ID #
+    Match Found. Operation completed!
+    Output:
+    loadb 82000000 115200
+    ## Ready for binary (kermit) download to 0x82000000 at 115200 bps...
+    Match Found. Operation completed!
+    Downloading file: 100.000% completed (244/244 bytes)
+    File Download completed
+    Output:
+    bootm 82000000
+    ## Booting kernel from Legacy Image at 82000000 ...
+       Image Name:   
+       Image Type:   ARM Linux Kernel Image (uncompressed)
+       Data Size:    180 Bytes =  0.2 kB
+       Load Address: 80008000
+       Entry Point:  80008000
+       Verifying Checksum ... OK
+       Loading Kernel Image ... OK
+    OK
+
+    Starting kernel ...
+
+    Hello world!
+    Match Found. Operation completed!
+
+NOTES
+-----
+
+By default, the Makefile uses the CodeSourcery arm-none-linux-gnueabi
+(GNU/Linux) tool-chain. You can also use arm-none-eabi if you want.
+
+    http://sourcery.mentor.com/sgpp/lite/arm/portal/subscription?@template=lite
+
+The GNU/Linux TAR contains the necessary files. Just unpack it and put
+the 'bin' directory in your path. There are also projects out there,
+such as EmDebian, with these tools packaged for your distribution.

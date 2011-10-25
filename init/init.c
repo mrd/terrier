@@ -40,6 +40,8 @@
 volatile unsigned int * const UART3 = (unsigned int *)0x49020000;
 #define THR_REG_IDX 0
 #define LSR_REG_IDX 5
+#define LSR_REG_TX_SR_E   (1<<6)
+#define LSR_REG_TX_FIFO_E (1<<5)
 
 /***************************************************************************
  * THR_REG (offset 0x0)                                                    *
@@ -61,7 +63,7 @@ volatile unsigned int * const UART3 = (unsigned int *)0x49020000;
 
 void print_uart3(const char *s) {
   while(*s != '\0') { /* Loop until end of string */
-    while ((UART3[LSR_REG_IDX] & (1<<6)) == 0);
+    while ((UART3[LSR_REG_IDX] & LSR_REG_TX_SR_E) == 0);
     UART3[THR_REG_IDX] = (unsigned int)(*s); /* Transmit char */
     s++; /* Next char */
   }

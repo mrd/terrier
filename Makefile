@@ -12,6 +12,9 @@ IMGNAME = puppy
 SFLAGS =
 CFLAGS =
 
+.PHONY: all
+all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
+
 $(IMGNAME).uimg: $(IMGNAME).bin
 	$(MKIMAGE) -A arm -C none -O linux -T kernel -d $< -a $(ADDRESS) -e $(ADDRESS) $@
 
@@ -32,9 +35,11 @@ $(IMGNAME).elf: init/init.o init/startup.o ldscripts/$(IMGNAME).ld
 clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin init/startup.o init/init.o
 	(cd util; make clean)
+	(cd omap-u-boot-utils; make clean V=1)
 
 distclean: clean
 	rm -f $(IMGNAME)-nand.bin
+	(cd omap-u-boot-utils; make distclean V=1)
 
 test: $(IMGNAME)-nand.bin
 	@echo "***** To quit QEMU type: Ctrl-a x"
@@ -42,6 +47,12 @@ test: $(IMGNAME)-nand.bin
 
 util/bb_nandflash_ecc: util/bb_nandflash_ecc.c
 	(cd util; make bb_nandflash_ecc)
+
+.PHONY: ucmd ukermit
+ucmd:
+	(cd omap-u-boot-utils; make ucmd V=1)
+ukermit:
+	(cd omap-u-boot-utils; make ukermit V=1)
 
 init/startup.o: init/startup.S
 init/init.o: init/init.c

@@ -51,8 +51,11 @@ util/bb_nandflash_ecc: util/bb_nandflash_ecc.c
 .PHONY: ucmd ukermit
 ucmd:
 	(cd omap-u-boot-utils; make ucmd V=1)
+	cp omap-u-boot-utils/ucmd .
+
 ukermit:
 	(cd omap-u-boot-utils; make ukermit V=1)
+	cp omap-u-boot-utils/ukermit .
 
 init/startup.o: init/startup.S
 init/init.o: init/init.c

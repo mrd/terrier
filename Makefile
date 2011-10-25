@@ -47,7 +47,7 @@ ADDRESS = 0x80008000
 IMGNAME = puppy
 
 SFLAGS =
-CFLAGS =
+CFLAGS = -Iinclude
 
 .PHONY: all
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin

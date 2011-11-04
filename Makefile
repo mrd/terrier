@@ -35,6 +35,17 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 
+##################################################
+
+C_FILES = init/init.c init/early_uart3.c init/device_id.c
+S_FILES = init/startup.S
+
+IMGNAME = puppy
+ADDRESS = 0x80008000
+OPT = 2
+
+##################################################
+
 ARCH = arm-none-linux-gnueabi
 CC = $(ARCH)-gcc
 LD = $(ARCH)-ld
@@ -42,16 +53,21 @@ AS = $(ARCH)-as
 OBJCOPY = $(ARCH)-objcopy
 MKIMAGE = mkimage
 
-ADDRESS = 0x80008000
+##################################################
 
-IMGNAME = puppy
-
-OPT = 2
-
-SFLAGS = -Iinclude
-CFLAGS = -Iinclude -O$(OPT)
+SFLAGS = -MMD -Iinclude
+CFLAGS = -MMD -Iinclude -O$(OPT)
 
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
+
+##################################################
+
+C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
+S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
+OBJS = $(C_OBJS) $(S_OBJS)
+DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
+
+##################################################
 
 .PHONY: all
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
@@ -65,16 +81,17 @@ $(IMGNAME)-nand.bin: $(IMGNAME).uimg u-boot/u-boot.bin util/bb_nandflash_ecc
 $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@
 
-$(IMGNAME).elf: init/init.o init/startup.o init/early_uart3.o init/device_id.o ldscripts/$(IMGNAME).ld
-	$(LD) -T ldscripts/$(IMGNAME).ld init/init.o init/startup.o init/early_uart3.o init/device_id.o $(LIBGCC) -o $@
+$(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld
+	$(LD) -T ldscripts/$(IMGNAME).ld $(OBJS) $(LIBGCC) -o $@
 
 %.o: %.S
-	$(CC) $(SFLAGS) $(SFLAGS) -c $< -o $@
+	$(CC) $(SFLAGS) -c $< -o $@
 
 .PHONY: clean test tags cscope
 
 clean:
-	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin init/startup.o init/init.o ucmd ukermit
+	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit
+	rm -f $(OBJS) $(DFILES)
 	(cd util; make clean)
 	(cd omap-u-boot-utils; make clean V=1)
 
@@ -109,9 +126,6 @@ ukermit:
 	(cd omap-u-boot-utils; make ukermit V=1)
 	cp omap-u-boot-utils/ukermit .
 
-init/startup.o: init/startup.S
-init/init.o: init/init.c
-init/early_uart3.o: init/early_uart3.c
-init/device_id.o: init/device_id.c
+-include $(DFILES)
 
 # vi: set noexpandtab sts=8 sw=8:

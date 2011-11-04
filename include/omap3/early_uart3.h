@@ -37,15 +37,17 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _ARM_MEMORY_H_
+#define _ARM_MEMORY_H_
+
 #include "types.h"
-#include "omap3/early_uart3.h"
 
-void c_entry()
-{
-  reset_uart3();
+void reset_uart3(void);
+void putc_uart3(const char);
+void putx_uart3(u32);
+void print_uart3(const char *);
 
-  print_uart3("Hello world!\n");
-}
+#endif
 
 /*
  * Local Variables:

@@ -63,8 +63,8 @@ $(IMGNAME)-nand.bin: $(IMGNAME).uimg u-boot/u-boot.bin util/bb_nandflash_ecc
 $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@
 
-$(IMGNAME).elf: init/init.o init/startup.o ldscripts/$(IMGNAME).ld
-	$(LD) -T ldscripts/$(IMGNAME).ld init/init.o init/startup.o -o $@
+$(IMGNAME).elf: init/init.o init/startup.o init/early_uart3.o ldscripts/$(IMGNAME).ld
+	$(LD) -T ldscripts/$(IMGNAME).ld init/init.o init/startup.o init/early_uart3.o -o $@
 
 %.o: %.S
 	$(CC) $(SFLAGS) $(SFLAGS) -c $< -o $@
@@ -98,5 +98,6 @@ ukermit:
 
 init/startup.o: init/startup.S
 init/init.o: init/init.c
+init/early_uart3.o: init/early_uart3.c
 
 # vi: set noexpandtab sts=8 sw=8:

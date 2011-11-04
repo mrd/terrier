@@ -51,6 +51,8 @@ OPT = 2
 SFLAGS = -Iinclude
 CFLAGS = -Iinclude -O$(OPT)
 
+LIBGCC = $(shell $(CC) -print-libgcc-file-name)
+
 .PHONY: all
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
 
@@ -64,7 +66,7 @@ $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@
 
 $(IMGNAME).elf: init/init.o init/startup.o init/early_uart3.o ldscripts/$(IMGNAME).ld
-	$(LD) -T ldscripts/$(IMGNAME).ld init/init.o init/startup.o init/early_uart3.o -o $@
+	$(LD) -T ldscripts/$(IMGNAME).ld init/init.o init/startup.o init/early_uart3.o $(LIBGCC) -o $@
 
 %.o: %.S
 	$(CC) $(SFLAGS) $(SFLAGS) -c $< -o $@

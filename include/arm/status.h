@@ -1,5 +1,5 @@
 /*
- * Entry point
+ * ARM status register
  *
  * -------------------------------------------------------------------
  *
@@ -37,20 +37,30 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "arm/status.h"
+#ifndef _ARM_STATUS_H_
+#define _ARM_STATUS_H_
 
-        .global _reset
-_reset:
-        /* Setup stacks */
-        LDR sp, =svc_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_FIQ
-        LDR sp, =fiq_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_IRQ
-        LDR sp, =irq_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_SYS
-        LDR sp, =sys_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_SVC /* back to SVC */
+#define MODE_USR 0x10           /* User */
+#define MODE_FIQ 0x11           /* Fast Interrupt Request */
+#define MODE_IRQ 0x12           /* Interrupt Request */
+#define MODE_SVC 0x13           /* Supervisor */
+#define MODE_ABT 0x17           /* Abort */
+#define MODE_UND 0x1b           /* Undefined instruction */
+#define MODE_SYS 0x1f           /* System */
 
-        /* Enter C world */
-        BL c_entry
-        B .
+#define MASK_IRQ 0x80
+#define MASK_FIQ 0x40
+#define MASK_ALL 0xc0
+
+#endif
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: nil
+ * mode: C
+ * c-file-style: "gnu"
+ * c-basic-offset: 2
+ * End:
+ */
+
+/* vi: set et sw=2 sts=2: */

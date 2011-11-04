@@ -71,7 +71,7 @@ $(IMGNAME).elf: init/init.o init/startup.o init/early_uart3.o init/device_id.o l
 %.o: %.S
 	$(CC) $(SFLAGS) $(SFLAGS) -c $< -o $@
 
-.PHONY: clean test
+.PHONY: clean test tags cscope
 
 clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin init/startup.o init/init.o ucmd ukermit
@@ -80,11 +80,22 @@ clean:
 
 distclean: clean
 	rm -f $(IMGNAME)-nand.bin
+	rm -f cscope.files cscope.in.out cscope.po.out cscope.out TAGS tags
 	(cd omap-u-boot-utils; make distclean V=1)
 
 test: $(IMGNAME)-nand.bin
 	@echo "***** To quit QEMU type: Ctrl-a x"
 	qemu-system-arm -M beagle -m 128M -nographic -mtdblock $<
+
+tags:
+	find . -name '*.[ch]' | xargs etags -o TAGS 
+	find . -name '*.[ch]' | xargs ctags -o tags
+
+cscope: cscope.files
+	cscope -b -q -k
+
+cscope.files:
+	find . -name '*.[ch]' > $@
 
 util/bb_nandflash_ecc: util/bb_nandflash_ecc.c
 	(cd util; make bb_nandflash_ecc)

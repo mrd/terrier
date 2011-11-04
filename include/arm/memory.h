@@ -1,5 +1,5 @@
 /*
- * Begin initialization in C.
+ * ARM memory management
  *
  * -------------------------------------------------------------------
  *
@@ -37,49 +37,97 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _ARM_MEMORY_H_
+#define _ARM_MEMORY_H_
+
 #include "types.h"
-#include "omap3/early_uart3.h"
-#include "arm/memory.h"
 
-ALIGNED(0x4000, static u32 l1table[4096]);
+#define MMU_CTRL_MMU    0x0001
+#define MMU_CTRL_DCACHE 0x0004
+#define MMU_CTRL_ICACHE 0x1000
 
-void build_identity_l1table(void)
+static inline void arm_mmu_ctrl(u32 set, u32 mask)
 {
-  u32 i, c, b;
-  for(i=0; i<4096; i++) {
-    if (0x800 <= i && i < 0xc00)
-      c = b = 1;
-    else
-      c = b = 0;
-    l1table[i] =
-      (i << 20) |      /* base address */
-      0x2  |           /* section entry */
-      0x10 |           /* reserved bit */
-      (0x0 << 5) |     /* domain */
-      (0x3 << 10) |    /* access perm. */
-      (c<<3) |         /* cached */
-      (b<<2);          /* buffered/writeback */
+  u32 cr;
+  asm volatile("MRC p15, #0, %0, c1, c0, #0":"=r"(cr));
+  cr &= ~mask;
+  cr |= set;
+  asm volatile("MCR p15, #0, %0, c1, c0, #0"::"r"(cr));
+}
+
+#define MMU_DOMAIN_NO_ACCESS 0x0
+#define MMU_DOMAIN_CLIENT    0x1
+#define MMU_DOMAIN_MANAGER   0x3
+
+static inline void arm_mmu_domain_access_ctrl(u32 set, u32 mask)
+{
+  u32 cr;
+  asm volatile("MRC p15, #0, %0, c3, c0, #0":"=r"(cr));
+  cr &= ~mask;
+  cr |= set;
+  asm volatile("MCR p15, #0, %0, c3, c0, #0"::"r"(cr));
+}
+
+static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
+{
+  u32 count;
+
+  if (exp < 3) {
+    u8 *ptr = (u8 *) addr;
+
+    count = 1 << exp;
+
+    for (; count > 0; --count)
+      *ptr++ = (u8) v;
+
+  } else {
+    u32 *ptr = (u32 *) addr;
+    u32 v4;
+
+    v &= 0x000000ff;
+    v4 = v;
+    v4 |= (v << 8);
+    v4 |= (v << 16);
+    v4 |= (v << 24);
+        
+    count = 1 << (exp - 2);
+
+    for(; count > 0; --count)
+      *ptr++ = v;
   }
 }
 
-void init_mmu(void)
+/* Set translation table base address for MMU. ttb must be 16kB aligned. */
+static inline void arm_mmu_set_ttb(void *ttbp)
 {
-  build_identity_l1table();
-  arm_mmu_flush_tlb();
-  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
-  arm_mmu_set_ttb(l1table);
-  arm_mmu_ctrl(MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE,
-               MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
+  u32 ttb = (u32) ttbp;
+  ttb &= 0xffffc000;
+  asm volatile("MCR p15, #0, %0, c2, c0, #0"::"r"(ttb));
 }
 
-void c_entry()
+/* Flush the entire translation lookaside buffer. */
+static inline void arm_mmu_flush_tlb(void)
 {
-  reset_uart3();
-
-  init_mmu();
-
-  print_uart3("Hello world!\n");
+  asm volatile("MCR p15, #0, %0, c8, c7, #0"::"r"(0));
 }
+
+static inline void arm_cache_flush_d(void)
+{
+  asm volatile("MCR p15, #0, %0, c7, c6, #0"::"r"(0));
+}
+
+static inline void arm_cache_flush_i(void)
+{
+  asm volatile("MCR p15, #0, %0, c7, c5, #0"::"r"(0));
+}
+
+static inline void arm_cache_flush(void)
+{
+  arm_cache_flush_d();
+  arm_cache_flush_i();
+}
+
+#endif
 
 /*
  * Local Variables:

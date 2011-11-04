@@ -46,8 +46,10 @@ ADDRESS = 0x80008000
 
 IMGNAME = puppy
 
-SFLAGS =
-CFLAGS = -Iinclude
+OPT = 2
+
+SFLAGS = -Iinclude
+CFLAGS = -Iinclude -O$(OPT)
 
 .PHONY: all
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
@@ -65,7 +67,7 @@ $(IMGNAME).elf: init/init.o init/startup.o ldscripts/$(IMGNAME).ld
 	$(LD) -T ldscripts/$(IMGNAME).ld init/init.o init/startup.o -o $@
 
 %.o: %.S
-	$(AS) $(SFLAGS) $< -o $@
+	$(CC) $(SFLAGS) $(SFLAGS) -c $< -o $@
 
 .PHONY: clean test
 

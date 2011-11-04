@@ -1,0 +1,9 @@
+*~
+*.d
+*.o
+*.bin
+*.elf
+*.uimg
+ucmd
+ukermit
+bb_nandflash_ecc

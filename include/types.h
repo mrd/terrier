@@ -1,5 +1,5 @@
 /*
- * Begin initialization in C.
+ * C type definitions
  *
  * -------------------------------------------------------------------
  *
@@ -46,8 +46,15 @@
 #error "PACKED unsupported"
 #endif
 
+#ifdef __GNUC__
+#define ALIGNED(n,decl) decl __attribute__((aligned(n)))
+#else
+#error "ALIGNED unsupported"
+#endif
+
 typedef unsigned char u8;
 typedef unsigned short u16;
+typedef unsigned int u32;
 
 #endif
 

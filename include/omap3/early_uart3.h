@@ -37,8 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ARM_MEMORY_H_
-#define _ARM_MEMORY_H_
+#ifndef _OMAP3_EARLY_UART3_H_
+#define _OMAP3_EARLY_UART3_H_
 
 #include "types.h"
 

@@ -41,7 +41,7 @@
 
 #define NS16650_REG(x) u8 x; u8 _unused_##x[3];
 
-struct ns16650_regs {
+PACKED_STRUCT(ns16650_regs) {
   NS16650_REG(thr);
   NS16650_REG(ier);
   NS16650_REG(fcr);
@@ -53,7 +53,7 @@ struct ns16650_regs {
   NS16650_REG(msr);
   NS16650_REG(spr);
   NS16650_REG(mdr1);
-} PACKED;
+} PACKED_END;
 #define dll thr
 #define dlh ier
 

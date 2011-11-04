@@ -42,12 +42,15 @@
 
 #ifdef __GNUC__
 #define PACKED __attribute__((packed))
+#define PACKED_STRUCT(name) struct name
+#define PACKED_FIELD(typ,name) typ name PACKED
+#define PACKED_END PACKED
 #else
 #error "PACKED unsupported"
 #endif
 
 #ifdef __GNUC__
-#define ALIGNED(n,decl) decl __attribute__((aligned(n)))
+#define ALIGNED(n,typ,name) typ name __attribute__((aligned(n)))
 #else
 #error "ALIGNED unsupported"
 #endif

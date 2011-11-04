@@ -41,7 +41,7 @@
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
 
-ALIGNED(0x4000, static u32 l1table[4096]);
+ALIGNED(0x4000, static u32, l1table[4096]);
 
 void build_identity_l1table(void)
 {

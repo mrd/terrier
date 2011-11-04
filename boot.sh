@@ -8,6 +8,6 @@ GOCMD=bootm
 EXPECT="Hello world!"
 
 ./ucmd    -p $SERIAL -c '' -e '#'
-./ucmd    -p $SERIAL -c "loadb $LOADADDR 115200" -e 'bps...'
+./ucmd    -p $SERIAL -c " loadb $LOADADDR 115200" -e 'bps...'
 ./ukermit -p $SERIAL -f $IMAGE
 ./ucmd    -p $SERIAL -c "$GOCMD $LOADADDR" -e "$EXPECT"

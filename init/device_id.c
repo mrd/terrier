@@ -39,49 +39,56 @@
 
 #include "types.h"
 #include "omap3/early_uart3.h"
-#include "arm/memory.h"
 
-ALIGNED(0x4000, static u32, l1table[4096]);
+PACKED_STRUCT(control_module_id) {
+  PACKED_FIELD(u32, _rsv1);
+  PACKED_FIELD(u32, control_idcode); /* 0x4830A204 */
+  PACKED_FIELD(u32, _rsv2[2]);
+  PACKED_FIELD(u32, control_production_id); /* 0x4830A210 */
+  PACKED_FIELD(u32, _rsv3);
+  PACKED_FIELD(u32, control_die_id[4]); /* 0x4830A218 */
+} PACKED_END;
+static volatile struct control_module_id *cm_id = (struct control_module_id *) 0x4830A200;
 
-void build_identity_l1table(void)
+static struct { char *version; u32 idcode; } idcodes[] = {
+  {"OMAP35x ES1.0"   , 0x0B6D602F},
+  {"OMAP35x ES2.0"   , 0x1B7AE02F},
+  {"OMAP35x ES2.1"   , 0x2B7AE02F},
+  {"OMAP35x ES3.0"   , 0x3B7AE02F},
+  {"OMAP35x ES3.1"   , 0x4B7AE02F},
+  {"OMAP35x ES3.1.2" , 0x7B7AE02F},
+  {NULL, 0}
+};
+
+void meminfo(void)
 {
-  u32 i, c, b;
-  for(i=0; i<4096; i++) {
-    if (0x800 <= i && i < 0xc00)
-      c = b = 1;
-    else
-      c = b = 0;
-    l1table[i] =
-      (i << 20) |      /* base address */
-      0x2  |           /* section entry */
-      0x10 |           /* reserved bit */
-      (0x0 << 5) |     /* domain */
-      (0x3 << 10) |    /* access perm. */
-      (c<<3) |         /* cached */
-      (b<<2);          /* buffered/writeback */
-  }
+  volatile u32 *SDRC_MCFG_0 = (u32 *) 0x6D000080;
+  volatile u32 *SDRC_MCFG_1 = (u32 *) 0x6D0000B0;
+  volatile u32 *SDRC_CS_CFG = (u32 *) 0x6D000040;
+  u32 cs0_ramsize = ((*SDRC_MCFG_0 >> 8) & 0x3FF) << 1;
+  u32 cs1_ramsize = ((*SDRC_MCFG_1 >> 8) & 0x3FF) << 1;
+  u32 cs1_start   = (((*SDRC_CS_CFG >> 8) & 0x3) | ((*SDRC_CS_CFG & 0xF) << 2)) * 0x2000000 + 0x80000000;
+  printf_uart3("SDRC CS0_size=%d MB CS1_size=%d MB CS1_start=%x\n",
+               cs0_ramsize, cs1_ramsize, cs1_start);
 }
 
-void init_mmu(void)
+void identify_device(void)
 {
-  build_identity_l1table();
-  arm_mmu_flush_tlb();
-  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
-  arm_mmu_set_ttb(l1table);
-  arm_mmu_ctrl(MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE,
-               MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
-}
-
-void c_entry()
-{
-  void identify_device(void);
-
-  reset_uart3();
-  identify_device();
-
-  init_mmu();
-
-  print_uart3("Hello world!\n");
+  int i;
+  u32 idcode = cm_id->control_idcode;
+  u32 prodcode = cm_id->control_production_id;
+  printf_uart3("IDCODE=%x PRODUCTION_ID=%x DIE_ID=%x%x%x%x\n",
+               idcode, prodcode,
+               cm_id->control_die_id[3],
+               cm_id->control_die_id[2],
+               cm_id->control_die_id[1],
+               cm_id->control_die_id[0]);
+  for(i=0; idcodes[i].idcode != 0; i++)
+    if(idcodes[i].idcode == idcode) {
+      printf_uart3("%s %s\n", idcodes[i].version, prodcode == 0xf0 ? "(GP device)" : "");
+      break;
+    }
+  meminfo();
 }
 
 /*

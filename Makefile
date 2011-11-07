@@ -56,7 +56,7 @@ MKIMAGE = mkimage
 ##################################################
 
 SFLAGS = -MMD -Iinclude
-CFLAGS = -MMD -Iinclude -O$(OPT)
+CFLAGS = -Wall -MMD -Iinclude -O$(OPT)
 
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 

@@ -154,7 +154,7 @@ void test(int fmt, ...)
   va_list ap;
   int i;
 
-  va_start(ap, fmt); 
+  va_start(ap, fmt);
   for (i = fmt; i >= 0; i = va_arg(ap, int))
     putx_uart3(i);
   va_end(ap);
@@ -168,8 +168,12 @@ static u32 base10_u32_divisors[10] = {
 void closure_vprintf (void putc_clo (void *, char), void *data, const char *fmt,
                       va_list args)
 {
-  int precision, width, mode, upper, ells;
+  int precision, width, mode,
+    upper,                      /* upper-case */
+    ells,                       /* number of 'l's (long) */
+    alt;                        /* "alternate form" */
   char padding;
+
 #define putc(c) putc_clo(data,c)
   while (*fmt) {
     /* handle ordinary characters and directives */
@@ -183,6 +187,7 @@ void closure_vprintf (void putc_clo (void *, char), void *data, const char *fmt,
       upper = 1;
       padding = ' ';
       ells = 0;
+      alt = 0;
 #define PRINTF_MODE_PRECISION 1
       mode = 0;
       /* handle directive arguments */
@@ -213,6 +218,11 @@ void closure_vprintf (void putc_clo (void *, char), void *data, const char *fmt,
               x = va_arg (args, u64);
             else
               x = va_arg (args, u32);
+
+            if (alt) {
+              putc ('0');
+              putc ('x');
+            }
 
             for (i = 0; i < w; i++) {
               li = (x >> (((w - 1) - i) << 2)) & 0x0F;
@@ -312,6 +322,9 @@ void closure_vprintf (void putc_clo (void *, char), void *data, const char *fmt,
           break;
         case '.':
           mode = PRINTF_MODE_PRECISION;
+          break;
+        case '#':
+          alt = 1;
           break;
         default:
           if ('0' <= *fmt && *fmt <= '9') {

@@ -93,7 +93,6 @@ clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit
 	rm -f $(OBJS) $(DFILES)
 	(cd util; make clean)
-	(cd omap-u-boot-utils; make clean V=1)
 
 distclean: clean
 	rm -f $(IMGNAME)-nand.bin

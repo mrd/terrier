@@ -144,11 +144,10 @@ void physical_init(void)
   DLOG(1, "physical memory bitmap: ");
   for(i=0;i<64;i++)
     if(BITMAP_TST(bitmap[0].map,i))
-      putc_uart3('X');
+      debuglog_no_prefix(1, "X");
     else
-      putc_uart3('.');
-
-  putc_uart3('\n');
+      debuglog_no_prefix(1, ".");
+  debuglog_no_prefix(1, "\n");
 }
 
 /*

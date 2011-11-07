@@ -255,6 +255,15 @@ void debuglog(const char *src, int lvl, const char *fmt, ...)
   }
 }
 
+void debuglog_no_prefix(int lvl, const char *fmt, ...)
+{
+  if(lvl <= current_debug_level) {
+    va_list args;
+    va_start(args, fmt);
+    closure_vprintf(_putc_uart3, NULL, fmt, args);
+    va_end(args);
+  }
+}
 
 /*
  * Local Variables:

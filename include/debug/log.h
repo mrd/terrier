@@ -47,6 +47,7 @@
 #endif
 
 void debuglog(const char *src, int lvl, const char *fmt, ...);
+void debuglog_no_prefix(int lvl, const char *fmt, ...);
 
 #endif
 

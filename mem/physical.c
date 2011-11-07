@@ -1,5 +1,5 @@
 /*
- * Begin initialization in C.
+ * Physical memory manager
  *
  * -------------------------------------------------------------------
  *
@@ -40,6 +40,8 @@
 #include "types.h"
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
+#define MODULE "pmm"
+#include "debug/log.h"
 
 #define DEFAULT_CS0_START 0x80000000
 #define BITMAP_PHYSADDR ((physaddr) DEFAULT_CS0_START)
@@ -100,11 +102,8 @@ void physical_init(void)
   u32 cs1_ramsize = ((*SDRC_MCFG_1 >> 8) & 0x3FF) << 1;
   u32 cs1_start   = (((*SDRC_CS_CFG >> 8) & 0x3) | ((*SDRC_CS_CFG & 0xF) << 2)) * 0x2000000 + DEFAULT_CS0_START;
   u32 cs0_start   = DEFAULT_CS0_START;
-  u32 cs0_end     = cs0_start + (cs0_ramsize << 20) - 1;
-  u32 cs1_end     = cs1_start + (cs1_ramsize << 20) - 1;
   u32 kern_pages  = (u32) &_kernel_pages;
   u32 kp_start    = (u32) &_physical_start;
-  u32 kp_end      = (u32) &_physical_start + (kern_pages << PAGE_SIZE_LOG2) - 1;
   u32 bitmap0_len = cs0_ramsize << (20 - PAGE_SIZE_LOG2 - 3);
   u32 bitmap1_len = cs1_ramsize << (20 - PAGE_SIZE_LOG2 - 3);
   u32 i;
@@ -142,7 +141,7 @@ void physical_init(void)
   for(i=0; i < kern_pages; i++)
     BITMAP_SET(bitmap[0].map, ((kp_start - bitmap[0].start) >> PAGE_SIZE_LOG2) + i);
 
-  printf_uart3("Physical memory bitmap: ");
+  DLOG(1, "physical memory bitmap: ");
   for(i=0;i<64;i++)
     if(BITMAP_TST(bitmap[0].map,i))
       putc_uart3('X');

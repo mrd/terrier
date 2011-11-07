@@ -1,5 +1,5 @@
 /*
- * Basic UART3 serial port support
+ * Debug logging support
  *
  * -------------------------------------------------------------------
  *
@@ -37,16 +37,16 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _OMAP3_EARLY_UART3_H_
-#define _OMAP3_EARLY_UART3_H_
-
+#ifndef _DEBUG_LOG_H_
+#define _DEBUG_LOG_H_
 #include "types.h"
+#include <stdarg.h>
 
-void reset_uart3(void);
-void putc_uart3(const char);
-void putx_uart3(u32);
-void print_uart3(const char *);
-void printf_uart3(const char *fmt, ...);
+#ifdef MODULE
+#define DLOG(lvl,fmt,...) debuglog(MODULE,lvl,fmt,##__VA_ARGS__)
+#endif
+
+void debuglog(const char *src, int lvl, const char *fmt, ...);
 
 #endif
 

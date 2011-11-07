@@ -41,8 +41,15 @@ ENTRY(_reset)
 SECTIONS
 {
  . = 0x80008000;
+ _kernel_start = .;
+
  .startup . : { init/startup.o(.text) }
+ _physical_start = LOADADDR(.startup);
  .text : { *(.text) }
+ . = ALIGN(0x1000);
+
+ _kernel_readonly_end = .;
+
  .data : { *(.data) }
  .bss : { *(.bss) }
 
@@ -60,6 +67,10 @@ SECTIONS
  . = . + 0x1000; /* 4kB of stack memory */
  sys_stack_top = .;
 
+ _kernel_end = ALIGN(0x1000);
+ _kernel_pages = (_kernel_end - _kernel_start) / 0x1000;
+ _kernel_readonly_pages = (_kernel_readonly_end - _kernel_start) / 0x1000;
+ _kernel_readwrite_pages = (_kernel_end - _kernel_readonly_end) / 0x1000;
 
  /* To make arm-none-linux-gnueabi-gcc shut up: */
  __aeabi_unwind_cpp_pr0 = .;

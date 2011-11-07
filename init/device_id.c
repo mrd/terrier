@@ -39,6 +39,7 @@
 
 #include "types.h"
 #include "omap3/early_uart3.h"
+#include "arm/memory.h"
 
 PACKED_STRUCT(control_module_id) {
   PACKED_FIELD(u32, _rsv1);
@@ -62,14 +63,24 @@ static struct { char *version; u32 idcode; } idcodes[] = {
 
 void meminfo(void)
 {
+  extern void *_physical_start, *_kernel_pages;
   volatile u32 *SDRC_MCFG_0 = (u32 *) 0x6D000080;
   volatile u32 *SDRC_MCFG_1 = (u32 *) 0x6D0000B0;
   volatile u32 *SDRC_CS_CFG = (u32 *) 0x6D000040;
   u32 cs0_ramsize = ((*SDRC_MCFG_0 >> 8) & 0x3FF) << 1;
   u32 cs1_ramsize = ((*SDRC_MCFG_1 >> 8) & 0x3FF) << 1;
   u32 cs1_start   = (((*SDRC_CS_CFG >> 8) & 0x3) | ((*SDRC_CS_CFG & 0xF) << 2)) * 0x2000000 + 0x80000000;
+  u32 cs0_start   = 0x80000000, cs0_end = 0x80000000 + (cs0_ramsize << 20) - 1;
+  u32 cs1_end     = cs1_start + (cs1_ramsize << 20) - 1;
+  u32 kp_start    = (u32) &_physical_start;
+  u32 kp_end      = (u32) &_physical_start + (((u32) &_kernel_pages) << 12) - 1;
   printf_uart3("SDRC CS0_size=%d MB CS1_size=%d MB CS1_start=%x\n",
                cs0_ramsize, cs1_ramsize, cs1_start);
+  printf_uart3("Physical memory map:\n");
+  printf_uart3("  %#x - %#x CS0 dynamic RAM\n", cs0_start, cs0_end);
+  printf_uart3("    %#x - %#x kernel physical addresses\n", kp_start, kp_end);
+  if (cs1_ramsize)
+    printf_uart3("  %#x - %#x CS1 dynamic RAM\n", cs1_start, cs1_end);
 }
 
 void identify_device(void)

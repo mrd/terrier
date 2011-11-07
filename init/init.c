@@ -75,9 +75,12 @@ void init_mmu(void)
 void c_entry()
 {
   void identify_device(void);
+  void physical_init(void);
 
   reset_uart3();
   identify_device();
+
+  physical_init();
 
   init_mmu();
 

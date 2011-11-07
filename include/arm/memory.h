@@ -42,6 +42,9 @@
 
 #include "types.h"
 
+#define PAGE_SIZE_LOG2 12
+#define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
+
 #define MMU_CTRL_MMU    0x0001
 #define MMU_CTRL_DCACHE 0x0004
 #define MMU_CTRL_ICACHE 0x1000

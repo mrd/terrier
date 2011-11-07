@@ -37,7 +37,7 @@
 
 ##################################################
 
-C_FILES = init/init.c init/early_uart3.c init/device_id.c
+C_FILES = init/init.c init/early_uart3.c init/device_id.c mem/physical.c
 S_FILES = init/startup.S
 
 IMGNAME = puppy

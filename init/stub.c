@@ -1,5 +1,5 @@
 /*
- * Entry point
+ * Low memory stub - setup page tables for remaining init
  *
  * -------------------------------------------------------------------
  *
@@ -37,27 +37,40 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "arm/status.h"
+#include "types.h"
+#include "omap3/early_uart3.h"
+#include "arm/memory.h"
 
-        .global _reset
-_reset:
-        LDR sp, =temp_stub_stack     /* temporary stack */
-        BL stub_init
+void stub_init(void)
+{
+  extern void *_l1table_phys, *_kernel_start, *_physical_start;
+  u32 *l1table_phys = (u32 *) &_l1table_phys;
+  u32 phystart = (u32) &_physical_start, krnstart = (u32) &_kernel_start;
 
-        /* Setup mode stacks */
-        LDR sp, =svc_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_FIQ
-        LDR sp, =fiq_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_IRQ
-        LDR sp, =irq_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_SYS
-        LDR sp, =sys_stack_top
-        MSR cpsr_c, #MASK_ALL|MODE_SVC /* back to SVC */
+  arm_memset_log2(l1table_phys, 0, 14);
 
-        /* Enter C world */
-        BL c_entry
-        B .
+  /* Map stub as identity, and kernel virtual -> physical */
+  l1table_phys[phystart >> 20] = (phystart & 0xFFF00000) | 0xc1e;
+  l1table_phys[krnstart >> 20] = (phystart & 0xFFF00000) | 0xc1e;
+  
+  arm_mmu_flush_tlb();
+  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
 
-        .align 4
-        .space 128
-temp_stub_stack:
+  /* Stub will remain mapped during early initialization. */
+  arm_mmu_set_ttb(l1table_phys);
+
+  /* Enable MMU */
+  arm_mmu_ctrl(MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE,
+               MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
+}
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: nil
+ * mode: C
+ * c-file-style: "gnu"
+ * c-basic-offset: 2
+ * End:
+ */
+
+/* vi: set et sw=2 sts=2: */

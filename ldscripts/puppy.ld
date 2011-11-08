@@ -37,21 +37,47 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* The physical addresses of the kernel begin at 0x80000000. The
+ * virtual addresses begin at 0xC0000000. For some reason, the load
+ * address must be strictly greater than 0x80000000, so I have chosen the
+ * same as Linux, at 0x80008000. */
+
+/* The stub is responsible for setting up virtual memory to match this file. */
+
 ENTRY(_reset)
 SECTIONS
 {
  . = 0x80008000;
+ _physical_start = .;
+ _stub_start = .;
+
+ /* The stub runs in identity-mapped space */
+
+ .startup . : { init/startup.o (.text) }
+ .stubtext : { init/stub.o (.text) }
+ .stubARMidx : { init/stub.o (.ARM.exidx) }
+
+ _stub_end = ALIGN(0x1000);
+ _stub_len = _stub_end - _stub_start;
+
+ . = 0xC0008000;
+ /* From now on, virtual and physical addresses are separate. */
+ . += _stub_len;                /* skip stub code */
+
  _kernel_start = .;
 
- .startup . : { init/startup.o(.text) }
- _physical_start = LOADADDR(.startup);
- .text : { *(.text) }
+ /* The virtual address is taken from the counter, but the physical
+  * address must be specified with AT. */
+
+ .text : AT ( _stub_end ) { *(.text) }
+ .rodata : AT ( LOADADDR (.text) + SIZEOF (.text) ) { *(.rodata) }
+
  . = ALIGN(0x1000);
 
  _kernel_readonly_end = .;
 
- .data : { *(.data) }
- .bss : { *(.bss) }
+ .data : AT ( LOADADDR (.text) + _kernel_readonly_end - _kernel_start ) { *(.data) }
+ .bss : AT ( LOADADDR (.data) + SIZEOF (.data) ) { *(.bss) }
 
  . = ALIGN(0x1000);
 
@@ -68,9 +94,13 @@ SECTIONS
  sys_stack_top = .;
 
  _kernel_end = ALIGN(0x1000);
+
  _kernel_pages = (_kernel_end - _kernel_start) / 0x1000;
  _kernel_readonly_pages = (_kernel_readonly_end - _kernel_start) / 0x1000;
  _kernel_readwrite_pages = (_kernel_end - _kernel_readonly_end) / 0x1000;
+
+ /* compute the physical address of the l1table */
+ _l1table_phys = l1table - ((_kernel_start - _stub_len) - _stub_start);
 
  /* To make arm-none-linux-gnueabi-gcc shut up: */
  __aeabi_unwind_cpp_pr0 = .;

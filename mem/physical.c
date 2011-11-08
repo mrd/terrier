@@ -44,7 +44,7 @@
 #include "debug/log.h"
 
 #define DEFAULT_CS0_START 0x80000000
-#define BITMAP_PHYSADDR ((physaddr) DEFAULT_CS0_START)
+#define BITMAP_VIRTADDR ((void *) 0xC0000000)
 
 typedef struct {
   u32 *map;
@@ -108,13 +108,13 @@ void physical_init(void)
   u32 bitmap1_len = cs1_ramsize << (20 - PAGE_SIZE_LOG2 - 3);
   u32 i;
 
-  bitmap[0].map = (u32 *) BITMAP_PHYSADDR;
+  bitmap[0].map = (u32 *) BITMAP_VIRTADDR;
   bitmap[0].map_bytes = bitmap0_len;
   bitmap[0].start = cs0_start;
 
   if(cs1_ramsize) {
     num_bitmaps = 2;
-    bitmap[1].map = (void *) (BITMAP_PHYSADDR + bitmap0_len);
+    bitmap[1].map = (void *) (BITMAP_VIRTADDR + bitmap0_len);
     bitmap[1].map_bytes = bitmap1_len;
     bitmap[1].start = cs1_start;
   } else {
@@ -130,12 +130,12 @@ void physical_init(void)
 
   /* mark space used by bitmap0 */
   for(i=0; i < (bitmap[0].map_bytes >> PAGE_SIZE_LOG2); i++)
-    BITMAP_SET(bitmap[0].map, i + ((BITMAP_PHYSADDR - bitmap[0].start) >> PAGE_SIZE_LOG2));
+    BITMAP_SET(bitmap[0].map, i + (((u32) BITMAP_VIRTADDR - (u32) bitmap[0].map) >> PAGE_SIZE_LOG2));
 
   if(bitmap[1].map)
     /* mark space used by bitmap1 */
     for(i=0; i < (bitmap1_len >> PAGE_SIZE_LOG2); i++)
-      BITMAP_SET(bitmap[0].map, i + ((BITMAP_PHYSADDR + bitmap[0].map_bytes - bitmap[0].start) >> PAGE_SIZE_LOG2));
+      BITMAP_SET(bitmap[0].map, i + (((u32) BITMAP_VIRTADDR + bitmap[0].map_bytes - (u32) bitmap[0].map) >> PAGE_SIZE_LOG2));
 
   /* mark space used by kernel */
   for(i=0; i < kern_pages; i++)

@@ -41,35 +41,12 @@
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
 
-ALIGNED(0x4000, static u32, l1table[4096]);
-
-void build_identity_l1table(void)
-{
-  u32 i, c, b;
-  for(i=0; i<4096; i++) {
-    if (0x800 <= i && i < 0xc00)
-      c = b = 1;
-    else
-      c = b = 0;
-    l1table[i] =
-      (i << 20) |      /* base address */
-      0x2  |           /* section entry */
-      0x10 |           /* reserved bit */
-      (0x0 << 5) |     /* domain */
-      (0x3 << 10) |    /* access perm. */
-      (c<<3) |         /* cached */
-      (b<<2);          /* buffered/writeback */
-  }
-}
+ALIGNED(0x4000, u32, l1table[4096]);
 
 void init_mmu(void)
 {
-  build_identity_l1table();
   arm_mmu_flush_tlb();
   arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
-  arm_mmu_set_ttb(l1table);
-  arm_mmu_ctrl(MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE,
-               MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
 }
 
 void c_entry()
@@ -77,12 +54,21 @@ void c_entry()
   void identify_device(void);
   void physical_init(void);
 
+  /* temporary mappings until comprehensive virtual memory manager added */
+
+  /* Map UART3 as identity (no cache, no buffer) */
+  l1table[0x490] = 0x49000c12;  
+
+  /* Some system registers */
+  l1table[0x483] = 0x48300c12;  
+  l1table[0x6D0] = 0x6D000c12;  
+
   reset_uart3();
   identify_device();
 
   physical_init();
 
-  init_mmu();
+  //init_mmu();
 
   print_uart3("Hello world!\n");
 }

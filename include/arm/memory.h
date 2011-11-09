@@ -101,7 +101,7 @@ static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
 }
 
 /* Set translation table base address for MMU. ttb must be 16kB aligned. */
-static inline void arm_mmu_set_ttb(void *ttbp)
+static inline void arm_mmu_set_ttb(physaddr ttbp)
 {
   u32 ttb = (u32) ttbp;
   ttb &= 0xffffc000;

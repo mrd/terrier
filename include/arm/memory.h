@@ -108,6 +108,14 @@ static inline void arm_mmu_set_ttb(void *ttbp)
   asm volatile("MCR p15, #0, %0, c2, c0, #0"::"r"(ttb));
 }
 
+/* Get translation table base address for MMU. */
+static inline physaddr arm_mmu_get_ttb(void *ttbp)
+{
+  u32 ttb;
+  asm volatile("MRC p15, #0, %0, c2, c0, #0":"=r"(ttb));
+  return ttb;
+}
+
 /* Flush the entire translation lookaside buffer. */
 static inline void arm_mmu_flush_tlb(void)
 {

@@ -40,6 +40,7 @@
 #include "types.h"
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
+#include "arm/asm.h"
 #define MODULE "pmm"
 #include "debug/log.h"
 
@@ -58,13 +59,6 @@ static u32 num_bitmaps;
 #define BITMAP_SET(table,index) ((table)[(index)>>5] |= (1 << ((index) & 31)))
 #define BITMAP_CLR(table,index) ((table)[(index)>>5] &= ~(1 << ((index) & 31)))
 #define BITMAP_TST(table,index) ((table)[(index)>>5] & (1 << ((index) & 31)))
-
-static inline u32 count_leading_zeroes(u32 x)
-{
-  u32 n;
-  asm volatile("CLZ %0, %1":"=r"(n):"r"(x));
-  return n;
-}
 
 /* Pick and mark a physical page as allocated. Zero on error. */
 physaddr physical_alloc_page(void)

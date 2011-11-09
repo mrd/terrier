@@ -1,5 +1,5 @@
 /*
- * C type definitions
+ * Status return codes
  *
  * -------------------------------------------------------------------
  *
@@ -37,40 +37,12 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _TYPES_H_
-#define _TYPES_H_
+#ifndef _STATUS_H_
+#define _STATUS_H_
 
-#include "status.h"
-
-#ifdef __GNUC__
-#define PACKED __attribute__((packed))
-#define PACKED_STRUCT(name) struct name
-#define PACKED_FIELD(typ,name) typ name PACKED
-#define PACKED_END PACKED
-#else
-#error "PACKED unsupported"
-#endif
-
-#ifdef __GNUC__
-#define ALIGNED(n,typ,name) typ name __attribute__((aligned(n)))
-#else
-#error "ALIGNED unsupported"
-#endif
-
-#define NULL ((void *) 0)
-
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
-typedef unsigned long long u64;
-
-typedef signed char s8;
-typedef signed short s16;
-typedef signed int s32;
-typedef signed long long s64;
-
-typedef u32 physaddr;
-typedef s32 status;
+#define OK 0
+#define EINVALID 1
+#define EUNDEFINED 2
 
 #endif
 

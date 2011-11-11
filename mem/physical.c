@@ -41,11 +41,14 @@
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
+#include "mem/virtual.h"
 #define MODULE "pmm"
 #include "debug/log.h"
 
 #define DEFAULT_CS0_START 0x80000000
 #define BITMAP_VIRTADDR ((void *) 0xC0000000)
+
+static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, R_PM };
 
 typedef struct {
   u32 *map;
@@ -88,6 +91,10 @@ void physical_free_page(physaddr addr)
 
 void physical_init(void)
 {
+  if(vmm_map_region(&sdrc_region) != OK) {
+    DLOG(1, "Unable to map sdrc_region.\n");
+    return;
+  }
   extern void *_physical_start, *_kernel_pages;
   volatile u32 *SDRC_MCFG_0 = (u32 *) 0x6D000080;
   volatile u32 *SDRC_MCFG_1 = (u32 *) 0x6D0000B0;

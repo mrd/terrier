@@ -40,6 +40,10 @@
 #include "types.h"
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
+#include "mem/virtual.h"
+
+static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, R_PM };
+static region_t l4wakeup_region = { 0x48300000, (void *) 0x48300000, &l1pt, 1, 20, 0, R_PM };
 
 PACKED_STRUCT(control_module_id) {
   PACKED_FIELD(u32, _rsv1);
@@ -86,8 +90,18 @@ void meminfo(void)
 void identify_device(void)
 {
   int i;
-  u32 idcode = cm_id->control_idcode;
-  u32 prodcode = cm_id->control_production_id;
+  u32 idcode;
+  u32 prodcode;
+  if(vmm_map_region(&sdrc_region) != OK) {
+    printf_uart3("Unable to map sdrc_region\n");
+    return;
+  }
+  if(vmm_map_region(&l4wakeup_region) != OK) {
+    printf_uart3("Unable to map l4wakeup_region\n");
+    return;
+  }
+  idcode = cm_id->control_idcode;
+  prodcode = cm_id->control_production_id;
   printf_uart3("IDCODE=%x PRODUCTION_ID=%x DIE_ID=%x%x%x%x\n",
                idcode, prodcode,
                cm_id->control_die_id[3],

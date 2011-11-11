@@ -38,7 +38,11 @@
  */
 
 #include "types.h"
+#include "mem/virtual.h"
+#include "arm/memory.h"
 #include <stdarg.h>
+
+static region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, R_PM };
 
 #define NS16650_REG(x) u8 x; u8 _unused_##x[3];
 
@@ -91,6 +95,13 @@ ns16650_regs_t UART3 = (ns16650_regs_t) 0x49020000;
 void reset_uart3(void)
 {
   u16 divisor = 0x001A;         /* 115200 baud */
+
+  if(vmm_map_region(&uart3_region) != OK) {
+    void early_panic(char *);
+    /* This is bad. Disable MMU and attempt to report the problem. */
+    arm_mmu_ctrl(0, MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
+    early_panic("Unable to map UART3 region.");
+  }
 
   UART3->ier = 0x00;            /* disable interrupts */
 

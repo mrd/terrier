@@ -45,23 +45,21 @@
 #include "debug/log.h"
 #include "debug/cassert.h"
 
-extern void *_l1table_phys;
-extern u32 *l1table;
-pagetable_t l1pt = { 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1table, &l1pt, PT_MASTER, 0 };
-region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &l1pt, 1, 20, R_C | R_B, R_PM };
-region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, R_PM };
-region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, R_PM };
-region_t l4wakeup_region = { 0x48300000, (void *) 0x48300000, &l1pt, 1, 20, 0, R_PM };
 
-static u32 pt_sizes_log2[] = { 0, 14, 10 };
-static u32 pt_start_masks[] = { 0, 0xFFFFFFFF, 0x000FFFFF };
-static u32 pt_entry_masks[] = { 0, 0x000FFFFF, 0x00000FFF };
-static u32 pt_entry_sizes_log2[] = { 0, 20, 12 };
-static u32 pt_type_bits[] = { 0, 0x12, 0x2 };
-static u32 pt_ap_offsets[] = { 0, 10, 4 };
-static u32 pt_ap_masks[] = { 0, 0x3, 0xFF };
-static u32 pt_dom_offsets[] = { 0, 5, 0 };
-static u32 pt_dom_masks[] = { 0, 0xF, 0 };
+ALIGNED(0x4000, u32, l1table[4096]);
+extern void *_l1table_phys;
+region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &l1pt, 1, 20, R_C | R_B, R_PM };
+pagetable_t l1pt = { 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1table, &l1pt, PT_MASTER, 0 };
+
+static u32 pt_sizes_log2[] = { 0, 14, 10 };                  /* size of pagetables */
+static u32 pt_start_masks[] = { 0, 0xFFFFFFFF, 0x000FFFFF }; /* valid pt virtual start */
+static u32 pt_entry_masks[] = { 0, 0x000FFFFF, 0x00000FFF }; /* valid region virtual start */
+static u32 pt_entry_sizes_log2[] = { 0, 20, 12 };            /* size that an entry covers */
+static u32 pt_type_bits[] = { 0, 0x12, 0x2 };                /* ARM-specific tag bits */
+static u32 pt_ap_offsets[] = { 0, 10, 4 };                   /* Access Perms. offset in entry */
+static u32 pt_ap_masks[] = { 0, 0x3, 0xFF };                 /* Access Perms. bitmask */
+static u32 pt_dom_offsets[] = { 0, 5, 0 };                   /* Domain offset in entry */
+static u32 pt_dom_masks[] = { 0, 0xF, 0 };                   /* Domain bitmask */
 
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_start_masks), vmm);
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_entry_masks), vmm);

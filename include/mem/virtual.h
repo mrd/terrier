@@ -71,6 +71,14 @@ typedef struct {
   u8 access;                    /* access permission attributes */
 } region_t;
 
+
+extern pagetable_t l1pt;
+
+status vmm_activate_pagetable(pagetable_t *pt);
+status vmm_map_region(region_t *r);
+status vmm_init_pagetable(pagetable_t *pt);
+
+
 #endif
 
 /*

@@ -40,8 +40,7 @@
 #include "types.h"
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
-
-ALIGNED(0x4000, u32, l1table[4096]);
+#include "mem/virtual.h"
 
 void init_mmu(void)
 {
@@ -54,21 +53,9 @@ void c_entry()
   void identify_device(void);
   void physical_init(void);
 
-  /* temporary mappings until comprehensive virtual memory manager added */
-
-  /* Map UART3 as identity (no cache, no buffer) */
-  l1table[0x490] = 0x49000c12;  
-
-  /* Some system registers */
-  l1table[0x483] = 0x48300c12;  
-  l1table[0x6D0] = 0x6D000c12;  
-
   reset_uart3();
   identify_device();
-
   physical_init();
-
-  //init_mmu();
 
   print_uart3("Hello world!\n");
 }

@@ -52,10 +52,13 @@ void c_entry()
 {
   void identify_device(void);
   void physical_init(void);
+  void intr_init(void);
 
   reset_uart3();
   identify_device();
   physical_init();
+
+  intr_init();
 
   print_uart3("Hello world!\n");
 }

@@ -1,5 +1,5 @@
 /*
- * ARM status register
+ * ARM Interrupt/Exception Vector Table
  *
  * -------------------------------------------------------------------
  *
@@ -37,62 +37,26 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ARM_STATUS_H_
-#define _ARM_STATUS_H_
+        .globl _vector_table
+_vector_table:
+        LDR pc, _vector_table_data+0
+        LDR pc, _vector_table_data+4
+        LDR pc, _vector_table_data+8
+        LDR pc, _vector_table_data+12
+        LDR pc, _vector_table_data+16
+        NOP
+        LDR pc, _vector_table_data+20
+        LDR pc, _vector_table_data+24
 
-#define MODE_USR 0x10           /* User */
-#define MODE_FIQ 0x11           /* Fast Interrupt Request */
-#define MODE_IRQ 0x12           /* Interrupt Request */
-#define MODE_SVC 0x13           /* Supervisor */
-#define MODE_ABT 0x17           /* Abort */
-#define MODE_UND 0x1b           /* Undefined instruction */
-#define MODE_SYS 0x1f           /* System */
+_vector_table_data:
+        .word _handle_reset
+        .word _handle_undefined_instruction
+        .word _handle_swi
+        .word _handle_prefetch_abort
+        .word _handle_data_abort
+        .word _handle_irq
+        .word _handle_fiq
 
-#define MASK_IRQ 0x80
-#define MASK_FIQ 0x40
-#define MASK_ALL 0xc0
-
-#ifndef __ASSEMBLER__
-static inline u32 arm_cpsr_c(u32 set, u32 mask)
-{
-  u32 sr;
-  asm volatile("MRS %0, cpsr":"=r"(sr));
-  sr &= ~mask;
-  sr |= set;
-  asm volatile("MSR cpsr_c, %0"::"r"(sr));
-  return sr;
-}
-
-static inline u32 disable_interrupts(void)
-{
-  return arm_cpsr_c(MASK_ALL, MASK_ALL);
-}
-
-static inline u32 enable_interrupts(void)
-{
-  return arm_cpsr_c(0, MASK_ALL);
-}
-
-static inline u32 enable_IRQ(void)
-{
-  return arm_cpsr_c(0, MASK_IRQ);
-}
-
-static inline u32 enable_FIQ(void)
-{
-  return arm_cpsr_c(0, MASK_FIQ);
-}
-#endif
-
-#endif
-
-/*
- * Local Variables:
- * indent-tabs-mode: nil
- * mode: C
- * c-file-style: "gnu"
- * c-basic-offset: 2
- * End:
- */
-
-/* vi: set et sw=2 sts=2: */
+        .globl _vector_table_size
+_vector_table_size:
+        .word _vector_table_size - _vector_table

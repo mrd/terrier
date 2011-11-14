@@ -48,6 +48,7 @@
 #define MMU_CTRL_MMU    0x0001
 #define MMU_CTRL_DCACHE 0x0004
 #define MMU_CTRL_ICACHE 0x1000
+#define MMU_CTRL_HIGHVT 0x2000
 
 static inline void arm_mmu_ctrl(u32 set, u32 mask)
 {

@@ -1,5 +1,5 @@
 /*
- * ARM status register
+ * Interrupt handling (C portion)
  *
  * -------------------------------------------------------------------
  *
@@ -37,54 +37,72 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ARM_STATUS_H_
-#define _ARM_STATUS_H_
+#include "types.h"
+#include "omap3/early_uart3.h"
+#include "arm/memory.h"
+#include "arm/status.h"
+#include "arm/asm.h"
+#include "mem/virtual.h"
+#define MODULE "intr"
+#include "debug/log.h"
 
-#define MODE_USR 0x10           /* User */
-#define MODE_FIQ 0x11           /* Fast Interrupt Request */
-#define MODE_IRQ 0x12           /* Interrupt Request */
-#define MODE_SVC 0x13           /* Supervisor */
-#define MODE_ABT 0x17           /* Abort */
-#define MODE_UND 0x1b           /* Undefined instruction */
-#define MODE_SYS 0x1f           /* System */
-
-#define MASK_IRQ 0x80
-#define MASK_FIQ 0x40
-#define MASK_ALL 0xc0
-
-#ifndef __ASSEMBLER__
-static inline u32 arm_cpsr_c(u32 set, u32 mask)
+region_t intr_region = { 0x89000000, (void *) 0xFFF00000, &l1pt, 1, 20, R_C | R_B, R_PM };
+void intr_init(void)
 {
-  u32 sr;
-  asm volatile("MRS %0, cpsr":"=r"(sr));
-  sr &= ~mask;
-  sr |= set;
-  asm volatile("MSR cpsr_c, %0"::"r"(sr));
-  return sr;
+  extern u32 _vector_table_size;
+  int i; u32 *vt = (u32 *) 0xFFFF0000;
+  extern void *_vector_table;
+  u32 *init_vt = (u32 *) &_vector_table;
+
+  if(vmm_map_region(&intr_region) != OK) {
+    early_panic("Unable to map interrupt vector table.");
+    return;
+  }
+
+  for(i=0;i < _vector_table_size;i++)
+    vt[i] = init_vt[i];
+  for(i=0;i < _vector_table_size;i++)
+    printf_uart3("%#x ", vt[i]);
+  putc_uart3('\n');
+  /* set vector table to 0xFFFF0000 */
+  arm_mmu_ctrl(MMU_CTRL_HIGHVT, MMU_CTRL_HIGHVT);
 }
 
-static inline u32 disable_interrupts(void)
+void _handle_reset(void)
 {
-  return arm_cpsr_c(MASK_ALL, MASK_ALL);
+  DLOG(1, "_handle_reset\n");
 }
 
-static inline u32 enable_interrupts(void)
+void _handle_undefined_instruction(void)
 {
-  return arm_cpsr_c(0, MASK_ALL);
+  DLOG(1, "_handle_undefined_instruction\n");
 }
 
-static inline u32 enable_IRQ(void)
+void _handle_swi(void)
 {
-  return arm_cpsr_c(0, MASK_IRQ);
+  DLOG(1, "_handle_swi\n");
 }
 
-static inline u32 enable_FIQ(void)
+void _handle_prefetch_abort(void)
 {
-  return arm_cpsr_c(0, MASK_FIQ);
+  DLOG(1, "_handle_prefetch_abort\n");
 }
-#endif
 
-#endif
+void _handle_data_abort(void)
+{
+  DLOG(1, "_handle_data_abort\n");
+}
+
+void _handle_irq(void)
+{
+  DLOG(1, "_handle_irq\n");
+}
+
+void _handle_fiq(void)
+{
+  DLOG(1, "_handle_fiq\n");
+}
+
 
 /*
  * Local Variables:

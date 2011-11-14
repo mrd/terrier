@@ -53,6 +53,7 @@ LD = $(ARCH)-ld
 AS = $(ARCH)-as
 OBJCOPY = $(ARCH)-objcopy
 MKIMAGE = mkimage
+QEMU = qemu-system-arm
 
 ##################################################
 
@@ -102,7 +103,7 @@ distclean: clean
 
 test: $(IMGNAME)-nand.bin
 	@echo "***** To quit QEMU type: Ctrl-a x"
-	qemu-system-arm -M beagle -m 128M -nographic -mtdblock $<
+	$(QEMU) -M beagle -m 128M -nographic -mtdblock $<
 
 tags:
 	find . -name '*.[ch]' | xargs etags -o TAGS 

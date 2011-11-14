@@ -47,6 +47,7 @@ void putc_uart3(const char);
 void putx_uart3(u32);
 void print_uart3(const char *);
 void printf_uart3(const char *fmt, ...);
+void early_panic(char *);
 
 #endif
 

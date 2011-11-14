@@ -40,6 +40,7 @@
 #include "types.h"
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
+#include "arm/asm.h"
 #include "mem/virtual.h"
 
 void init_mmu(void)
@@ -54,12 +55,15 @@ void c_entry()
   void physical_init(void);
   void intr_init(void);
 
+  arm_perfmon_ctrl(1,1);
+
   reset_uart3();
   identify_device();
   physical_init();
 
   intr_init();
 
+  printf_uart3("cycles %#x\n", arm_read_cycle_counter());
   print_uart3("Hello world!\n");
 }
 

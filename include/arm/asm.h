@@ -48,6 +48,23 @@ static inline u32 count_leading_zeroes(u32 x)
   return n;
 }
 
+static inline u32 arm_read_cycle_counter(void)
+{
+  u32 c;
+  asm volatile("MRC p15, 0, %0, c15, c12, 1":"=r"(c));
+  return c;
+}
+
+static inline u32 arm_perfmon_ctrl(u32 set, u32 mask)
+{
+  u32 cr;
+  asm volatile("MRC p15, 0, %0, c15, c12, 0":"=r"(cr));
+  cr &= ~mask;
+  cr |= set;
+  asm volatile("MCR p15, 0, %0, c15, c12, 0"::"r"(cr));
+  return cr;
+}
+
 #endif
 
 /*

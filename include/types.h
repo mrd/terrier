@@ -69,8 +69,15 @@ typedef signed short s16;
 typedef signed int s32;
 typedef signed long long s64;
 
-typedef u32 physaddr;
+typedef u32 physaddr, size_t;
 typedef s32 status;
+
+#define BIT(x) ((u32) (1<<(x)))
+
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#define container_of(ptr, type, member) ({                      \
+      const typeof( ((type *)0)->member ) *__mptr = (ptr);      \
+      (type *)( (u8 *)__mptr - offsetof(type,member) );})
 
 #endif
 

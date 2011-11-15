@@ -39,12 +39,92 @@
 
 #include "types.h"
 #include "omap3/early_uart3.h"
+#include "intr/interrupts.h"
 #include "arm/memory.h"
 #include "arm/status.h"
 #include "arm/asm.h"
 #include "mem/virtual.h"
 #define MODULE "intr"
 #include "debug/log.h"
+#include "debug/cassert.h"
+
+#define MPU_INTC_BASE_PHYS_ADDR 0x48200000
+
+#define MPU_INTC_BASE_ADDR 0xF8200000
+
+region_t mpu_intc_region = {
+  MPU_INTC_BASE_PHYS_ADDR,
+  (void *) MPU_INTC_BASE_ADDR,
+  &l1pt, 1, 20, 0, R_PM
+};
+
+PACKED_STRUCT(intcps) {
+  PACKED_FIELD(u32, revision);
+  u8 _rsvd1[12];
+  PACKED_FIELD(u32, sysconfig);
+  PACKED_FIELD(u32, sysstatus);
+  u8 _rsvd2[40];
+  PACKED_STRUCT(sir_irq) {
+    PACKED_FIELD(u32, activeirq:7);
+    PACKED_FIELD(u32, spuriousirqflag:25);
+  } PACKED_END sir_irq;
+  PACKED_STRUCT(sir_fiq) {
+    PACKED_FIELD(u32, activefiq:7);
+    PACKED_FIELD(u32, spuriousfiqflag:25);
+  } PACKED_END sir_fiq;
+  PACKED_FIELD(u32, control);
+#define INTCPS_CONTROL_NEWIRQAGR BIT(0)
+#define INTCPS_CONTROL_NEWFIQAGR BIT(1)
+  PACKED_FIELD(u32, protection);
+  PACKED_FIELD(u32, idle);
+  u8 _rsvd3[12];
+  PACKED_FIELD(u32, irq_priority);
+  PACKED_FIELD(u32, fiq_priority);
+  PACKED_FIELD(u32, threshold);
+  u8 _rsvd4[20];
+  PACKED_STRUCT(intcps_n) {
+    u32 itr;
+    u32 mir;
+    u32 mir_clear;
+    u32 mir_set;
+    u32 isr_set;
+    u32 isr_clear;
+    u32 pending_irq;
+    u32 pending_fiq;
+  } PACKED_END n[3];
+  u8 _rsvd5[32];
+  PACKED_STRUCT(ilr) {
+    PACKED_FIELD(u32, fiqnirq:1);
+    PACKED_FIELD(u32, _rsvd1:1);
+    PACKED_FIELD(u32, priority:6);
+    PACKED_FIELD(u32, _rsvd2:24);
+  } PACKED_END ilr[96];
+} PACKED_END;
+/* CASSERT(offsetof(struct intcps, threshold) == 0x68, interrupts); */
+/* CASSERT(offsetof(struct intcps, n[2].pending_fiq) == 0xdc, interrupts); */
+/* CASSERT(offsetof(struct intcps, ilr) == 0x100, interrupts); */
+
+static volatile struct intcps *intc = (struct intcps *) MPU_INTC_BASE_ADDR;
+
+static irq_handler_t irq_table[96];
+
+/* INTerrupt Controller initialization */
+void intc_init(void)
+{
+  int i;
+  if(vmm_map_region(&mpu_intc_region) != OK) {
+    early_panic("Unable to map interrupt controller registers.");
+    return;
+  }
+
+  DLOG(1, "IP revision=%#x\n", intc->revision & 0xF);
+  intc->sysconfig = 0x1;        /* Software reset */
+  intc->n[0].mir_set = ~0;      /* Mask all IRQs */
+  intc->n[1].mir_set = ~0;
+  intc->n[2].mir_set = ~0;
+  for(i=0;i<96;i++) irq_table[i] = NULL;
+  enable_IRQ();
+}
 
 region_t intr_region = { 0x89000000, (void *) 0xFFF00000, &l1pt, 1, 20, R_C | R_B, R_PM };
 void intr_init(void)
@@ -66,39 +146,92 @@ void intr_init(void)
   putc_uart3('\n');
   /* set vector table to 0xFFFF0000 */
   arm_mmu_ctrl(MMU_CTRL_HIGHVT, MMU_CTRL_HIGHVT);
+
+  intc_init();
 }
 
-void _handle_reset(void)
+status intc_set_irq_handler(u32 irq_num, void (*handler)(u32))
+{
+  irq_table[irq_num] = handler;
+  return OK;
+}
+
+status intc_mask_irq(u32 irq_num)
+{
+  if (irq_num < 32)
+    intc->n[0].mir_set |= BIT(irq_num - 0);
+  else if (irq_num < 64)
+    intc->n[1].mir_set |= BIT(irq_num - 32);
+  else
+    intc->n[2].mir_set |= BIT(irq_num - 64);
+  return OK;
+}
+
+status intc_unmask_irq(u32 irq_num)
+{
+  if (irq_num < 32)
+    intc->n[0].mir_clear |= BIT(irq_num - 0);
+  else if (irq_num < 64)
+    intc->n[1].mir_clear |= BIT(irq_num - 32);
+  else
+    intc->n[2].mir_clear |= BIT(irq_num - 64);
+  return OK;
+}
+
+#ifdef __GNUC__
+#define HANDLES(t) __attribute__ ((interrupt (t)))
+#else
+#error "HANDLES unsupported"
+#endif
+
+void HANDLES() _handle_reset(void)
 {
   DLOG(1, "_handle_reset\n");
 }
 
-void _handle_undefined_instruction(void)
+void HANDLES("UNDEF") _handle_undefined_instruction(void)
 {
-  DLOG(1, "_handle_undefined_instruction\n");
+  u32 lr;
+  asm volatile("MOV %0, lr":"=r"(lr));
+  DLOG(1, "_handle_undefined_instruction @%#x = %#x\n", lr - 4, *((u32 *)(lr - 4)));
 }
 
-void _handle_swi(void)
+void HANDLES("SWI") _handle_swi(void)
 {
   DLOG(1, "_handle_swi\n");
 }
 
-void _handle_prefetch_abort(void)
+void HANDLES("ABORT") _handle_prefetch_abort(void)
 {
-  DLOG(1, "_handle_prefetch_abort\n");
+  u32 lr; u32 sp;
+  asm volatile("MOV %0, lr":"=r"(lr));
+  asm volatile("MOV %0, sp":"=r"(sp));
+  DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x\n", lr - 4, sp);
+  early_panic("prefetch abort");
 }
 
-void _handle_data_abort(void)
+void HANDLES("ABORT") _handle_data_abort(void)
 {
-  DLOG(1, "_handle_data_abort\n");
+  u32 lr; u32 sp;
+  asm volatile("MOV %0, lr":"=r"(lr));
+  asm volatile("MOV %0, sp":"=r"(sp));
+  DLOG(1, "_handle_data_abort lr=%#x sp=%#x\n", lr - 8, sp);
+  early_panic("data abort");
 }
 
-void _handle_irq(void)
+void HANDLES("IRQ") _handle_irq(void)
 {
-  DLOG(1, "_handle_irq\n");
+  u32 activeirq = intc->sir_irq.activeirq;
+  intc_mask_irq(activeirq);
+  if (irq_table[activeirq])
+    irq_table[activeirq](activeirq);
+  else
+    DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
+  intc->control = INTCPS_CONTROL_NEWIRQAGR;
+  data_sync_barrier();
 }
 
-void _handle_fiq(void)
+void HANDLES("FIQ") _handle_fiq(void)
 {
   DLOG(1, "_handle_fiq\n");
 }

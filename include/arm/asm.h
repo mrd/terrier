@@ -41,6 +41,26 @@
 #define _ARM_ASM_H_
 #include "types.h"
 
+/* The purpose of the data synchronization barrier operation is to
+ * ensure that all outstanding explicit memory transactions complete
+ * before any following instructions begin. This ensures that data in
+ * memory is up to date before the processor executes any more
+ * instructions. */
+static inline void data_sync_barrier(void)
+{
+  asm volatile("MCR p15, #0, %0, c7, c10, #4"::"r"(0));
+}
+
+/* The purpose of the data memory barrier operation is to ensure that
+ * all outstanding explicit memory transactions complete before any
+ * following explicit memory transactions begin. This ensures that
+ * data in memory is up to date for any memory transaction that
+ * depends on it. */
+static inline void data_mem_barrier(void)
+{
+  asm volatile("MCR p15, #0, %0, c7, c10, #5"::"r"(0));
+}
+
 static inline u32 count_leading_zeroes(u32 x)
 {
   u32 n;

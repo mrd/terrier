@@ -44,6 +44,7 @@ S_FILES = init/startup.S intr/table.S
 
 IMGNAME = puppy
 ADDRESS = 0x80008000
+DEBUG = 0
 OPT = 2
 
 ##################################################
@@ -59,7 +60,12 @@ QEMU = qemu-system-arm
 ##################################################
 
 SFLAGS = -MMD -Iinclude
-CFLAGS = -Wall -MMD -Iinclude -O$(OPT)
+CFLAGS = -Wall -MMD -Iinclude
+ifeq ($(DEBUG),1)
+CFLAGS += -g -O0
+else
+CFLAGS += -O$(OPT)
+endif
 
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
@@ -95,11 +101,11 @@ $(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld
 clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit
 	rm -f $(OBJS) $(DFILES)
-	(cd util; make clean)
 
 distclean: clean
 	rm -f $(IMGNAME)-nand.bin
 	rm -f cscope.files cscope.in.out cscope.po.out cscope.out TAGS tags
+	(cd util; make clean)
 	(cd omap-u-boot-utils; make distclean V=1)
 
 test: $(IMGNAME)-nand.bin

@@ -55,6 +55,7 @@ SECTIONS
 
  .startup . : { init/startup.o (.text) }
  .stubtext : { init/stub.o (.text) }
+ .stubARMtab : { init/stub.o (.ARM.extab) }
  .stubARMidx : { init/stub.o (.ARM.exidx) }
 
  _stub_end = ALIGN(0x1000);

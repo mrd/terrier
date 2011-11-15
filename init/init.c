@@ -49,7 +49,7 @@ void perfmon_init(void)
   arm_perfmon_cntens(PERFMON_CNTENS_C);
 }
 
-void c_entry()
+void NO_RETURN c_entry()
 {
   void identify_device(void);
   void physical_init(void);
@@ -64,6 +64,8 @@ void c_entry()
   timer_init();
 
   print_uart3("Hello world!\n");
+
+  for(;;);
 }
 
 /*

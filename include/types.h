@@ -57,6 +57,12 @@
 #error "ALIGNED unsupported"
 #endif
 
+#ifdef __GNUC__
+#define NO_RETURN __attribute__((noreturn))
+#else
+#error "NO_RETURN unsupported"
+#endif
+
 #define NULL ((void *) 0)
 
 typedef unsigned char u8;

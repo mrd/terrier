@@ -55,6 +55,12 @@ void NO_RETURN c_entry()
   void physical_init(void);
   void intr_init(void);
   void timer_init(void);
+  extern pagetable_t l1pt;
+  extern void *_physical_start;
+  u32 phystart = (u32) &_physical_start;
+
+  l1pt.ptvaddr[phystart >> 20] = 0;
+  arm_mmu_flush_tlb();
 
   perfmon_init();
   reset_uart3();

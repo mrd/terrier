@@ -43,10 +43,10 @@
 #include "arm/asm.h"
 #include "mem/virtual.h"
 
-void init_mmu(void)
+void perfmon_init(void)
 {
-  arm_mmu_flush_tlb();
-  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
+  arm_perfmon_pmnc(PERFMON_PMNC_E, PERFMON_PMNC_E);
+  arm_perfmon_cntens(PERFMON_CNTENS_C);
 }
 
 void c_entry()
@@ -55,15 +55,12 @@ void c_entry()
   void physical_init(void);
   void intr_init(void);
 
-  arm_perfmon_ctrl(1,1);
-
+  perfmon_init();
   reset_uart3();
   identify_device();
   physical_init();
-
   intr_init();
 
-  printf_uart3("cycles %#x\n", arm_read_cycle_counter());
   print_uart3("Hello world!\n");
 }
 

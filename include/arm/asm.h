@@ -68,21 +68,36 @@ static inline u32 count_leading_zeroes(u32 x)
   return n;
 }
 
+/* See ARM Cortex-A8 Tech. Ref. Manual sections 3.2.42-53 */
 static inline u32 arm_read_cycle_counter(void)
 {
   u32 c;
-  asm volatile("MRC p15, 0, %0, c15, c12, 1":"=r"(c));
+  asm volatile("MRC p15, 0, %0, c9, c13, 0":"=r"(c));
   return c;
 }
 
-static inline u32 arm_perfmon_ctrl(u32 set, u32 mask)
+#define PERFMON_PMNC_E BIT(0)   /* Enable */
+#define PERFMON_PMNC_P BIT(1)   /* Reset all Perf counters (RaZ) */
+#define PERFMON_PMNC_C BIT(2)   /* Reset cycle counter (RaZ) */
+#define PERFMON_PMNC_D BIT(3)   /* Cycle count divider (1:1 or 1:64) */
+static inline u32 arm_perfmon_pmnc(u32 set, u32 mask)
 {
   u32 cr;
-  asm volatile("MRC p15, 0, %0, c15, c12, 0":"=r"(cr));
+  asm volatile("MRC p15, 0, %0, c9, c12, 0":"=r"(cr));
   cr &= ~mask;
   cr |= set;
-  asm volatile("MCR p15, 0, %0, c15, c12, 0"::"r"(cr));
+  asm volatile("MCR p15, 0, %0, c9, c12, 0"::"r"(cr));
   return cr;
+}
+
+#define PERFMON_CNTENS_P0 BIT(0)
+#define PERFMON_CNTENS_P1 BIT(1)
+#define PERFMON_CNTENS_P2 BIT(2)
+#define PERFMON_CNTENS_P3 BIT(3)
+#define PERFMON_CNTENS_C  BIT(31)
+static inline void arm_perfmon_cntens(u32 set)
+{
+  asm volatile("MCR p15, 0, %0, c9, c12, 1"::"r"(set));
 }
 
 #endif

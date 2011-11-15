@@ -54,6 +54,8 @@ _reset:
         LDR sp, =sys_stack_top
         MSR cpsr_c, #MASK_ALL|MODE_ABT
         LDR sp, =abt_stack_top
+        MSR cpsr_c, #MASK_ALL|MODE_UND
+        LDR sp, =und_stack_top
         MSR cpsr_c, #MASK_ALL|MODE_SVC /* back to SVC */
 
         /* Enter C world */

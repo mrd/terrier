@@ -96,6 +96,9 @@ SECTIONS
  . = . + 0x1000; /* 4kB of stack memory */
  abt_stack_top = .;
 
+ . = . + 0x1000; /* 4kB of stack memory */
+ und_stack_top = .;
+
  _kernel_end = ALIGN(0x1000);
 
  _kernel_pages = (_kernel_end - _kernel_start) / 0x1000;

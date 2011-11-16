@@ -56,10 +56,10 @@
 static inline u32 arm_cpsr_c(u32 set, u32 mask)
 {
   u32 sr;
-  asm volatile("MRS %0, cpsr":"=r"(sr));
+  ASM("MRS %0, cpsr":"=r"(sr));
   sr &= ~mask;
   sr |= set;
-  asm volatile("MSR cpsr_c, %0"::"r"(sr));
+  ASM("MSR cpsr_c, %0"::"r"(sr));
   return sr;
 }
 

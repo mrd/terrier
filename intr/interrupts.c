@@ -192,7 +192,7 @@ void HANDLES() _handle_reset(void)
 void HANDLES("UNDEF") _handle_undefined_instruction(void)
 {
   u32 lr;
-  asm volatile("MOV %0, lr":"=r"(lr));
+  ASM("MOV %0, lr":"=r"(lr));
   DLOG(1, "_handle_undefined_instruction @%#x = %#x\n", lr - 4, *((u32 *)(lr - 4)));
 }
 
@@ -204,8 +204,8 @@ void HANDLES("SWI") _handle_swi(void)
 void HANDLES("ABORT") _handle_prefetch_abort(void)
 {
   u32 lr; u32 sp;
-  asm volatile("MOV %0, lr":"=r"(lr));
-  asm volatile("MOV %0, sp":"=r"(sp));
+  ASM("MOV %0, lr":"=r"(lr));
+  ASM("MOV %0, sp":"=r"(sp));
   DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x\n", lr - 4, sp);
   early_panic("prefetch abort");
 }
@@ -213,8 +213,8 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
 void HANDLES("ABORT") _handle_data_abort(void)
 {
   u32 lr; u32 sp;
-  asm volatile("MOV %0, lr":"=r"(lr));
-  asm volatile("MOV %0, sp":"=r"(sp));
+  ASM("MOV %0, lr":"=r"(lr));
+  ASM("MOV %0, sp":"=r"(sp));
   DLOG(1, "_handle_data_abort lr=%#x sp=%#x\n", lr - 8, sp);
   early_panic("data abort");
 }

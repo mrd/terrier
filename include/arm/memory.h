@@ -53,10 +53,10 @@
 static inline void arm_mmu_ctrl(u32 set, u32 mask)
 {
   u32 cr;
-  asm volatile("MRC p15, #0, %0, c1, c0, #0":"=r"(cr));
+  ASM("MRC p15, #0, %0, c1, c0, #0":"=r"(cr));
   cr &= ~mask;
   cr |= set;
-  asm volatile("MCR p15, #0, %0, c1, c0, #0"::"r"(cr));
+  ASM("MCR p15, #0, %0, c1, c0, #0"::"r"(cr));
 }
 
 #define MMU_DOMAIN_NO_ACCESS 0x0
@@ -66,10 +66,10 @@ static inline void arm_mmu_ctrl(u32 set, u32 mask)
 static inline void arm_mmu_domain_access_ctrl(u32 set, u32 mask)
 {
   u32 cr;
-  asm volatile("MRC p15, #0, %0, c3, c0, #0":"=r"(cr));
+  ASM("MRC p15, #0, %0, c3, c0, #0":"=r"(cr));
   cr &= ~mask;
   cr |= set;
-  asm volatile("MCR p15, #0, %0, c3, c0, #0"::"r"(cr));
+  ASM("MCR p15, #0, %0, c3, c0, #0"::"r"(cr));
 }
 
 static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
@@ -106,31 +106,31 @@ static inline void arm_mmu_set_ttb(physaddr ttbp)
 {
   u32 ttb = (u32) ttbp;
   ttb &= 0xffffc000;
-  asm volatile("MCR p15, #0, %0, c2, c0, #0"::"r"(ttb));
+  ASM("MCR p15, #0, %0, c2, c0, #0"::"r"(ttb));
 }
 
 /* Get translation table base address for MMU. */
 static inline physaddr arm_mmu_get_ttb(void *ttbp)
 {
   u32 ttb;
-  asm volatile("MRC p15, #0, %0, c2, c0, #0":"=r"(ttb));
+  ASM("MRC p15, #0, %0, c2, c0, #0":"=r"(ttb));
   return ttb;
 }
 
 /* Flush the entire translation lookaside buffer. */
 static inline void arm_mmu_flush_tlb(void)
 {
-  asm volatile("MCR p15, #0, %0, c8, c7, #0"::"r"(0));
+  ASM("MCR p15, #0, %0, c8, c7, #0"::"r"(0));
 }
 
 static inline void arm_cache_flush_d(void)
 {
-  asm volatile("MCR p15, #0, %0, c7, c6, #0"::"r"(0));
+  ASM("MCR p15, #0, %0, c7, c6, #0"::"r"(0));
 }
 
 static inline void arm_cache_flush_i(void)
 {
-  asm volatile("MCR p15, #0, %0, c7, c5, #0"::"r"(0));
+  ASM("MCR p15, #0, %0, c7, c5, #0"::"r"(0));
 }
 
 static inline void arm_cache_flush(void)

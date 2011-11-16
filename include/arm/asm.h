@@ -48,7 +48,7 @@
  * instructions. */
 static inline void data_sync_barrier(void)
 {
-  asm volatile("MCR p15, #0, %0, c7, c10, #4"::"r"(0));
+  ASM("MCR p15, #0, %0, c7, c10, #4"::"r"(0));
 }
 
 /* The purpose of the data memory barrier operation is to ensure that
@@ -58,13 +58,13 @@ static inline void data_sync_barrier(void)
  * depends on it. */
 static inline void data_mem_barrier(void)
 {
-  asm volatile("MCR p15, #0, %0, c7, c10, #5"::"r"(0));
+  ASM("MCR p15, #0, %0, c7, c10, #5"::"r"(0));
 }
 
 static inline u32 count_leading_zeroes(u32 x)
 {
   u32 n;
-  asm volatile("CLZ %0, %1":"=r"(n):"r"(x));
+  ASM("CLZ %0, %1":"=r"(n):"r"(x));
   return n;
 }
 
@@ -72,7 +72,7 @@ static inline u32 count_leading_zeroes(u32 x)
 static inline u32 arm_read_cycle_counter(void)
 {
   u32 c;
-  asm volatile("MRC p15, 0, %0, c9, c13, 0":"=r"(c));
+  ASM("MRC p15, 0, %0, c9, c13, 0":"=r"(c));
   return c;
 }
 
@@ -83,10 +83,10 @@ static inline u32 arm_read_cycle_counter(void)
 static inline u32 arm_perfmon_pmnc(u32 set, u32 mask)
 {
   u32 cr;
-  asm volatile("MRC p15, 0, %0, c9, c12, 0":"=r"(cr));
+  ASM("MRC p15, 0, %0, c9, c12, 0":"=r"(cr));
   cr &= ~mask;
   cr |= set;
-  asm volatile("MCR p15, 0, %0, c9, c12, 0"::"r"(cr));
+  ASM("MCR p15, 0, %0, c9, c12, 0"::"r"(cr));
   return cr;
 }
 
@@ -97,7 +97,7 @@ static inline u32 arm_perfmon_pmnc(u32 set, u32 mask)
 #define PERFMON_CNTENS_C  BIT(31)
 static inline void arm_perfmon_cntens(u32 set)
 {
-  asm volatile("MCR p15, 0, %0, c9, c12, 1"::"r"(set));
+  ASM("MCR p15, 0, %0, c9, c12, 1"::"r"(set));
 }
 
 #endif

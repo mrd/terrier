@@ -63,6 +63,12 @@
 #error "NO_RETURN unsupported"
 #endif
 
+#ifdef __GNUC__
+#define ASM asm volatile
+#else
+#error "ASM unsupported"
+#endif
+
 #define NULL ((void *) 0)
 
 typedef unsigned char u8;

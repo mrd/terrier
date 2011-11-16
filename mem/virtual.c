@@ -48,8 +48,11 @@
 
 ALIGNED(0x4000, u32, l1table[4096]);
 extern void *_l1table_phys;
-region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &l1pt, 1, 20, R_C | R_B, R_PM };
-pagetable_t l1pt = { 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1table, &l1pt, PT_MASTER, 0 };
+pagetable_t l1pt = { (void *) 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1table, &l1pt, PT_MASTER, 0 };
+ALIGNED(0x400, u32, kernel_l2table[256]);
+extern void *_kernel_l2table_phys, *_kernel_pages;
+pagetable_t kernel_l2pt = { (void *) 0xC0000000, (physaddr) &_kernel_l2table_phys, (u32 *) &kernel_l2table, &l1pt, PT_COARSE, 0 };
+region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages, 12, R_C | R_B, R_PM };
 
 static u32 pt_sizes_log2[] = { 0, 14, 10 };                  /* size of pagetables */
 static u32 pt_start_masks[] = { 0, 0xFFFFFFFF, 0x000FFFFF }; /* valid pt virtual start */
@@ -179,6 +182,15 @@ status vmm_activate_pagetable(pagetable_t *pt)
   }
 
   return OK;
+}
+
+void vmm_init(void)
+{
+  vmm_init_pagetable(&kernel_l2pt);
+  vmm_map_region(&kernel_region);
+  vmm_activate_pagetable(&kernel_l2pt);
+  vmm_activate_pagetable(&l1pt);
+  arm_mmu_flush_tlb();
 }
 
 /*

@@ -55,6 +55,7 @@ void NO_RETURN c_entry()
   void physical_init(void);
   void intr_init(void);
   void timer_init(void);
+  void vmm_init(void);
   extern pagetable_t l1pt;
   extern void *_physical_start;
   u32 phystart = (u32) &_physical_start;
@@ -68,6 +69,7 @@ void NO_RETURN c_entry()
   physical_init();
   intr_init();
   timer_init();
+  vmm_init();
 
   print_uart3("Hello world!\n");
 

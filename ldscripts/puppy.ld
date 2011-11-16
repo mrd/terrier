@@ -102,12 +102,13 @@ SECTIONS
 
  _kernel_end = ALIGN(0x1000);
 
- _kernel_pages = (_kernel_end - _kernel_start) / 0x1000;
+ _kernel_pages = 1 + ((_kernel_end - _kernel_start + (_stub_end - (_physical_start & 0xFFF00000))) / 0x1000);
  _kernel_readonly_pages = (_kernel_readonly_end - _kernel_start) / 0x1000;
  _kernel_readwrite_pages = (_kernel_end - _kernel_readonly_end) / 0x1000;
 
  /* compute the physical address of the l1table */
  _l1table_phys = l1table - ((_kernel_start - _stub_len) - _stub_start);
+ _kernel_l2table_phys = kernel_l2table - ((_kernel_start - _stub_len) - _stub_start);
 
  /* To make arm-none-linux-gnueabi-gcc shut up: */
  __aeabi_unwind_cpp_pr0 = .;

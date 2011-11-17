@@ -43,6 +43,7 @@
 #define OK 0
 #define EINVALID 1
 #define EUNDEFINED 2
+#define ENOSPACE 3
 
 #endif
 

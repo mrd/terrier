@@ -87,11 +87,132 @@ void meminfo(void)
     printf_uart3("  %#x - %#x CS1 dynamic RAM\n", cs1_start, cs1_end);
 }
 
+void cacheinfo(void)
+{
+  u32 cache_type, tlb_type;
+  ASM("MRC p15, #0, %0, c0, c0, #1":"=r"(cache_type));
+  printf_uart3("cache_type=%#x writeback_granule=%d dminline=%d iminline=%d l1policy=%s\n",
+               cache_type,
+               1 << GETBITS(cache_type, 24, 4),
+               GETBITS(cache_type, 16, 4) << 2,
+               GETBITS(cache_type, 0, 4) << 2,
+               GETBITS(cache_type, 14, 2) == 2 ? "(virtual index, physical tag)" : "(unknown)");
+  ASM("MRC p15, #0, %0, c0, c0, #3":"=r"(tlb_type));
+  printf_uart3("tlb_type=%#x ILsize=%d DLsize=%d separate_I_D=%d\n",
+               tlb_type, GETBITS(tlb_type, 16, 8), GETBITS(tlb_type, 8, 8), GETBITS(tlb_type, 0, 1));
+}
+
 void identify_device(void)
 {
   int i;
   u32 idcode;
   u32 prodcode;
+  u32 mainid;
+  u32 feat;
+
+  ASM("MRC p15, #0, %0, c0, c0, #0":"=r"(mainid));
+  printf_uart3("MainID=%#x %s variant=%d arch=%#x %s rev=%d\n",
+               mainid,
+               GETBITS(mainid, 24, 8) == 0x41 ? "ARM" : "n/a",
+               GETBITS(mainid, 20, 4),
+               GETBITS(mainid, 16, 4),
+               GETBITS(mainid, 4, 12) == 0xc08 ? "Cortex-A8" : "n/a",
+               GETBITS(mainid, 0, 4));
+  ASM("MRC p15, #0, %0, c0, c1, #0":"=r"(feat));
+  printf_uart3("Proc_Feat0=%#x%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 12, 4) == 1 ? " (ThumbEE)" : "",
+               GETBITS(feat, 8, 4) == 1 ? " (Jazelle)" : "",
+               GETBITS(feat, 4, 4) == 3 ? " (Thumb-2)" : "",
+               GETBITS(feat, 0, 4) == 1 ? " (ARM)" : "");
+  ASM("MRC p15, #0, %0, c0, c1, #1":"=r"(feat));
+  printf_uart3("Proc_Feat1=%#x%s%s%s\n",
+               feat,
+               GETBITS(feat, 8, 4) ? " (uController)" : "",
+               GETBITS(feat, 4, 4) == 1 ? " (Sec. Ext. v1)" : "",
+               GETBITS(feat, 0, 4) == 1 ? " (ARMv4 model)" : "");
+  ASM("MRC p15, #0, %0, c0, c1, #2":"=r"(feat));
+  printf_uart3("Debug_Feat=%#x%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 20, 4) ? " (uController debug - mmap)" : "",
+               GETBITS(feat, 16, 4) ? " (trace debug - mmap)" : "",
+               GETBITS(feat, 12, 4) ? " (trace debug - co-p)" : "",
+               GETBITS(feat, 8, 4) == 4 ? " (core debug - mmap)" : "",
+               GETBITS(feat, 4, 4) ? " (secure debug - co-p)" : "",
+               GETBITS(feat, 0, 4) ? " (core debug - co-p)" : "");
+  ASM("MRC p15, #0, %0, c0, c1, #4":"=r"(feat));
+  printf_uart3("MemModel_Feat0=%#x%s%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 24, 4) ? " (FCSE)" : "",
+               GETBITS(feat, 20, 4) ? " (aux control)" : "",
+               GETBITS(feat, 16, 4) ? " (TCM)" : "",
+               GETBITS(feat, 12, 4) ? " (outer shareable)" : "",
+               GETBITS(feat, 8, 4)  ? " (cache coherence)" : "",
+               GETBITS(feat, 4, 4) ? " (PMSA)" : "",
+               GETBITS(feat, 0, 4) == 3 ? " (VMSAv7/ARMv6-ext)" : "");
+  ASM("MRC p15, #0, %0, c0, c1, #5":"=r"(feat));
+  printf_uart3("MemModel_Feat1=%#x%s%s%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 28, 4) == 2 ? " (BTB)" : "",
+               GETBITS(feat, 24, 4) ? " (L1 test clean)" : "",
+               GETBITS(feat, 20, 4) ? " (L1 unified maint.)" : "",
+               GETBITS(feat, 16, 4) ? " (L1 Harvard maint.)" : "",
+               GETBITS(feat, 12, 4)  ? " (L1 unified maint. SaW)" : "",
+               GETBITS(feat, 8, 4) ? " (L1 Harvard maint. SaW)" : "",
+               GETBITS(feat, 4, 4) ? " (L1 unified maint. MVA)" : "",
+               GETBITS(feat, 0, 4) ? " (L1 Harvard maint. MVA)" : "");
+  ASM("MRC p15, #0, %0, c0, c1, #6":"=r"(feat));
+  printf_uart3("MemModel_Feat2=%#x%s%s%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 28, 4) ? " (HW access flag)" : "",
+               GETBITS(feat, 24, 4) ? " (WFI)" : "",
+               GETBITS(feat, 20, 4) == 2 ? " (mem barriers)" : "",
+               GETBITS(feat, 16, 4) ? " (unified TLB)" : "",
+               GETBITS(feat, 12, 4) == 2 ? " (Harvard TLB)" : "",
+               GETBITS(feat, 8, 4) ? " (L1 Harvard maint. range)" : "",
+               GETBITS(feat, 4, 4) ? " (L1 Harvard bg prefetch)" : "",
+               GETBITS(feat, 0, 4) ? " (L1 Harvard fg prefetch)" : "");
+  ASM("MRC p15, #0, %0, c0, c1, #7":"=r"(feat));
+  printf_uart3("MemModel_Feat3=%#x%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 28, 4) ? " (supersections)" : "",
+               GETBITS(feat, 8, 4) == 2 ? " (branch pred. maint.)" : "",
+               GETBITS(feat, 4, 4) ? " (cache maint. SaW)" : "",
+               GETBITS(feat, 0, 4) ? " (cache maint. MVA)" : "");
+  ASM("MRC p15, #0, %0, c0, c2, #0":"=r"(feat));
+  printf_uart3("ISA0=%#x%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 24, 4) ? " (DIV)" : "",
+               GETBITS(feat, 20, 4) ? " (BKPT)" : "",
+               GETBITS(feat, 12, 4) ? " (Compare&Branch)" : "",
+               GETBITS(feat, 8, 4) ? " (Bitfield)" : "",
+               GETBITS(feat, 4, 4) ? " (CLZ)" : "",
+               GETBITS(feat, 0, 4) ? " (SWP/SWPB)" : "");
+  ASM("MRC p15, #0, %0, c0, c2, #1":"=r"(feat));
+  printf_uart3("ISA1=%#x%s%s%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 28, 4) ? " (Jazelle)" : "",
+               GETBITS(feat, 24, 4) == 3 ? " (ARM/Thumb branches)" : "",
+               GETBITS(feat, 20, 4) ? " (immediate instr)" : "",
+               GETBITS(feat, 16, 4) ? " (IfThen)" : "",
+               GETBITS(feat, 12, 4) == 2 ? " (Sign/Zero-extend)" : "",
+               GETBITS(feat, 8, 4) ? " (Exception2 instrs)" : "",
+               GETBITS(feat, 4, 4) ? " (Exception1 instrs)" : "",
+               GETBITS(feat, 0, 4) ? " (Endian control)" : "");
+  ASM("MRC p15, #0, %0, c0, c2, #2":"=r"(feat));
+  printf_uart3("ISA2=%#x%s%s%s%s%s%s%s%s\n",
+               feat,
+               GETBITS(feat, 28, 4) == 2 ? " (Reversal)" : "",
+               GETBITS(feat, 24, 4) ? " (PSR instrs)" : "",
+               GETBITS(feat, 20, 4) == 2 ? " (unsigned multiply)" : "",
+               GETBITS(feat, 16, 4) == 3 ? " (signed multiply)" : "",
+               GETBITS(feat, 12, 4) == 2 ? " (multiply)" : "",
+               GETBITS(feat, 8, 4) ? " (interruptible instrs)" : "",
+               GETBITS(feat, 4, 4) == 3 ? " (memory hint instrs)" : "",
+               GETBITS(feat, 0, 4) ? " (LDRD/STRD)" : "");
+
+
+
   if(vmm_map_region(&sdrc_region) != OK) {
     printf_uart3("Unable to map sdrc_region\n");
     return;
@@ -114,6 +235,7 @@ void identify_device(void)
       break;
     }
   meminfo();
+  cacheinfo();
 }
 
 /*

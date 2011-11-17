@@ -123,20 +123,37 @@ static inline void arm_mmu_flush_tlb(void)
   ASM("MCR p15, #0, %0, c8, c7, #0"::"r"(0));
 }
 
-static inline void arm_cache_flush_d(void)
+/* MVA - Modified Virtual Address (64-byte aligned) (ARMv6+ accepts any address)
+ * SAW - Set and Way
+ * 
+ * PoC - Point of Coherency - The time when the imposition of any more
+ * cache becomes transparent for instruction, data, and translation
+ * table walk accesses to that address by any processor in the system.
+ * 
+ * PoU - Point of Unification - The time when the instruction and data
+ * caches, and the TLB translation table walks have merged for a
+ * uniprocessor system.
+ *
+ * Invalidate - Line no longer available for hits until re-assigned.
+ * Clean - if write-back enabled then flush writes to memory
+ */
+
+/* Invalidate data (or unified) cache by MVA to PoC */
+static inline void arm_cache_invl_data_mva_poc(void *vaddr)
 {
-  ASM("MCR p15, #0, %0, c7, c6, #0"::"r"(0));
+  ASM("MCR p15, #0, %0, c7, c6, #1"::"r"(vaddr));
 }
 
-static inline void arm_cache_flush_i(void)
+/* Clean data or unified cache by MVA to PoC. */
+static inline void arm_cache_clean_data_mva_poc(void *vaddr)
 {
-  ASM("MCR p15, #0, %0, c7, c5, #0"::"r"(0));
+  ASM("MCR p15, #0, %0, c7, c10, #1"::"r"(vaddr));
 }
 
-static inline void arm_cache_flush(void)
+/* Clean and invalidate data (or unified) cache by MVA to PoC */
+static inline void arm_cache_clean_invl_data_mva_poc(void *vaddr)
 {
-  arm_cache_flush_d();
-  arm_cache_flush_i();
+  ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(vaddr));
 }
 
 #endif

@@ -198,6 +198,42 @@ void vmm_init(void)
   arm_mmu_flush_tlb();
 }
 
+status vmm_map_region_find_vstart(region_t *r)
+{
+
+  int i,j;
+  if(r->pstart == 0) {
+    DLOG(2,"vmm_map_region_find_vstart(%#x): r->pstart==0\n", r);
+    return EINVALID;
+  }
+  if(r->page_size_log2 != PAGE_SIZE_LOG2) {
+    DLOG(2,"vmm_map_region_find_vstart(%#x): r->page_size_log2!=%d\n", r, PAGE_SIZE_LOG2);
+    return EINVALID;
+  }
+  if(r->page_count < 1 || r->page_count > 256) {
+    DLOG(2,"vmm_map_region_find_vstart(%#x): r->page_count=%d invalid\n", r, r->page_count);
+    return EINVALID;
+  }
+  if(r->pt == NULL || r->pt->type != PT_COARSE) {
+    DLOG(2,"vmm_map_region_find_vstart(%#x): r->pt is NULL or invalid\n", r);
+    return EINVALID;
+  }
+
+  for(i=0; i<(256 - r->page_count + 1); i++) {
+    for(j=0; j<r->page_count; j++) {
+      if(r->pt->ptvaddr[i+j] != 0)
+        break;
+    }
+    if(j == r->page_count) {
+      /* found one */
+      r->vstart = r->pt->vstart + (i << r->page_size_log2);
+      return vmm_map_region(r);
+    }
+  }
+
+  return ENOSPACE;
+}
+
 /*
  * Local Variables:
  * indent-tabs-mode: nil

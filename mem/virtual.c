@@ -153,8 +153,13 @@ status vmm_map_region(region_t *r)
   entry |= pt_type_bits[t];         /* indicates type of entry */
   entry |= (r->cache_buf & 3) << 2; /* cache/buf bits */
 
-  for(i = r->page_count - 1; i >= 0; i--)
-    *ptr-- = entry + (i << pt_entry_sizes_log2[t]);
+  for(i = r->page_count - 1; i >= 0; i--) {
+    *ptr = entry + (i << pt_entry_sizes_log2[t]);
+    /* The MMU is allowed to skip over caches when doing its
+     * work. Make sure table entry is written to main memory. */
+    /* http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0344k/Bgbfdjaa.html */
+    arm_cache_clean_invl_data_mva_poc(ptr--);
+  }
 
   return OK;
 }

@@ -145,7 +145,7 @@ void intr_init(void)
     printf_uart3("%#x ", vt[i]);
   putc_uart3('\n');
   /* set vector table to 0xFFFF0000 */
-  arm_mmu_ctrl(MMU_CTRL_HIGHVT, MMU_CTRL_HIGHVT);
+  arm_ctrl(CTRL_HIGHVT, CTRL_HIGHVT);
 
   intc_init();
 }

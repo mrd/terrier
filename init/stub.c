@@ -61,8 +61,8 @@ void stub_init(void)
   arm_mmu_set_ttb1((physaddr) l1table_phys);
 
   /* Enable MMU */
-  arm_mmu_ctrl(MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE,
-               MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
+  arm_ctrl(CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE,
+           CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
 }
 
 /*

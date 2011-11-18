@@ -45,12 +45,13 @@
 #define PAGE_SIZE_LOG2 12
 #define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
 
-#define MMU_CTRL_MMU    0x0001
-#define MMU_CTRL_DCACHE 0x0004
-#define MMU_CTRL_ICACHE 0x1000
-#define MMU_CTRL_HIGHVT 0x2000
+#define CTRL_MMU    BIT(0)
+#define CTRL_DCACHE BIT(2)
+#define CTRL_ICACHE BIT(12)
+#define CTRL_HIGHVT BIT(13)
+#define CTRL_XP     BIT(23)
 
-static inline void arm_mmu_ctrl(u32 set, u32 mask)
+static inline void arm_ctrl(u32 set, u32 mask)
 {
   u32 cr;
   ASM("MRC p15, #0, %0, c1, c0, #0":"=r"(cr));

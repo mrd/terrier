@@ -99,7 +99,7 @@ void reset_uart3(void)
   if(vmm_map_region(&uart3_region) != OK) {
     void early_panic(char *);
     /* This is bad. Disable MMU and attempt to report the problem. */
-    arm_mmu_ctrl(0, MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE);
+    arm_ctrl(0, CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
     early_panic("Unable to map UART3 region.");
   }
 

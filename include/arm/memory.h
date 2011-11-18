@@ -59,6 +59,31 @@ static inline void arm_mmu_ctrl(u32 set, u32 mask)
   ASM("MCR p15, #0, %0, c1, c0, #0"::"r"(cr));
 }
 
+/* Translation Table Base Control Register */
+
+/* A translation table base register is selected in the following fashion:
+ *
+ * If N is set to 0, always use Translation Table Base Register
+ * 0. This is the default case at reset. It is backwards compatible
+ * with ARMv5 and earlier processors.
+ *
+ * If N is set to a value greater than 0, and bits [31:32-N] of the VA
+ * are all zeros, use Translation Table Base Register 0. Otherwise,
+ * use Translation Table Base Register 1. N must be in the range
+ * 0-7. */
+
+#define MMU_TTBCR_N    BITMASK(0,3)
+#define MMU_TTBCR_PD0  BIT(4)
+#define MMU_TTBCR_PD1  BIT(5)
+static inline void arm_mmu_ttbcr(u32 set, u32 mask)
+{
+  u32 cr;
+  ASM("MRC p15, 0, %0, c2, c0, 2":"=r"(cr));
+  cr &= ~mask;
+  cr |= set;
+  ASM("MCR p15, 0, %0, c2, c0, 2"::"r"(cr));
+}
+
 #define MMU_DOMAIN_NO_ACCESS 0x0
 #define MMU_DOMAIN_CLIENT    0x1
 #define MMU_DOMAIN_MANAGER   0x3
@@ -101,8 +126,11 @@ static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
   }
 }
 
+/* TTB0 -- process-specific virtual mappings */
+/* TTB1 -- OS or I/O specific virtual mappings */
+
 /* Set translation table base address for MMU. ttb must be 16kB aligned. */
-static inline void arm_mmu_set_ttb(physaddr ttbp)
+static inline void arm_mmu_set_ttb0(physaddr ttbp)
 {
   u32 ttb = (u32) ttbp;
   ttb &= 0xffffc000;
@@ -110,10 +138,26 @@ static inline void arm_mmu_set_ttb(physaddr ttbp)
 }
 
 /* Get translation table base address for MMU. */
-static inline physaddr arm_mmu_get_ttb(void *ttbp)
+static inline physaddr arm_mmu_get_ttb0(void *ttbp)
 {
   u32 ttb;
   ASM("MRC p15, #0, %0, c2, c0, #0":"=r"(ttb));
+  return ttb;
+}
+
+/* Set translation table base address for MMU. ttb must be 16kB aligned. */
+static inline void arm_mmu_set_ttb1(physaddr ttbp)
+{
+  u32 ttb = (u32) ttbp;
+  ttb &= 0xffffc000;
+  ASM("MCR p15, #0, %0, c2, c0, #1"::"r"(ttb));
+}
+
+/* Get translation table base address for MMU. */
+static inline physaddr arm_mmu_get_ttb1(void *ttbp)
+{
+  u32 ttb;
+  ASM("MRC p15, #0, %0, c2, c0, #1":"=r"(ttb));
   return ttb;
 }
 

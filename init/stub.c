@@ -57,7 +57,8 @@ void stub_init(void)
   arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
 
   /* Stub will remain mapped during early initialization. */
-  arm_mmu_set_ttb((physaddr) l1table_phys);
+  arm_mmu_set_ttb0((physaddr) l1table_phys);
+  arm_mmu_set_ttb1((physaddr) l1table_phys);
 
   /* Enable MMU */
   arm_mmu_ctrl(MMU_CTRL_MMU | MMU_CTRL_DCACHE | MMU_CTRL_ICACHE,

@@ -171,7 +171,7 @@ status vmm_activate_pagetable(pagetable_t *pt)
   u32 idx, entry;
   switch(pt->type) {
   case PT_MASTER:
-    arm_mmu_set_ttb(pt->ptpaddr);
+    arm_mmu_set_ttb0(pt->ptpaddr);
     current_base_table = pt;
     break;
   case PT_COARSE:
@@ -191,10 +191,12 @@ status vmm_activate_pagetable(pagetable_t *pt)
 
 void vmm_init(void)
 {
+  /* Below 1 GB use TTB0. Above 1 GB use TTB1. */
+  arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
+  /* Presume l1pt is already active in TTB1, from stub. */
   vmm_init_pagetable(&kernel_l2pt);
   vmm_map_region(&kernel_region);
   vmm_activate_pagetable(&kernel_l2pt);
-  vmm_activate_pagetable(&l1pt);
   arm_mmu_flush_tlb();
 }
 

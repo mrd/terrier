@@ -61,6 +61,15 @@ static inline void data_mem_barrier(void)
   ASM("MCR p15, #0, %0, c7, c10, #5"::"r"(0));
 }
 
+/* Flushing the instruction prefetch buffer has the effect that all
+ * instructions occurring in program order after this instruction are
+ * fetched from the memory system, including the L1 cache or TCM,
+ * after the execution of this instruction. */
+static inline void prefetch_flush(void)
+{
+  ASM("MCR p15, #0, %0, c7, c5, #4"::"r"(0));
+}
+
 static inline u32 count_leading_zeroes(u32 x)
 {
   u32 n;

@@ -183,10 +183,35 @@ static inline void arm_mmu_flush_tlb(void)
  * Clean - if write-back enabled then flush writes to memory
  */
 
+/* Invalidate entire instruction cache to PoU. Also flush branch
+ * target cache. */
+static inline void arm_cache_invl_instr(void)
+{
+  ASM("MCR p15, #0, %0, c7, c5, #0"::"r"(0));
+}
+
+/* Invalidate entire branch predictor array. */
+static inline void arm_cache_invl_branch_pred_array(void)
+{
+  ASM("MCR p15, #0, %0, c7, c5, #6"::"r"(0));
+}
+
+/* Invalidate entire data cache */
+static inline void arm_cache_invl_data(void)
+{
+  /* Loop through set/way */
+}
+
 /* Invalidate data (or unified) cache by MVA to PoC */
 static inline void arm_cache_invl_data_mva_poc(void *vaddr)
 {
   ASM("MCR p15, #0, %0, c7, c6, #1"::"r"(vaddr));
+}
+
+/* Clean entire data cache. */
+static inline void arm_cache_clean_data(void)
+{
+  /* Loop through set/way */
 }
 
 /* Clean data or unified cache by MVA to PoC. */
@@ -199,6 +224,12 @@ static inline void arm_cache_clean_data_mva_poc(void *vaddr)
 static inline void arm_cache_clean_invl_data_mva_poc(void *vaddr)
 {
   ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(vaddr));
+}
+
+/* Clean and invalidate entire data cache */
+static inline void arm_cache_clean_invl_data(void)
+{
+  /* Loop through set/way */
 }
 
 /* The least significant byte is the Address Space ID. The remainder

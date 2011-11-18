@@ -85,7 +85,9 @@ typedef u32 physaddr, size_t;
 typedef s32 status;
 
 #define BIT(x) ((u32) (1<<(x)))
+#define BITMASK(s,n) ((u32) (((1<<(n)) - 1) << s))
 #define GETBITS(x,s,n) (((x) >> (s)) & ((1 << (n)) - 1))
+#define SETBITS(x,s,n) (((x) & BITMASK(0,n)) << (s))
 
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 #define container_of(ptr, type, member) ({                      \

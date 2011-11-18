@@ -201,6 +201,14 @@ static inline void arm_cache_clean_invl_data_mva_poc(void *vaddr)
   ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(vaddr));
 }
 
+/* The least significant byte is the Address Space ID. The remainder
+ * forms a general-purpose process ID. There can be many process IDs
+ * per ASID. The ASID is used for tagged TLB entries. */
+static inline void arm_mmu_set_context_id(u32 cid)
+{
+  ASM("MCR p15, #0, %0, c13, c0, #1"::"r"(cid));
+}
+
 #endif
 
 /*

@@ -240,6 +240,41 @@ static inline void arm_mmu_set_context_id(u32 cid)
   ASM("MCR p15, #0, %0, c13, c0, #1"::"r"(cid));
 }
 
+static inline u32 arm_mmu_data_fault_status(void)
+{
+  u32 stat;
+  ASM("MRC p15, #0, %0, c5, c0, #0":"=r"(stat));
+  return stat;
+}
+
+static inline u32 arm_mmu_instr_fault_status(void)
+{
+  u32 stat;
+  ASM("MRC p15, #0, %0, c5, c0, #1":"=r"(stat));
+  return stat;
+}
+
+static inline u32 arm_mmu_data_fault_addr(void)
+{
+  u32 stat;
+  ASM("MRC p15, #0, %0, c6, c0, #0":"=r"(stat));
+  return stat;
+}
+
+static inline u32 arm_mmu_watchpoint_fault_addr(void)
+{
+  u32 stat;
+  ASM("MRC p15, #0, %0, c6, c0, #1":"=r"(stat));
+  return stat;
+}
+
+static inline u32 arm_mmu_instr_fault_addr(void)
+{
+  u32 stat;
+  ASM("MRC p15, #0, %0, c6, c0, #2":"=r"(stat));
+  return stat;
+}
+
 #endif
 
 /*

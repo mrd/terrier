@@ -184,6 +184,40 @@ status intc_unmask_irq(u32 irq_num)
 #error "HANDLES unsupported"
 #endif
 
+struct {
+  char *source; u32 status; u32 dom_valid; u32 far_valid;
+} fault_status_register_encodings[] = {
+  { "Alignment", 0b00001, 0, 1 },
+  { "PMSA - TLB miss (MPU)", 0b00000, 0, 1 },
+  { "Instruction Cache Maintenance Operation Fault", 0b00100, 0, 1 },
+  { "External Abort on Translation 1st level", 0b01100, 0, 1 },
+  { "External Abort on Translation 2nd level", 0b01110, 1, 1 },
+  { "Translation Section", 0b00101, 0, 1 },
+  { "Translation Page", 0b00111, 1, 1 },
+  { "Domain Section", 0b01001, 1, 1 },
+  { "Domain Page", 0b01011, 1, 1 },
+  { "Permission Section", 0b01101, 1, 1 },
+  { "Permission Page", 0b01111, 1, 1 },
+  { "Precise External Abort", 0b01000, 0, 1 },
+  { "TLB Lock", 0b10100, 0, 0 },
+  { "Coprocessor Data Abort", 0b11010, 0, 0 },
+  { "Imprecise External Abort", 0b10110, 0, 0 },
+  { "Parity Error Exception", 0b11000, 0, 0 },
+  { "Debug event", 0b00010, 1, 0 },
+  { "", 0, 0, 0 }
+};
+
+static int find_fault_status(u32 sr)
+{
+  u32 status = GETBITS(sr,0,4) | (GETBITS(sr,10,1) << 4);
+  int i;
+  for(i=0;fault_status_register_encodings[i].source[0] != 0;i++) {
+    if(fault_status_register_encodings[i].status == status)
+      return i;
+  }
+  return i;
+}
+
 void HANDLES() _handle_reset(void)
 {
   DLOG(1, "_handle_reset\n");
@@ -203,19 +237,25 @@ void HANDLES("SWI") _handle_swi(void)
 
 void HANDLES("ABORT") _handle_prefetch_abort(void)
 {
-  u32 lr; u32 sp;
+  u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
-  DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x\n", lr - 4, sp);
+  sr = arm_mmu_instr_fault_status();
+  DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 4, sp, sr,
+       arm_mmu_instr_fault_addr());
+  DLOG(1, "  source=%s\n", fault_status_register_encodings[find_fault_status(sr)].source);
   early_panic("prefetch abort");
 }
 
 void HANDLES("ABORT") _handle_data_abort(void)
 {
-  u32 lr; u32 sp;
+  u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
-  DLOG(1, "_handle_data_abort lr=%#x sp=%#x\n", lr - 8, sp);
+  sr = arm_mmu_data_fault_status();
+  DLOG(1, "_handle_data_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 8, sp, sr,
+       arm_mmu_data_fault_addr());
+  DLOG(1, "  source=%s\n", fault_status_register_encodings[find_fault_status(sr)].source);
   early_panic("data abort");
 }
 

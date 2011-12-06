@@ -60,7 +60,7 @@ void NO_RETURN c_entry()
   extern void *_physical_start;
   u32 phystart = (u32) &_physical_start;
 
-  l1pt.ptvaddr[phystart >> 20] = 0;
+  l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
   arm_mmu_flush_tlb();
 
   perfmon_init();

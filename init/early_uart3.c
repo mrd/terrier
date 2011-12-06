@@ -42,7 +42,7 @@
 #include "arm/memory.h"
 #include <stdarg.h>
 
-static region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, R_PM };
+static region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
 
 #define NS16650_REG(x) u8 x; u8 _unused_##x[3];
 

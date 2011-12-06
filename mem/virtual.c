@@ -52,7 +52,7 @@ pagetable_t l1pt = { (void *) 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1
 ALIGNED(0x400, u32, kernel_l2table[256]);
 extern void *_kernel_l2table_phys, *_kernel_pages;
 pagetable_t kernel_l2pt = { (void *) 0xC0000000, (physaddr) &_kernel_l2table_phys, (u32 *) &kernel_l2table, &l1pt, PT_COARSE, 0 };
-region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages, 12, R_C | R_B, R_PM };
+region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages, 12, R_C | R_B, 0, R_PM };
 
 static u32 pt_sizes_log2[] = { 0, 14, 10 };                  /* size of pagetables */
 static u32 pt_start_masks[] = { 0, 0xFFFFFFFF, 0x000FFFFF }; /* valid pt virtual start */
@@ -60,9 +60,10 @@ static u32 pt_entry_masks[] = { 0, 0x000FFFFF, 0x00000FFF }; /* valid region vir
 static u32 pt_entry_sizes_log2[] = { 0, 20, 12 };            /* size that an entry covers */
 static u32 pt_type_bits[] = { 0, 0x12, 0x2 };                /* ARM-specific tag bits */
 static u32 pt_ap_offsets[] = { 0, 10, 4 };                   /* Access Perms. offset in entry */
-static u32 pt_ap_masks[] = { 0, 0x3, 0xFF };                 /* Access Perms. bitmask */
+static u32 pt_ap_masks[] = { 0, 0x3, 0x3 };                  /* Access Perms. bitmask */
 static u32 pt_dom_offsets[] = { 0, 5, 0 };                   /* Domain offset in entry */
 static u32 pt_dom_masks[] = { 0, 0xF, 0 };                   /* Domain bitmask */
+static u32 pt_sng_offsets[] = { 0, 16, 10 };                 /* Shared and not-Global bit offsets */
 
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_start_masks), vmm);
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_entry_masks), vmm);
@@ -72,6 +73,7 @@ CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_ap_offsets), vmm);
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_ap_masks), vmm);
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_dom_offsets), vmm);
 CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_dom_masks), vmm);
+CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_sng_offsets), vmm);
 
 #define PT_NUM_TYPES (sizeof(pt_sizes_log2) / sizeof(u32))
 
@@ -152,6 +154,7 @@ status vmm_map_region(region_t *r)
   entry |= (r->pt->domain & pt_dom_masks[t]) << pt_dom_offsets[t]; /* domain */
   entry |= pt_type_bits[t];         /* indicates type of entry */
   entry |= (r->cache_buf & 3) << 2; /* cache/buf bits */
+  entry |= (r->shared_ng & 3) << pt_sng_offsets[t]; /* shared/not-global */
 
   for(i = r->page_count - 1; i >= 0; i--) {
     *ptr = entry + (i << pt_entry_sizes_log2[t]);
@@ -191,6 +194,8 @@ status vmm_activate_pagetable(pagetable_t *pt)
 
 void vmm_init(void)
 {
+  /* Enable VMSAv6 with tagged TLB, and disable subpages. */
+  arm_ctrl(CTRL_XP, CTRL_XP);
   /* Below 1 GB use TTB0. Above 1 GB use TTB1. */
   arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
   /* Presume l1pt is already active in TTB1, from stub. */

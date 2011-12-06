@@ -62,12 +62,14 @@ typedef struct {
   u16 page_size_log2;           /* size of pages in this region (log2) */
 #define R_C 1                   /* set "cached" bit */
 #define R_B 2                   /* set "buffered" bit */
-  u8 cache_buf;                 /* cache/buffer attributes */
+  u8 cache_buf:4;               /* cache/buffer attributes */
+#define R_S 1                   /* set "shared" bit */
+#define R_NG 2                  /* set "not-global" bit */
+  u8 shared_ng:4;               /* shared/not-global attributes */
 #define R_NA 0                  /* no access (besides use of System/ROM bits) */
 #define R_PM 1                  /* privileged mode only */
 #define R_RO 2                  /* user-mode can read-only */
 #define R_RW 3                  /* user-mode can read-write */
-#define R_SETALL(x) (x | (x << 2) | (x << 4) | (x << 6))
   u8 access;                    /* access permission attributes */
 } region_t;
 

@@ -49,8 +49,8 @@
 #include "debug/cassert.h"
 
 extern region_t l4wakeup_region;
-region_t l4perip_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, R_PM };
-region_t l4core_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, R_PM };
+region_t l4perip_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
+region_t l4core_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
 
 /* 32-kHz sync timer counter */
 static volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x48320010;

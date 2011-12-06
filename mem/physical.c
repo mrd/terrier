@@ -48,7 +48,7 @@
 #define DEFAULT_CS0_START 0x80000000
 #define BITMAP_VIRTADDR ((void *) 0xC0000000)
 
-static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, R_PM };
+static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
 
 typedef struct {
   u32 *map;

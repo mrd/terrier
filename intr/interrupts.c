@@ -55,7 +55,7 @@
 region_t mpu_intc_region = {
   MPU_INTC_BASE_PHYS_ADDR,
   (void *) MPU_INTC_BASE_ADDR,
-  &l1pt, 1, 20, 0, R_PM
+  &l1pt, 1, 20, 0, 0, R_PM
 };
 
 PACKED_STRUCT(intcps) {
@@ -126,7 +126,7 @@ void intc_init(void)
   enable_IRQ();
 }
 
-region_t intr_region = { 0x89000000, (void *) 0xFFF00000, &l1pt, 1, 20, R_C | R_B, R_PM };
+region_t intr_region = { 0x89000000, (void *) 0xFFF00000, &l1pt, 1, 20, R_C | R_B, 0, R_PM };
 void intr_init(void)
 {
   extern u32 _vector_table_size;

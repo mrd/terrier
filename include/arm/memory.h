@@ -49,7 +49,6 @@
 #define CTRL_DCACHE BIT(2)
 #define CTRL_ICACHE BIT(12)
 #define CTRL_HIGHVT BIT(13)
-#define CTRL_XP     BIT(23)
 
 static inline void arm_ctrl(u32 set, u32 mask)
 {

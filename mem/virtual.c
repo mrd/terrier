@@ -194,8 +194,6 @@ status vmm_activate_pagetable(pagetable_t *pt)
 
 void vmm_init(void)
 {
-  /* Enable VMSAv6 with tagged TLB, and disable subpages. */
-  arm_ctrl(CTRL_XP, CTRL_XP);
   /* Below 1 GB use TTB0. Above 1 GB use TTB1. */
   arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
   /* Presume l1pt is already active in TTB1, from stub. */

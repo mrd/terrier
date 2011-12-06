@@ -46,6 +46,7 @@ IMGNAME = puppy
 ADDRESS = 0x80008000
 DEBUG = 0
 OPT = 2
+TESTS =
 
 ##################################################
 
@@ -66,6 +67,7 @@ CFLAGS += -g -O0
 else
 CFLAGS += -O$(OPT)
 endif
+CFLAGS += $(patsubst %,-DTEST_%,$(TESTS))
 
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 

@@ -39,7 +39,7 @@
 
 C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	mem/physical.c mem/virtual.c intr/interrupts.c omap3/timer.c \
-	debug/log.c
+	debug/log.c tests/cswitch.c
 S_FILES = init/startup.S intr/table.S
 
 IMGNAME = puppy

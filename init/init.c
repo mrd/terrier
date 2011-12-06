@@ -71,6 +71,10 @@ void NO_RETURN c_entry()
   timer_init();
   vmm_init();
 
+#ifdef TEST_CSWITCH
+  status test_cswitch(void); test_cswitch();
+#endif
+
   print_uart3("Hello world!\n");
 
   for(;;);

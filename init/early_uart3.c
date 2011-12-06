@@ -40,6 +40,7 @@
 #include "types.h"
 #include "mem/virtual.h"
 #include "arm/memory.h"
+#include "arm/asm.h"
 #include <stdarg.h>
 
 static region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
@@ -151,7 +152,8 @@ void early_panic(char *msg)
 {
   print_uart3("EARLY PANIC\n");
   print_uart3(msg);
-  for (;;);
+  print_uart3("-- HALTED --\n");
+  for (;;) arm_wait_for_interrupt();
 }
 
 int raise(int sig)

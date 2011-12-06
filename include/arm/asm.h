@@ -109,6 +109,12 @@ static inline void arm_perfmon_cntens(u32 set)
   ASM("MCR p15, 0, %0, c9, c12, 1"::"r"(set));
 }
 
+/* Put processor in low power state until interrupt. */
+static inline void arm_wait_for_interrupt(void)
+{
+  ASM("MCR p15, 0, %0, c7, c0, 4"::"r"(0));
+}
+
 #endif
 
 /*

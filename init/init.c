@@ -75,9 +75,9 @@ void NO_RETURN c_entry()
   status test_cswitch(void); test_cswitch();
 #endif
 
-  print_uart3("Hello world!\n");
+  print_uart3("-- HALTED --\n");
 
-  for(;;);
+  for(;;) arm_wait_for_interrupt();
 }
 
 /*

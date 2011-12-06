@@ -79,6 +79,7 @@ status vmm_activate_pagetable(pagetable_t *pt);
 status vmm_map_region(region_t *r);
 status vmm_init_pagetable(pagetable_t *pt);
 status vmm_map_region_find_vstart(region_t *r);
+status vmm_get_phys_addr(void *vaddr, physaddr *paddr);
 
 #endif
 

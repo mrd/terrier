@@ -44,6 +44,9 @@
 #include "arm/memory.h"
 #include "arm/asm.h"
 #include "mem/virtual.h"
+#include "mem/physical.h"
+#define MODULE "test_cswitch"
+#include "debug/log.h"
 
 #define TEST_ASID
 
@@ -64,24 +67,38 @@
   } while (0)
 #endif
 
-ALIGNED(0x4000, u32, usr1_l1table[4096]);
-ALIGNED(0x4000, u32, usr2_l1table[4096]);
-pagetable_t usr1_l1pt = { (void *) 0x00000000, 0, (u32 *) &usr1_l1table, &usr1_l1pt, PT_MASTER, 0 };
-pagetable_t usr2_l1pt = { (void *) 0x00000000, 0, (u32 *) &usr2_l1table, &usr2_l1pt, PT_MASTER, 0 };
+static status alloc_pt(pagetable_t *pt)
+{
+  /* get four contiguous naturally aligned physical pages */
+  if(physical_alloc_pages(4, 4, &pt->ptpaddr) != OK) {
+    DLOG(1, "physical_alloc_pages for pagetable failed.\n");
+    return ENOSPACE;
+  }
+  region_t tmp = { pt->ptpaddr, NULL, &kernel_l2pt, 4, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+  /* map to kernel virtual memory */
+  if(vmm_map_region_find_vstart(&tmp) != OK) {
+    DLOG(1, "vmm_map_region_find_vstart for pagetable failed.\n");
+    return ENOSPACE;
+  }
+  pt->ptvaddr = tmp.vstart;
+  return OK;
+}
 
 status test_cswitch(void)
 {
+  pagetable_t usr1_l1pt = { (void *) 0x00000000, 0, NULL, &usr1_l1pt, PT_MASTER, 0 };
+  pagetable_t usr2_l1pt = { (void *) 0x00000000, 0, NULL, &usr2_l1pt, PT_MASTER, 0 };
   u32 t1, t2;
   region_t r1 = { 0x84000000, (void *) 0x100000, &usr1_l1pt, 1, 20, R_C | R_B, R_NG, R_RW };
   region_t r2 = { 0x84100000, (void *) 0x100000, &usr2_l1pt, 1, 20, R_C | R_B, R_NG, R_RW };
 
-  if(vmm_get_phys_addr(usr1_l1pt.ptvaddr, &usr1_l1pt.ptpaddr) != OK)
-    early_panic("vmm_get_phys_addr usr1_l1table");
-  if(vmm_get_phys_addr(usr2_l1pt.ptvaddr, &usr2_l1pt.ptpaddr) != OK)
-    early_panic("vmm_get_phys_addr usr2_l1table");
+  alloc_pt(&usr1_l1pt);
+  alloc_pt(&usr2_l1pt);
 
   printf_uart3("usr1_l1table phys=%#x usr2_l1table phys=%#x\n",
                usr1_l1pt.ptpaddr, usr2_l1pt.ptpaddr);
+  printf_uart3("usr1_l1table virt=%#x usr2_l1table virt=%#x\n",
+               usr1_l1pt.ptvaddr, usr2_l1pt.ptvaddr);
 
   SW(&usr1_l1pt,1);
 
@@ -119,6 +136,7 @@ status test_cswitch(void)
       return EINVALID;
   }
   return EINVALID;
+  /* free temp regions */
 }
 
 #endif

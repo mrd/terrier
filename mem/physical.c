@@ -78,6 +78,79 @@ physaddr physical_alloc_page(void)
   return 0;
 }
 
+/* Pick and mark multiple aligned physical pages as allocated. */
+/* Permits alignments up to 8 pages. */
+status physical_alloc_pages(u32 n, u32 align, physaddr *start)
+{
+  int m = 0, byt = 0, bit = 0, count = n, mode = 0;
+  int saved_m = 0, saved_byt = 0, saved_bit = 0;
+
+  if(align == 0) align = 1;
+
+  /* Modes: 0=search; 1=mark */
+
+  /* First search for matching space. Then mark it as allocated. */
+
+  while(m < num_bitmaps) {
+    if(mode == 0) {
+      /* search mode */
+      if(BITMAP_TST(bitmap[m].map, (byt << 3) + bit)) {
+        /* found allocated page. reset count. */
+        count = n;
+      } else {
+        /* found an unallocated page. */
+        if(count == n) {
+          /* start of span */
+          if((bit & (align - 1)) == 0) {
+            /* save state at aligned start of (potential) span. */
+            saved_m = m;
+            saved_byt = byt;
+            saved_bit = bit;
+            count--;
+          }
+        } else
+          /* mid-span */
+          count--;
+      }
+
+      if(count == 0) {
+        /* found n consecutive unallocated pages. */
+        /* switch to marking mode. */
+        mode = 1;
+        /* restore count. */
+        count = n;
+        /* restore state to start of span. */
+        m = saved_m;
+        byt = saved_byt;
+        bit = saved_bit;
+        continue;
+      }
+    } else if(mode == 1) {
+      /* mark mode */
+      BITMAP_SET(bitmap[m].map, (byt << 3) + bit);
+      if(--count == 0) {
+        *start = bitmap[saved_m].start + (((saved_byt << 3) + saved_bit) << PAGE_SIZE_LOG2);
+        return OK;
+      }
+    }
+
+    /* increment bit and carry over when necessary */
+    bit++;
+
+    if(bit >= 8) {
+      byt++;
+      bit = 0;
+    }
+
+    if(byt >= bitmap[m].map_bytes) {
+      m++;
+      byt = 0;
+    }
+  }
+
+  return ENOSPACE;
+}
+
 /* Unmark physical page given by address (assume aligned) */
 void physical_free_page(physaddr addr)
 {

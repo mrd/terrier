@@ -41,6 +41,8 @@
 #define _MEM_VIRTUAL_H_
 
 #include "types.h"
+#include "list.h"
+#include "mem/pool.h"
 
 typedef struct pagetable {
   void *vstart;                 /* starting virtual address managed by PT */
@@ -53,6 +55,8 @@ typedef struct pagetable {
   u16 type;                     /* one of PT_* */
   u16 domain;                   /* domain of section entries if MASTER */
 } pagetable_t;
+DLIST_TYPE(pagetable,pagetable_t);
+POOL_PROTO(pagetable_list,pagetable_list_t);
 
 typedef struct {
   physaddr pstart;              /* starting physical address of region */
@@ -72,7 +76,8 @@ typedef struct {
 #define R_RW 3                  /* user-mode can read-write */
   u8 access;                    /* access permission attributes */
 } region_t;
-
+DLIST_TYPE(region,region_t);
+POOL_PROTO(region_list,region_list_t);
 
 extern pagetable_t l1pt;
 extern pagetable_t kernel_l2pt;

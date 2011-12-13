@@ -249,6 +249,9 @@ status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
   return OK;
 }
 
+POOL_DEFN(pagetable_list,pagetable_list_t,16,4);
+POOL_DEFN(region_list,region_list_t,16,4);
+
 /*
  * Local Variables:
  * indent-tabs-mode: nil

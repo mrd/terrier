@@ -1,5 +1,5 @@
 /*
- * Begin initialization in C.
+ * Scheduler processes
  *
  * -------------------------------------------------------------------
  *
@@ -37,50 +37,29 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _SCHED_PROCESS_H_
+#define _SCHED_PROCESS_H_
+
 #include "types.h"
-#include "omap3/early_uart3.h"
-#include "arm/memory.h"
-#include "arm/asm.h"
 #include "mem/virtual.h"
 
-void perfmon_init(void)
-{
-  arm_perfmon_pmnc(PERFMON_PMNC_E, PERFMON_PMNC_E);
-  arm_perfmon_cntens(PERFMON_CNTENS_C);
-}
+typedef u32 pid_t;
+#define MAX_PROCESSES 16
+#define NOPID ((pid_t) 0)
 
-void NO_RETURN c_entry()
-{
-  void identify_device(void);
-  void physical_init(void);
-  void intr_init(void);
-  void timer_init(void);
-  void vmm_init(void);
-  void process_init(void);
-  extern pagetable_t l1pt;
-  extern void *_physical_start;
-  u32 phystart = (u32) &_physical_start;
+typedef struct {
+  pid_t pid;
+  pagetable_list_t *tables;
+  region_list_t *regions;
+  u32 next;
+} process_t;
 
-  l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
-  arm_mmu_flush_tlb();
+process_t *process_find(u32 pid);
+status process_switch_to(process_t *p);
+status process_new(process_t **return_p);
+void process_init(void);
 
-  perfmon_init();
-  reset_uart3();
-  identify_device();
-  physical_init();
-  intr_init();
-  timer_init();
-  vmm_init();
-  process_init();
-
-#ifdef TEST_CSWITCH
-  status test_cswitch(void); test_cswitch();
 #endif
-
-  print_uart3("-- HALTED --\n");
-
-  for(;;) arm_wait_for_interrupt();
-}
 
 /*
  * Local Variables:

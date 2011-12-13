@@ -242,7 +242,8 @@ status vmm_map_region_find_vstart(region_t *r)
 status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
 {
   u32 addr = (u32) vaddr;
-  u32 res = arm_mmu_va_to_pa((void *) (addr & 0xFFFFF000), 0);
+  u32 res;
+  arm_mmu_va_to_pa((void *) (addr & 0xFFFFF000), 0, res);
   if (res & 1) return EINVALID;
   *paddr = (res & 0xFFFFF000) + (addr & 0xFFF);
   return OK;

@@ -274,13 +274,9 @@ static inline u32 arm_mmu_instr_fault_addr(void)
   return stat;
 }
 
-static inline u32 arm_mmu_va_to_pa(void *vaddr, u32 op2)
-{
-  u32 res;
-  ASM("MCR p15,0,%1,c7,c8,%2\n"
-      "MRC p15,0,%0,c7,c4,0":"=r"(res):"r"(vaddr),"I"(op2));
-  return res;
-}
+#define arm_mmu_va_to_pa(vaddr, op2, res)                       \
+  ASM("MCR p15,0,%1,c7,c8,%2\n"                                 \
+      "MRC p15,0,%0,c7,c4,0":"=r"(res):"r"(vaddr),"I"(op2))
 
 #endif
 

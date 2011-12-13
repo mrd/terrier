@@ -1,5 +1,5 @@
 /*
- * Begin initialization in C.
+ * Testing Processes
  *
  * -------------------------------------------------------------------
  *
@@ -37,53 +37,53 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef TEST_PROCESS
+
 #include "types.h"
-#include "omap3/early_uart3.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
 #include "mem/virtual.h"
+#include "mem/physical.h"
+#include "sched/process.h"
+#define MODULE "test_process"
+#include "debug/log.h"
 
-void perfmon_init(void)
+status test_process(void)
 {
-  arm_perfmon_pmnc(PERFMON_PMNC_E, PERFMON_PMNC_E);
-  arm_perfmon_cntens(PERFMON_CNTENS_C);
+  process_t *p;
+  if(process_new(&p) != OK) {
+    DLOG(1, "process_new failed\n");
+    return EINVALID;
+  }
+
+  DLOG(1, "process region pstart=%#x\n", p->regions->elt.pstart);
+  region_t rtmp = { p->regions->elt.pstart, NULL, &kernel_l2pt, 4, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+  /* map to kernel virtual memory */
+  if(vmm_map_region_find_vstart(&rtmp) != OK) {
+    DLOG(1, "test_process: vmm_map_region_find_vstart for user region failed.\n");
+    return ENOSPACE;
+  }
+  ((u32 *) rtmp.vstart)[0] = 0xef00007b; /* SVC #123 */
+  ((u32 *) rtmp.vstart)[1] = 0xeafffffe; /* B . */
+
+  process_switch_to(p);
+  DLOG(1, "0x1000: %#x\n", *((u32 *) 0x1000));
+
+  DLOG(1, "Switching to usermode. Expect SWI then halt:\n");
+
+  u32 spsr;
+  ASM("MRS %0,spsr\n"
+      "AND %0, %0, #0xE0\n"
+      "ORR %0, %0, #0x10\n"
+      "MSR spsr_c, %0":"=r"(spsr));
+
+  ASM("STMFD sp!, {%0}\n"
+      "LDMFD sp!, {pc}^"::"r"(0x1000));
+
+  return OK;
 }
 
-void NO_RETURN c_entry()
-{
-  void identify_device(void);
-  void physical_init(void);
-  void intr_init(void);
-  void timer_init(void);
-  void vmm_init(void);
-  void process_init(void);
-  extern pagetable_t l1pt;
-  extern void *_physical_start;
-  u32 phystart = (u32) &_physical_start;
-
-  l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
-  arm_mmu_flush_tlb();
-
-  perfmon_init();
-  reset_uart3();
-  identify_device();
-  physical_init();
-  intr_init();
-  timer_init();
-  vmm_init();
-  process_init();
-
-#ifdef TEST_CSWITCH
-  status test_cswitch(void); test_cswitch();
 #endif
-#ifdef TEST_PROCESS
-  status test_process(void); test_process();
-#endif
-
-  print_uart3("-- HALTED --\n");
-
-  for(;;) arm_wait_for_interrupt();
-}
 
 /*
  * Local Variables:

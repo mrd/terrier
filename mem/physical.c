@@ -59,10 +59,6 @@ typedef struct {
 static bitmap_t bitmap[2];
 static u32 num_bitmaps;
 
-#define BITMAP_SET(table,index) ((table)[(index)>>5] |= (1 << ((index) & 31)))
-#define BITMAP_CLR(table,index) ((table)[(index)>>5] &= ~(1 << ((index) & 31)))
-#define BITMAP_TST(table,index) ((table)[(index)>>5] & (1 << ((index) & 31)))
-
 /* Pick and mark a physical page as allocated. Zero on error. */
 physaddr physical_alloc_page(void)
 {

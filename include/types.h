@@ -88,6 +88,9 @@ typedef s32 status;
 #define BITMASK(s,n) ((u32) (((1<<(n)) - 1) << s))
 #define GETBITS(x,s,n) (((x) >> (s)) & ((1 << (n)) - 1))
 #define SETBITS(x,s,n) (((x) & BITMASK(0,n)) << (s))
+#define BITMAP_SET(table,index) ((table)[(index)>>5] |= (1 << ((index) & 31)))
+#define BITMAP_CLR(table,index) ((table)[(index)>>5] &= ~(1 << ((index) & 31)))
+#define BITMAP_TST(table,index) ((table)[(index)>>5] & (1 << ((index) & 31)))
 
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 #define container_of(ptr, type, member) ({                      \

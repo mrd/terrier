@@ -71,7 +71,13 @@ SECTIONS
   * address must be specified with AT. */
 
  .text : AT ( _stub_end ) { *(.text) }
- .rodata : AT ( LOADADDR (.text) + SIZEOF (.text) ) { *(.rodata) }
+ .rodata : AT ( LOADADDR (.text) + SIZEOF (.text) ) {
+   *(.rodata)
+   _program_map_start = .;
+   INCLUDE program-map.ld;      /* list of program objects included */
+   _program_map_end = .;
+ }
+ _program_map_count = (_program_map_end - _program_map_start) >> 2;
 
  . = ALIGN(0x1000);
 

@@ -49,9 +49,9 @@
 #define MODULE "test_process"
 #include "debug/log.h"
 
-extern u32 _binary_idle_elf_size, _binary_idle_elf_start;
+extern u32 _program_map_start, _program_map_count;
 
-static status program_load(void *pstart, u32 plen, process_t **return_p)
+static status program_load(void *pstart, process_t **return_p)
 {
   process_t *p;
   Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
@@ -136,8 +136,15 @@ static status program_load(void *pstart, u32 plen, process_t **return_p)
 status test_process(void)
 {
   process_t *p;
+  u32 *progs = (u32 *) &_program_map_start, cnt = (u32) &_program_map_count;
 
-  if(program_load(&_binary_idle_elf_start, (u32) &_binary_idle_elf_size, &p) != OK) {
+  if(cnt == 0) {
+    DLOG(1, "test_process: no program to load\n");
+    return EINVALID;
+  }
+
+  DLOG(1, "test_process: loading program found at %#x\n", progs[0]);
+  if(program_load((void *) progs[0], &p) != OK) {
     DLOG(1, "program_load failed\n");
     return EINVALID;
   }

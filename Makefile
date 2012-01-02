@@ -98,8 +98,11 @@ $(IMGNAME).bin.gz: $(IMGNAME).bin
 $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@
 
-$(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld buildprograms
+$(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld program-map.ld
 	$(LD) -T ldscripts/$(IMGNAME).ld $(OBJS) $(POBJS) $(LIBGCC) -o $@
+
+program-map.ld: buildprograms
+	nm $(POBJS) | egrep "_binary_.*_start" | awk -- '{ printf "LONG(%s);\n", $$3 }' > $@
 
 .PHONY: buildprograms
 buildprograms:
@@ -111,7 +114,7 @@ buildprograms:
 .PHONY: clean test tags cscope
 
 clean:
-	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit
+	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit program-map.ld
 	rm -f $(OBJS) $(DFILES)
 	for p in $(PROGS); do make -C $$p clean; done
 

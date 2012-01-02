@@ -84,11 +84,14 @@ DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
 .PHONY: all
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
 
-$(IMGNAME).uimg: $(IMGNAME).bin
-	$(MKIMAGE) -A arm -C none -O linux -T kernel -d $< -a $(ADDRESS) -e $(ADDRESS) $@
+$(IMGNAME).uimg: $(IMGNAME).bin.gz
+	$(MKIMAGE) -A arm -C gzip -O linux -T kernel -d $< -a $(ADDRESS) -e $(ADDRESS) $@
 
 $(IMGNAME)-nand.bin: $(IMGNAME).uimg u-boot/u-boot.bin util/bb_nandflash_ecc
 	sh util/nand.sh $< $@ 2> /dev/null
+
+$(IMGNAME).bin.gz: $(IMGNAME).bin
+	gzip -f $<
 
 $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@

@@ -45,29 +45,110 @@
 #include "mem/virtual.h"
 #include "mem/physical.h"
 #include "sched/process.h"
+#include "sched/elf.h"
 #define MODULE "test_process"
 #include "debug/log.h"
 
-status test_process(void)
+extern u32 _binary_idle_elf_size, _binary_idle_elf_start;
+
+static status program_load(void *pstart, u32 plen, process_t **return_p)
 {
   process_t *p;
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Phdr *pph = (void *) pe + pe->e_phoff, *loadph = NULL;
+  void *entry = (void *) pe->e_entry;
+  int i, memsz = 0;
+
+  /* Parse ELF */
+  DLOG(1, "Magic: %X%X%X%X\n", pe->e_ident[0], pe->e_ident[1], pe->e_ident[2], pe->e_ident[3]);
+  if(!(pe->e_ident[EI_MAG0] == ELFMAG0 &&
+       pe->e_ident[EI_MAG1] == ELFMAG1 &&
+       pe->e_ident[EI_MAG2] == ELFMAG2 &&
+       pe->e_ident[EI_MAG3] == ELFMAG3)) {
+    DLOG(1, "Bad Magic\n");
+    return EINVALID;
+  }
+  DLOG(1, "phnum=%d phoff=%#x entry=%#x\n", pe->e_phnum, pe->e_phoff, entry);
+  for(i=0;i<pe->e_phnum;i++) {
+    if (pph->p_type == PT_LOAD) {
+      memsz += pph->p_memsz;
+      loadph = pph;
+    }
+    DLOG(1, " ph[%d]: type=%#x flags=%#x filesz=%#x offset=%#x memsz=%#x vaddr=%#x align=%#x\n",
+         i, pph->p_type, pph->p_flags, pph->p_filesz, pph->p_offset,
+         pph->p_memsz, pph->p_vaddr, pph->p_align);
+    pph = (void *) pph + pe->e_phentsize;
+  }
+  if(loadph == NULL) {
+    DLOG(1, "No loadable program header found.\n");
+    return EINVALID;
+  }
+
+  /* Create process */
   if(process_new(&p) != OK) {
     DLOG(1, "process_new failed\n");
     return EINVALID;
   }
+  p->entry = entry;
 
-  DLOG(1, "process region pstart=%#x\n", p->regions->elt.pstart);
-  region_t rtmp = { p->regions->elt.pstart, NULL, &kernel_l2pt, 4, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
-  /* map to kernel virtual memory */
-  if(vmm_map_region_find_vstart(&rtmp) != OK) {
-    DLOG(1, "test_process: vmm_map_region_find_vstart for user region failed.\n");
+  pagetable_t *l2;
+  u32 pages = (loadph->p_memsz + 0xFFF) >> PAGE_SIZE_LOG2;
+  u32 align = 1;                /* physical: shouldn't matter */
+  l2 = &p->tables->next->elt;
+
+  /* Create userspace region */
+
+  region_list_t *rl = region_list_pool_alloc();
+  if(rl == NULL) {
+    DLOG(1, "process_new: region_list_pool_alloc failed.\n");
+    /* FIXME: clean-up previous resources */
     return ENOSPACE;
   }
-  ((u32 *) rtmp.vstart)[0] = 0xef00007b; /* SVC #123 */
-  ((u32 *) rtmp.vstart)[1] = 0xeafffffe; /* B . */
+  if(physical_alloc_pages(pages, align, &rl->elt.pstart) != OK) {
+    DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
+    /* FIXME: clean-up previous resources */
+    return ENOSPACE;
+  }
+
+  rl->elt.vstart = (void *) loadph->p_vaddr;
+  rl->elt.pt = l2;
+  rl->elt.page_count = pages;
+  rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
+  rl->elt.cache_buf = R_C | R_B; /* cached and buffered */
+  rl->elt.shared_ng = R_NG;      /* not global */
+  rl->elt.access = R_RW;         /* read-write user mode */
+  region_append(&p->regions, rl);
+  vmm_map_region(&rl->elt);
 
   process_switch_to(p);
-  DLOG(1, "0x1000: %#x\n", *((u32 *) 0x1000));
+  /* cheat, switch to process and use its mapping */
+
+  u32 *dest = (u32 *) loadph->p_vaddr;
+  u32 *src = (u32 *) pstart;
+  for(i=0;i<loadph->p_memsz;i++) {
+    dest[i] = src[i];
+  }
+
+  *return_p = p;
+  return OK;
+}
+
+status test_process(void)
+{
+  process_t *p;
+
+  if(program_load(&_binary_idle_elf_start, (u32) &_binary_idle_elf_size, &p) != OK) {
+    DLOG(1, "program_load failed\n");
+    return EINVALID;
+  }
+
+  process_switch_to(p);
+
+  void *entry;
+  entry = p->entry;
+  DLOG(1, "%#x: %#x %#x %#x %#x\n", entry,
+       ((u32 *) entry)[0], ((u32 *) entry)[1], ((u32 *) entry)[2], ((u32 *) entry)[3]);
+
 
   DLOG(1, "Switching to usermode. Expect SWI then halt:\n");
 
@@ -78,7 +159,7 @@ status test_process(void)
       "MSR spsr_c, %0":"=r"(spsr));
 
   ASM("STMFD sp!, {%0}\n"
-      "LDMFD sp!, {pc}^"::"r"(0x1000));
+      "LDMFD sp!, {pc}^"::"r"(p->entry));
 
   return OK;
 }

@@ -51,6 +51,7 @@ typedef struct {
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;
+  void *entry;
   u32 next;
 } process_t;
 

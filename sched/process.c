@@ -140,28 +140,7 @@ status process_new(process_t **return_p)
       l2 = &ptl2->elt;
       vmm_activate_pagetable(l2);
 
-      /* initialize userspace region */
-
-      region_list_t *rl = region_list_pool_alloc();
-      if(rl == NULL) {
-        DLOG(1, "process_new: region_list_pool_alloc failed.\n");
-        /* FIXME: clean-up previous resources */
-        return ENOSPACE;
-      }
-      if(physical_alloc_pages(4, 1, &rl->elt.pstart) != OK) {
-        DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
-        /* FIXME: clean-up previous resources */
-        return ENOSPACE;
-      }
-      rl->elt.vstart = (void *) PAGE_SIZE;  /* start at second page */
-      rl->elt.pt = l2;
-      rl->elt.page_count = 4;
-      rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
-      rl->elt.cache_buf = R_C | R_B; /* cached and buffered */
-      rl->elt.shared_ng = R_NG;      /* not global */
-      rl->elt.access = R_RW;         /* read-write user mode */
-      p->regions = rl;
-      vmm_map_region(&rl->elt);
+      p->regions = NULL;
 
       /* set pid */
       p->pid = (pid_t) (i + 1);

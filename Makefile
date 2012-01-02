@@ -42,7 +42,7 @@ C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	sched/process.c \
 	debug/log.c tests/cswitch.c tests/test_process.c
 S_FILES = init/startup.S intr/table.S
-PROGS = idle
+PROGS = progs/idle
 
 IMGNAME = puppy
 ADDRESS = 0x80008000
@@ -79,7 +79,7 @@ C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
 OBJS = $(C_OBJS) $(S_OBJS)
 DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
-POBJS = $(patsubst %,progs/%/program,$(PROGS))
+POBJS = $(patsubst %,%/program,$(PROGS))
 
 ##################################################
 
@@ -103,7 +103,7 @@ $(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld buildprograms
 
 .PHONY: buildprograms
 buildprograms:
-	for p in $(PROGS); do make -C progs/$$p; done
+	for p in $(PROGS); do make -C $$p; done
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@
@@ -113,12 +113,14 @@ buildprograms:
 clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit
 	rm -f $(OBJS) $(DFILES)
+	for p in $(PROGS); do make -C $$p clean; done
 
 distclean: clean
 	rm -f $(IMGNAME)-nand.bin
 	rm -f cscope.files cscope.in.out cscope.po.out cscope.out TAGS tags
 	(cd util; make clean)
 	(cd omap-u-boot-utils; make distclean V=1)
+	for p in $(PROGS); do make -C $$p distclean; done
 
 test: $(IMGNAME)-nand.bin
 	@echo "***** To quit QEMU type: Ctrl-a x"

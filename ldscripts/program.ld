@@ -3,9 +3,9 @@ OUTPUT_ARCH(arm)
 ENTRY(main)
 SECTIONS
 {
- PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x00008000)); . = SEGMENT_START("text-segment", 0x00008000) + SIZEOF_HEADERS;
- .text : { *(.text) }
- _etext = .;
+ PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x00008000));
+ . = SEGMENT_START("text-segment", 0x00008000) + SIZEOF_HEADERS;
+ .text : { *(.text) PROVIDE(_etext = .); }
  .rodata : { *(.rodata) }
  .data : { *(.data) }
  .bss : { *(.bss) }

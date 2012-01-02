@@ -40,12 +40,12 @@
 /* These "templates" generate functions and types according to the
  * 'name' parameter given. */
 
-/* insert_name: inserts into the list at the current spot */
+/* name_insert: inserts into the list at the current spot */
 
-/* append_name: appends to the list--if linear--or inserts into the
+/* name_append: appends to the list--if linear--or inserts into the
  * list after the current spot--if circular. */
 
-/* delete_name: deletes the current element and moves the pointer to
+/* name_delete: deletes the current element and moves the pointer to
  * the next. */
 
 #ifndef _LIST_H_

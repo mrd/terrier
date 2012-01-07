@@ -52,18 +52,13 @@ TESTS =
 
 ##################################################
 
-ARCH = arm-none-linux-gnueabi
-CC = $(ARCH)-gcc
-LD = $(ARCH)-ld
-AS = $(ARCH)-as
-OBJCOPY = $(ARCH)-objcopy
-MKIMAGE = mkimage
-QEMU = qemu-system-arm
+include config.mk
 
 ##################################################
 
-SFLAGS = -MMD -Iinclude
-CFLAGS = -Wall -MMD -Iinclude
+CFLAGS += -Iinclude
+SFLAGS += -Iinclude
+
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0
 else

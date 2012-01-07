@@ -2,13 +2,8 @@ NAME = idle
 C_FILES = idle.c
 S_FILES =
 
+include ../../config.mk
 LDSCRIPT = ../../ldscripts/program.ld
-ARCH = arm-none-linux-gnueabi
-CC = $(ARCH)-gcc
-LD = $(ARCH)-ld
-
-CFLAGS = -MMD -Wall
-SFLAGS = -MMD
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))

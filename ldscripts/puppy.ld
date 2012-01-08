@@ -83,7 +83,7 @@ SECTIONS
 
  _kernel_readonly_end = .;
 
- .data : AT ( LOADADDR (.text) + _kernel_readonly_end - _kernel_start ) { *(.data) }
+ .data : AT ( LOADADDR (.text) + _kernel_readonly_end - _kernel_start ) SUBALIGN(4) { *(.data) }
  .bss : AT ( LOADADDR (.data) + SIZEOF (.data) ) { *(.bss) }
 
  . = ALIGN(0x1000);

@@ -232,7 +232,11 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
 
 void HANDLES("SWI") _handle_swi(void)
 {
-  DLOG(1, "_handle_swi\n");
+  u32 lr;
+  ASM("MOV %0, lr":"=r"(lr));
+  lr -= 4;
+  DLOG(1, "_handle_swi lr=%#x (%#x)\n",
+       lr, *((u32 *) lr));
 }
 
 void HANDLES("ABORT") _handle_prefetch_abort(void)

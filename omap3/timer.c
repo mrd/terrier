@@ -124,9 +124,23 @@ static inline void set_upward_timer(int i, u32 value)
   gptimer[i]->TCRR = value;
 }
 
+status timer_gp_set(int i, u32 value)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  set_upward_timer(i, value);
+  return OK;
+}
+
 static inline void start_timer(int i)
 {
   gptimer[i]->TCLR |= GPTIMER_TCLR_ST;
+}
+
+status timer_gp_start(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  start_timer(i);
+  return OK;
 }
 
 static inline void enable_timer_autoreload(int i)
@@ -134,9 +148,23 @@ static inline void enable_timer_autoreload(int i)
   gptimer[i]->TCLR |= GPTIMER_TCLR_AR;
 }
 
+status timer_gp_enable_autoreload(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  enable_timer_autoreload(i);
+  return OK;
+}
+
 static inline void enable_timer_overflow_interrupt(int i)
 {
   gptimer[i]->TIER |= GPTIMER_TIER_OVF_IT_ENA;
+}
+
+status timer_gp_enable_overflow_interrupt(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  enable_timer_overflow_interrupt(i);
+  return OK;
 }
 
 static inline void stop_timer(int i)
@@ -145,9 +173,23 @@ static inline void stop_timer(int i)
   gptimer[i]->TISR = GPTIMER_TISR_TCAR_IT_FLAG | GPTIMER_TISR_OVF_IT_FLAG | GPTIMER_TISR_MAT_IT_FLAG;
 }
 
+status timer_gp_stop(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  stop_timer(i);
+  return OK;
+}
+
 static void timer_irq_handler(u32 activeirq)
 {
   DLOG(1, "timer_irq_handler(%#x)\n", activeirq);
+}
+
+status timer_gp_set_handler(int i, void (*handler)(u32))
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  intc_set_irq_handler(0x25 + i - 1, handler);
+  return OK;
 }
 
 static void timing_loop(void)

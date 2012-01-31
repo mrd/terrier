@@ -167,6 +167,18 @@ status timer_gp_enable_overflow_interrupt(int i)
   return OK;
 }
 
+static inline void ack_timer_overflow_interrupt(int i)
+{
+  gptimer[i]->TISR = 2;
+}
+
+status timer_gp_ack_overflow_interrupt(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  ack_timer_overflow_interrupt(i);
+  return OK;
+}
+
 static inline void stop_timer(int i)
 {
   gptimer[i]->TCLR &= ~(GPTIMER_TCLR_ST | GPTIMER_TCLR_AR);

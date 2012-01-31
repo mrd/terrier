@@ -46,6 +46,7 @@ status timer_gp_set(int i, u32 value);
 status timer_gp_start(int i);
 status timer_gp_enable_autoreload(int i);
 status timer_gp_enable_overflow_interrupt(int i);
+status timer_gp_ack_overflow_interrupt(int i);
 status timer_gp_stop(int i);
 status timer_gp_set_handler(int i, void (*handler)(u32));
 

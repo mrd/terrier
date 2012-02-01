@@ -55,16 +55,31 @@ _vector_table:
 _irq_stub:
         .word   0b11111001011011010000010100010011 /* SRSDB   sp!, #0x13 ; save {r14, spsr} on SVC mode stack */
         .word   0b11110001000000100000000000010011 /* CPS     #0x13      ; change to SVC mode */
-        STMFD   sp!, {r0-r3,r12}      /* put caller-save regs on stack */
-        MOV     lr, pc                /* lr = pc + 8 */
+        STMFD   r13!, {r0-r3,r12}         /* put caller-save regs on stack */
+        MOV     lr, pc                    /* lr = pc + 8 */
         LDR     pc, _vector_table_data+20 /* far call */
-        LDMFD   sp!, {r0-r3,r12}      /* restore caller-save regs */
-        /* r14 is the only available scratch register */
-        LDR     r14, [sp, #4]         /* r14 = saved IRQ spsr */
-        MSR     spsr_cxsf, r14        /* update spsr */
-        LDR     r14, [sp]             /* r14 = r14_irq */
-        ADD     sp, sp, #8            /* restore svc stack */
-        /* check if context switch needed. r13 is available. */
+
+        /* stack layout at this point:
+         *   ____________
+         *   | spsr_irq | SRS-saved
+         *   | r14_irq  | ___________
+         *   | r12      |
+         *   | r3       |
+         *   | r2       | caller-save
+         *   | r1       |
+         *   | r0       |
+         *   ------------
+         */
+
+        LDMFD   r13, {r0-r3,r12,r13,r14}   /* restore caller-save and SRS-saved registers */
+
+        /* LDM loads registers in numerical order from lower addesses to higher addresses.
+         * Therefore, r13=r14_irq and r14=spsr_irq */
+
+        MSR     spsr_cxsf, r14             /* spsr_svc = spsr_irq */
+        MOV     r14, r13                   /* r14_svc = r14_irq */
+
+        /* check if context switch needed. r13 is only register available. */
         LDR     r13, _vector_table_data+28 /* r13 = &_prev_process */
         LDR     r13, [r13]                 /* r13 = *r13 */
         CMP     r13, #0
@@ -77,8 +92,9 @@ _irq_stub:
         /* prev != NULL implies context switch: now save old context */
         ADD     r13, r13, #8
         STMIA   r13, {r0-r14}^ /* store user registers (incl. r13_usr, r14_usr) */
+        /* now all GP registers available for use */
         MRS     r0, spsr
-        STMDB   r13, {r0,lr}   /* save status register, return address */
+        STMDB   r13, {r0,lr}   /* store status register, return address */
 
         /* now load the next process context */
         LDR     r13, _vector_table_data+32 /* r13 = &_next_process */

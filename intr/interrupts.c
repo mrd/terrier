@@ -271,7 +271,7 @@ void HANDLES("ABORT") _handle_data_abort(void)
   early_panic("data abort");
 }
 
-void HANDLES("IRQ") _handle_irq(void)
+void _handle_irq(void)
 {
   u32 activeirq = intc->sir_irq.activeirq;
   intc_mask_irq(activeirq);

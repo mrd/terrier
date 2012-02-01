@@ -37,26 +37,65 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Be careful: actual virtual starting address will be 0xFFFF0000
+ * during operation. */
+
         .globl _vector_table
+        .align 8
 _vector_table:
-        LDR pc, _vector_table_data+0
-        LDR pc, _vector_table_data+4
-        LDR pc, _vector_table_data+8
-        LDR pc, _vector_table_data+12
-        LDR pc, _vector_table_data+16
+        LDR     pc, _vector_table_data+0
+        LDR     pc, _vector_table_data+4
+        LDR     pc, _vector_table_data+8
+        LDR     pc, _vector_table_data+12
+        LDR     pc, _vector_table_data+16
         NOP
-        LDR pc, _vector_table_data+20
-        LDR pc, _vector_table_data+24
+        B       _irq_stub
+        LDR     pc, _vector_table_data+24
+
+_irq_stub:
+        STMFD   sp!, {r0-r3,r12,r14}      /* put caller-save regs on stack */
+        MOV     lr, pc                    /* lr = pc + 8 */
+        LDR     pc, _vector_table_data+20 /* far call */
+        LDMFD   sp!, {r0-r3,r12,r14}      /* restore caller-save regs */
+        /* check if context switch needed. r13 is available. */
+        LDR     r13, _vector_table_data+28 /* r13 = &_prev_process */
+        LDR     r13, [r13]                 /* r13 = *r13 */
+        CMP     r13, #0
+
+        /* prev == NULL, jump directly to userspace */
+        LDREQ   r13, _vector_table_data+36 /* r13 = &irq_stack_top */
+        SUBEQS  pc, lr, #4                 /* jump to userspace */
+
+        /* prev != NULL implies context switch: now save old context */
+        ADD     r13, r13, #8
+        STMIA   r13, {r0-r14}^ /* store user registers (incl. r13_usr, r14_usr) */
+        MRS     r0, spsr
+        STMDB   r13, {r0,lr}   /* save status register, return address */
+
+        /* now load the next process context */
+        LDR     r13, _vector_table_data+32 /* r13 = &_next_process */
+        LDR     r13, [r13]                 /* r13 = *r13 */
+        ADD     r13, r13, #8
+        LDMDB   r13, {r0,lr}    /* load status register, return address */
+        MSR     spsr_cxsf, r0   /* prep saved process status register */
+        LDMIA   r13, {r0-r14}^  /* load user registers (incl. r13_usr, r14_usr) */
+
+        /* and return to userspace */
+        LDR     r13, _vector_table_data+36 /* r13 = &irq_stack_top */
+        SUBS    pc, lr, #4                 /* jump to userspace */
 
 _vector_table_data:
-        .word _handle_reset
-        .word _handle_undefined_instruction
-        .word _handle_swi
-        .word _handle_prefetch_abort
-        .word _handle_data_abort
-        .word _handle_irq
-        .word _handle_fiq
+        .word   _handle_reset
+        .word   _handle_undefined_instruction
+        .word   _handle_swi
+        .word   _handle_prefetch_abort
+        .word   _handle_data_abort
+        .word   _handle_irq
+        .word   _handle_fiq
+        .word   _prev_process
+        .word   _next_process
+        .word   irq_stack_top
 
-        .globl _vector_table_size
+        .globl  _vector_table_size
 _vector_table_size:
-        .word _vector_table_size - _vector_table
+        .word   _vector_table_size - _vector_table

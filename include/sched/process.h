@@ -48,6 +48,14 @@ typedef u32 pid_t;
 #define NOPID ((pid_t) 0)
 
 typedef struct {
+  u32 lr, psr;
+  struct {
+    u32 r[15];
+  } usr;
+} context_t;
+
+typedef struct {
+  context_t ctxt;
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;

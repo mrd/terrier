@@ -56,14 +56,14 @@ _irq_stub:
         .word   0b11111001011011010000010100010011 /* SRSDB   sp!, #0x13 ; save {r14, spsr} on SVC mode stack */
         .word   0b11110001000000100000000000010011 /* CPS     #0x13      ; change to SVC mode */
         STMFD   sp!, {r0-r3,r12}      /* put caller-save regs on stack */
-        MOV     lr, pc                    /* lr = pc + 8 */
+        MOV     lr, pc                /* lr = pc + 8 */
         LDR     pc, _vector_table_data+20 /* far call */
         LDMFD   sp!, {r0-r3,r12}      /* restore caller-save regs */
-        ADD     sp, sp, #8
-        LDMDB   sp!, {r14}            /* saved IRQ spsr */
+        /* r14 is the only available scratch register */
+        LDR     r14, [sp, #4]         /* r14 = saved IRQ spsr */
         MSR     spsr_cxsf, r14        /* update spsr */
-        LDMDB   sp!, {r14}            /* saved IRQ lr */
-        ADD     sp, sp, #8
+        LDR     r14, [sp]             /* r14 = r14_irq */
+        ADD     sp, sp, #8            /* restore svc stack */
         /* check if context switch needed. r13 is available. */
         LDR     r13, _vector_table_data+28 /* r13 = &_prev_process */
         LDR     r13, [r13]                 /* r13 = *r13 */

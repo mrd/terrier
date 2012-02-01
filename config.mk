@@ -5,7 +5,5 @@ AS = $(ARCH)-as
 OBJCOPY = $(ARCH)-objcopy
 MKIMAGE = mkimage
 QEMU = qemu-system-arm
-SFLAGS = -MMD
-CFLAGS = -Wall -MMD
-
-
+SFLAGS = -MMD -mcpu=cortex-a8
+CFLAGS = -Wall -MMD -mcpu=cortex-a8

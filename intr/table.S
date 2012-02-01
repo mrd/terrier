@@ -37,6 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include<arm/status.h>
+
 /* Be careful: actual virtual starting address will be 0xFFFF0000
  * during operation. */
 
@@ -53,8 +55,8 @@ _vector_table:
         LDR     pc, _vector_table_data+24
 
 _irq_stub:
-        .word   0b11111001011011010000010100010011 /* SRSDB   sp!, #0x13 ; save {r14, spsr} on SVC mode stack */
-        .word   0b11110001000000100000000000010011 /* CPS     #0x13      ; change to SVC mode */
+        SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on SVC mode stack */
+        CPS     #MODE_SVC                 /* change to SVC mode */
         STMFD   r13!, {r0-r3,r12}         /* put caller-save regs on stack */
         MOV     lr, pc                    /* lr = pc + 8 */
         LDR     pc, _vector_table_data+20 /* far call */

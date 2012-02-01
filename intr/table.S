@@ -47,18 +47,26 @@
 _vector_table:
         LDR     pc, _vector_table_data+0
         LDR     pc, _vector_table_data+4
-        LDR     pc, _vector_table_data+8
+        B       _swi_stub
         LDR     pc, _vector_table_data+12
         LDR     pc, _vector_table_data+16
         NOP
         B       _irq_stub
         LDR     pc, _vector_table_data+24
 
-_irq_stub:
+_swi_stub:
         SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on SVC mode stack */
         CPS     #MODE_SVC                 /* change to SVC mode */
         STMFD   r13!, {r0-r3,r12}         /* put caller-save regs on stack */
-        MOV     lr, pc                    /* lr = pc + 8 */
+        ADR     lr, _far_call_return      /* set return address */
+        LDR     pc, _vector_table_data+8  /* far call */
+
+_irq_stub:
+        SUB     lr, lr, #4
+        SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on SVC mode stack */
+        CPS     #MODE_SVC                 /* change to SVC mode */
+        STMFD   r13!, {r0-r3,r12}         /* put caller-save regs on stack */
+        ADR     lr, _far_call_return      /* set return address */
         LDR     pc, _vector_table_data+20 /* far call */
 
         /* stack layout at this point:
@@ -72,7 +80,7 @@ _irq_stub:
          *   | r0       |
          *   ------------
          */
-
+_far_call_return:
         LDMFD   r13, {r0-r3,r12,r13,r14}   /* restore caller-save and SRS-saved registers */
 
         /* LDM loads registers in numerical order from lower addesses to higher addresses.
@@ -89,7 +97,7 @@ _irq_stub:
         /* prev == NULL, jump directly to userspace */
 
         LDREQ   r13, _vector_table_data+36 /* r13 = &svc_stack_top */
-        SUBEQS  pc, lr, #4                 /* jump to userspace */
+        MOVEQS  pc, lr                     /* jump to userspace */
 
         /* prev != NULL implies context switch: now save old context */
         ADD     r13, r13, #8
@@ -108,7 +116,7 @@ _irq_stub:
 
         /* and return to userspace */
         LDR     r13, _vector_table_data+36 /* r13 = &svc_stack_top */
-        SUBS    pc, lr, #4                 /* jump to userspace */
+        MOVS    pc, lr                     /* jump to userspace */
 
 _vector_table_data:
         .word   _handle_reset

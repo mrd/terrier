@@ -53,17 +53,25 @@ _vector_table:
         LDR     pc, _vector_table_data+24
 
 _irq_stub:
-        STMFD   sp!, {r0-r3,r12,r14}      /* put caller-save regs on stack */
+        .word   0b11111001011011010000010100010011 /* SRSDB   sp!, #0x13 ; save {r14, spsr} on SVC mode stack */
+        .word   0b11110001000000100000000000010011 /* CPS     #0x13      ; change to SVC mode */
+        STMFD   sp!, {r0-r3,r12}      /* put caller-save regs on stack */
         MOV     lr, pc                    /* lr = pc + 8 */
         LDR     pc, _vector_table_data+20 /* far call */
-        LDMFD   sp!, {r0-r3,r12,r14}      /* restore caller-save regs */
+        LDMFD   sp!, {r0-r3,r12}      /* restore caller-save regs */
+        ADD     sp, sp, #8
+        LDMDB   sp!, {r14}            /* saved IRQ spsr */
+        MSR     spsr_cxsf, r14        /* update spsr */
+        LDMDB   sp!, {r14}            /* saved IRQ lr */
+        ADD     sp, sp, #8
         /* check if context switch needed. r13 is available. */
         LDR     r13, _vector_table_data+28 /* r13 = &_prev_process */
         LDR     r13, [r13]                 /* r13 = *r13 */
         CMP     r13, #0
 
         /* prev == NULL, jump directly to userspace */
-        LDREQ   r13, _vector_table_data+36 /* r13 = &irq_stack_top */
+
+        LDREQ   r13, _vector_table_data+36 /* r13 = &svc_stack_top */
         SUBEQS  pc, lr, #4                 /* jump to userspace */
 
         /* prev != NULL implies context switch: now save old context */
@@ -81,7 +89,7 @@ _irq_stub:
         LDMIA   r13, {r0-r14}^  /* load user registers (incl. r13_usr, r14_usr) */
 
         /* and return to userspace */
-        LDR     r13, _vector_table_data+36 /* r13 = &irq_stack_top */
+        LDR     r13, _vector_table_data+36 /* r13 = &svc_stack_top */
         SUBS    pc, lr, #4                 /* jump to userspace */
 
 _vector_table_data:
@@ -94,7 +102,7 @@ _vector_table_data:
         .word   _handle_fiq
         .word   _prev_process
         .word   _next_process
-        .word   irq_stack_top
+        .word   svc_stack_top
 
         .globl  _vector_table_size
 _vector_table_size:

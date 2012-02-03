@@ -41,10 +41,12 @@
 
 #include "types.h"
 #include "arm/memory.h"
+#include "arm/status.h"
 #include "arm/asm.h"
 #include "mem/virtual.h"
 #include "mem/physical.h"
 #include "sched/process.h"
+#include "sched/sched.h"
 #include "sched/elf.h"
 #define MODULE "test_process"
 #include "debug/log.h"
@@ -91,6 +93,10 @@ static status program_load(void *pstart, process_t **return_p)
   }
   p->entry = entry;
 
+  /* setup context */
+  p->ctxt.lr = (u32) entry;     /* starting address */
+  p->ctxt.psr = MODE_USR;       /* starting status register */
+
   pagetable_t *l2;
   u32 pages = (loadph->p_memsz + 0xFFF) >> PAGE_SIZE_LOG2;
   u32 align = 1;                /* physical: shouldn't matter */
@@ -125,6 +131,7 @@ static status program_load(void *pstart, process_t **return_p)
 
   u32 *dest = (u32 *) loadph->p_vaddr;
   u32 *src = (u32 *) pstart;
+  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", loadph->p_memsz, src, dest);
   for(i=0;i<loadph->p_memsz;i++) {
     dest[i] = src[i];
   }
@@ -133,13 +140,26 @@ static status program_load(void *pstart, process_t **return_p)
   return OK;
 }
 
+static inline void sched_launch_first_process(process_t *p)
+{
+  ASM(/* load context */
+      "LDMIA   %0!, {r0,lr}\n"          /* load status register, return address */
+      "MSR     spsr_cxsf, r0\n"         /* prep saved process status register */
+      "LDMIA   %0, {r0-r14}^\n"         /* load user registers (incl. r13_usr, r14_usr) */
+      /* and return to userspace */
+      "LDR     r13, =svc_stack_top\n"   /* r13 = &svc_stack_top */
+      "MOVS    pc, lr"::"r"(p):"r0");   /* jump to userspace */
+}
+
 status test_process(void)
 {
-  process_t *p;
+  extern process_t *current;
+  void *entry;
+  process_t *p, *q;
   u32 *progs = (u32 *) &_program_map_start, cnt = (u32) &_program_map_count;
 
-  if(cnt == 0) {
-    DLOG(1, "test_process: no program to load\n");
+  if(cnt < 2) {
+    DLOG(1, "test_process: requires > 2 programs\n");
     return EINVALID;
   }
 
@@ -149,24 +169,23 @@ status test_process(void)
     return EINVALID;
   }
 
+  DLOG(1, "test_process: loading program found at %#x\n", progs[1]);
+  if(program_load((void *) progs[1], &q) != OK) {
+    DLOG(1, "program_load failed\n");
+    return EINVALID;
+  }
+
+  sched_wakeup(q);
   process_switch_to(p);
 
-  void *entry;
+  current = p;
   entry = p->entry;
   DLOG(1, "%#x: %#x %#x %#x %#x\n", entry,
        ((u32 *) entry)[0], ((u32 *) entry)[1], ((u32 *) entry)[2], ((u32 *) entry)[3]);
 
+  DLOG(1, "Switching to usermode.\n");
 
-  DLOG(1, "Switching to usermode. Expect SWI then halt:\n");
-
-  u32 spsr;
-  ASM("MRS %0,spsr\n"
-      "AND %0, %0, #0xE0\n"
-      "ORR %0, %0, #0x10\n"
-      "MSR spsr_c, %0":"=r"(spsr));
-
-  ASM("STMFD sp!, {%0}\n"
-      "LDMFD sp!, {pc}^"::"r"(p->entry));
+  sched_launch_first_process(p);
 
   return OK;
 }

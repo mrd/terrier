@@ -109,8 +109,7 @@ _far_call_return:
         /* now load the next process context */
         LDR     r13, _vector_table_data+32 /* r13 = &_next_process */
         LDR     r13, [r13]                 /* r13 = *r13 */
-        ADD     r13, r13, #8
-        LDMDB   r13, {r0,lr}    /* load status register, return address */
+        LDMIA   r13!, {r0,lr}   /* load status register, return address */
         MSR     spsr_cxsf, r0   /* prep saved process status register */
         LDMIA   r13, {r0-r14}^  /* load user registers (incl. r13_usr, r14_usr) */
 

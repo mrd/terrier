@@ -1,6 +1,6 @@
 OUTPUT_FORMAT("elf32-littlearm")
 OUTPUT_ARCH(arm)
-ENTRY(main)
+ENTRY(_start)
 SECTIONS
 {
  PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x00008000));

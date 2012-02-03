@@ -46,8 +46,6 @@ PROGS = progs/idle progs/uart
 
 IMGNAME = puppy
 ADDRESS = 0x80008000
-DEBUG = 0
-OPT = 2
 TESTS =
 
 ##################################################

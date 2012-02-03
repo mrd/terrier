@@ -1,3 +1,6 @@
+OPT = 2
+DEBUG = 0
+
 ARCH = arm-none-linux-gnueabi
 CC = $(ARCH)-gcc
 LD = $(ARCH)-ld

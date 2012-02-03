@@ -42,7 +42,7 @@ C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	sched/process.c \
 	debug/log.c tests/cswitch.c tests/test_process.c
 S_FILES = init/startup.S intr/table.S
-PROGS = progs/idle
+PROGS = progs/idle progs/uart
 
 IMGNAME = puppy
 ADDRESS = 0x80008000

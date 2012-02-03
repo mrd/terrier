@@ -124,7 +124,6 @@ void intc_init(void)
   intc->n[1].mir_set = ~0;
   intc->n[2].mir_set = ~0;
   for(i=0;i<96;i++) irq_table[i] = NULL;
-  enable_IRQ();
 }
 
 region_t intr_region = { 0x89000000, (void *) 0xFFF00000, &l1pt, 1, 20, R_C | R_B, 0, R_PM };

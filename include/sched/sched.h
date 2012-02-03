@@ -1,5 +1,5 @@
 /*
- * Scheduler processes
+ * Scheduler interface
  *
  * -------------------------------------------------------------------
  *
@@ -37,36 +37,12 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SCHED_PROCESS_H_
-#define _SCHED_PROCESS_H_
+#ifndef _SCHED_SCHED_H_
+#define _SCHED_SCHED_H_
 
 #include "types.h"
-#include "mem/virtual.h"
 
-typedef u32 pid_t;
-#define MAX_PROCESSES 16
-#define NOPID ((pid_t) 0)
-
-typedef struct {
-  u32 psr, lr;
-  struct {
-    u32 r[15];
-  } usr;
-} context_t;
-
-typedef struct {
-  context_t ctxt;
-  pid_t pid;
-  pagetable_list_t *tables;
-  region_list_t *regions;
-  void *entry;
-  pid_t next;
-} process_t;
-
-process_t *process_find(u32 pid);
-status process_switch_to(process_t *p);
-status process_new(process_t **return_p);
-void process_init(void);
+status sched_wakeup(process_t *p);
 
 #endif
 

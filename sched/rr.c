@@ -1,5 +1,5 @@
 /*
- * Scheduler processes
+ * Round-Robin Scheduler -- simple and straightforward stand-in
  *
  * -------------------------------------------------------------------
  *
@@ -37,38 +37,94 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SCHED_PROCESS_H_
-#define _SCHED_PROCESS_H_
-
 #include "types.h"
 #include "mem/virtual.h"
+#include "mem/physical.h"
+#include "arm/memory.h"
+#include "arm/asm.h"
+#include "omap3/timer.h"
+#include "sched/process.h"
+#include "intr/interrupts.h"
+#define MODULE "sched_rr"
+#include "debug/log.h"
 
-typedef u32 pid_t;
-#define MAX_PROCESSES 16
-#define NOPID ((pid_t) 0)
+#define QUANTUM (1<<12)
 
-typedef struct {
-  u32 psr, lr;
-  struct {
-    u32 r[15];
-  } usr;
-} context_t;
+static pid_t runq_head;
+process_t *current;
+process_t *_next_process, *_prev_process;
 
-typedef struct {
-  context_t ctxt;
-  pid_t pid;
-  pagetable_list_t *tables;
-  region_list_t *regions;
-  void *entry;
-  pid_t next;
-} process_t;
+static status waitqueue_append(pid_t *q, process_t *p)
+{
+  p->next = NOPID;
+  for(;;) {                     /* tail-recursion elided */
+    if(*q == NOPID) {
+      *q = p->pid;
+      return OK;
+    } else {
+      process_t *qp = process_find(*q);
+      if(qp == NULL)
+        return EINVALID;
+      q = &qp->next;
+    }
+  }
+}
 
-process_t *process_find(u32 pid);
-status process_switch_to(process_t *p);
-status process_new(process_t **return_p);
-void process_init(void);
+static process_t *waitqueue_dequeue(pid_t *q)
+{
+  process_t *p;
+  if(*q == NOPID)
+    return NULL;
+  p = process_find(*q);
+  if(p == NULL)
+    return NULL;
+  *q = p->next;
+  return p;
+}
 
-#endif
+void schedule(void)
+{
+  process_t *p = waitqueue_dequeue(&runq_head);
+  if(p == NULL) {
+    /* go idle */
+  } else {
+    _prev_process = current;
+    current = p;
+    process_switch_to(p);
+    _next_process = p;
+    DLOG(1, "switch_to: pid=%d\n", p->pid);
+  }
+}
+
+status sched_wakeup(process_t *p)
+{
+  return waitqueue_append(&runq_head, p);
+}
+
+static void sched_timer_handler(u32 activeirq)
+{
+  extern u32 irq_stack_top;
+  u32 *sp = &irq_stack_top;
+  sp -= 2;
+  DLOG(1, "sched_timer_handler %#x %#x\n", sp[0], sp[1]);
+  timer_gp_set(1, -QUANTUM);
+  timer_gp_ack_overflow_interrupt(1);
+  intc_unmask_irq(activeirq);
+
+  waitqueue_append(&runq_head, current);
+  schedule();
+}
+
+void sched_init(void)
+{
+  timer_gp_set_handler(1, sched_timer_handler);
+  timer_gp_set(1, -QUANTUM);
+  timer_gp_enable_overflow_interrupt(1);
+  timer_gp_start(1);
+  runq_head = NOPID;
+  current = NULL;
+  _next_process = _prev_process = current;
+}
 
 /*
  * Local Variables:

@@ -44,6 +44,7 @@
 #include "arm/status.h"
 #include "arm/asm.h"
 #include "mem/virtual.h"
+#include "sched/process.h"
 #define MODULE "intr"
 #include "debug/log.h"
 #include "debug/cassert.h"
@@ -207,6 +208,8 @@ struct {
   { "", 0, 0, 0 }
 };
 
+extern process_t *_prev_process;
+
 static int find_fault_status(u32 sr)
 {
   u32 status = GETBITS(sr,0,4) | (GETBITS(sr,10,1) << 4);
@@ -232,6 +235,7 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
 
 void _handle_swi(u32 lr)
 {
+  _prev_process = NULL;
   lr -= 4;                      /* the SWI is the previous instruction */
   DLOG(1, "_handle_swi lr=%#x (%#x)\n",
        lr, *((u32 *) lr));
@@ -272,6 +276,7 @@ void HANDLES("ABORT") _handle_data_abort(void)
 void _handle_irq(void)
 {
   u32 activeirq = intc->sir_irq.activeirq;
+  _prev_process = NULL;
   intc_mask_irq(activeirq);
   if (irq_table[activeirq])
     irq_table[activeirq](activeirq);

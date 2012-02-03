@@ -57,6 +57,7 @@ void NO_RETURN c_entry()
   void timer_init(void);
   void vmm_init(void);
   void process_init(void);
+  void sched_init(void);
   extern pagetable_t l1pt;
   extern void *_physical_start;
   u32 phystart = (u32) &_physical_start;
@@ -72,6 +73,7 @@ void NO_RETURN c_entry()
   timer_init();
   vmm_init();
   process_init();
+  sched_init();
 
 #ifdef TEST_CSWITCH
   status test_cswitch(void); test_cswitch();

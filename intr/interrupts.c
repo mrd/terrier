@@ -230,11 +230,9 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
   DLOG(1, "_handle_undefined_instruction @%#x = %#x\n", lr - 4, *((u32 *)(lr - 4)));
 }
 
-void _handle_swi(void)
+void _handle_swi(u32 lr)
 {
-  u32 lr;
-  ASM("MOV %0, lr":"=r"(lr));
-  lr -= 4;
+  lr -= 4;                      /* the SWI is the previous instruction */
   DLOG(1, "_handle_swi lr=%#x (%#x)\n",
        lr, *((u32 *) lr));
 }

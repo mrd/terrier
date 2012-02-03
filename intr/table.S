@@ -58,6 +58,7 @@ _swi_stub:
         SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on SVC mode stack */
         CPS     #MODE_SVC                 /* change to SVC mode */
         STMFD   r13!, {r0-r3,r12}         /* put caller-save regs on stack */
+        MOV     r0, lr                    /* set interrupt return address as argument */
         ADR     lr, _far_call_return      /* set return address */
         LDR     pc, _vector_table_data+8  /* far call */
 
@@ -95,7 +96,6 @@ _far_call_return:
         CMP     r13, #0
 
         /* prev == NULL, jump directly to userspace */
-
         LDREQ   r13, _vector_table_data+36 /* r13 = &svc_stack_top */
         MOVEQS  pc, lr                     /* jump to userspace */
 

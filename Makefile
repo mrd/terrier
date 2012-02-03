@@ -99,9 +99,11 @@ $(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld program-map.ld
 program-map.ld: buildprograms
 	nm $(POBJS) | egrep "_binary_.*_start" | awk -- '{ printf "LONG(%s);\n", $$3 }' > $@
 
-.PHONY: buildprograms
-buildprograms:
+.PHONY: buildprograms userlib
+buildprograms: userlib
 	for p in $(PROGS); do make -C $$p; done
+userlib:
+	make -C userlib
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@
@@ -112,6 +114,7 @@ clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit program-map.ld
 	rm -f $(OBJS) $(DFILES)
 	for p in $(PROGS); do make -C $$p clean; done
+	make -C userlib clean
 
 distclean: clean
 	rm -f $(IMGNAME)-nand.bin
@@ -119,6 +122,7 @@ distclean: clean
 	(cd util; make clean)
 	(cd omap-u-boot-utils; make distclean V=1)
 	for p in $(PROGS); do make -C $$p distclean; done
+	make -C userlib distclean
 
 test: $(IMGNAME)-nand.bin
 	@echo "***** To quit QEMU type: Ctrl-a x"

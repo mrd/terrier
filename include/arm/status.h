@@ -63,24 +63,24 @@ static inline u32 arm_cpsr_c(u32 set, u32 mask)
   return sr;
 }
 
-static inline u32 disable_interrupts(void)
+static inline void disable_interrupts(void)
 {
-  return arm_cpsr_c(MASK_ALL, MASK_ALL);
+  ASM("CPSID fi");
 }
 
-static inline u32 enable_interrupts(void)
+static inline void enable_interrupts(void)
 {
-  return arm_cpsr_c(0, MASK_ALL);
+  ASM("CPSIE fi");
 }
 
-static inline u32 enable_IRQ(void)
+static inline void enable_IRQ(void)
 {
-  return arm_cpsr_c(0, MASK_IRQ);
+  ASM("CPSIE i");
 }
 
-static inline u32 enable_FIQ(void)
+static inline void enable_FIQ(void)
 {
-  return arm_cpsr_c(0, MASK_FIQ);
+  ASM("CPSIE f");
 }
 #endif
 

@@ -48,7 +48,7 @@ typedef u32 pid_t;
 #define NOPID ((pid_t) 0)
 
 typedef struct {
-  u32 lr, psr;
+  u32 psr, lr;
   struct {
     u32 r[15];
   } usr;

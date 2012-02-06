@@ -129,10 +129,10 @@ static status program_load(void *pstart, process_t **return_p)
   process_switch_to(p);
   /* cheat, switch to process and use its mapping */
 
-  u32 *dest = (u32 *) loadph->p_vaddr;
-  u32 *src = (u32 *) pstart;
-  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", loadph->p_memsz, src, dest);
-  for(i=0;i<loadph->p_memsz;i++) {
+  u8 *dest = (u8 *) loadph->p_vaddr;
+  u8 *src = &((u8 *) pstart)[loadph->p_offset];
+  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", loadph->p_filesz, src, dest);
+  for(i=0;i<loadph->p_filesz;i++) {
     dest[i] = src[i];
   }
 

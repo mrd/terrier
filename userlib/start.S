@@ -1,5 +1,7 @@
         .globl _start
-_start: ADR     sp, _stack
+        .section .text
+_start: LDR     sp, =_stack
         LDR     pc, =main
-        .space  128
+        .section .bss
+        .space  1024
 _stack:

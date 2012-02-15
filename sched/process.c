@@ -42,7 +42,11 @@
 #include "mem/physical.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
+#include "arm/status.h"
 #include "sched/process.h"
+#include "sched/elf.h"
+#include "sched/sched.h"
+#include "omap3/early_uart3.h"
 #define MODULE "process"
 #include "debug/log.h"
 
@@ -156,6 +160,127 @@ void process_init(void)
   int i;
   for(i=0; i<MAX_PROCESSES; i++)
     process[i].pid = NOPID;
+}
+
+status program_load(void *pstart, process_t **return_p)
+{
+  process_t *p;
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Phdr *pph = (void *) pe + pe->e_phoff, *loadph = NULL;
+  void *entry = (void *) pe->e_entry;
+  int i, memsz = 0;
+
+  /* Parse ELF */
+  DLOG(1, "Magic: %X%X%X%X\n", pe->e_ident[0], pe->e_ident[1], pe->e_ident[2], pe->e_ident[3]);
+  if(!(pe->e_ident[EI_MAG0] == ELFMAG0 &&
+       pe->e_ident[EI_MAG1] == ELFMAG1 &&
+       pe->e_ident[EI_MAG2] == ELFMAG2 &&
+       pe->e_ident[EI_MAG3] == ELFMAG3)) {
+    DLOG(1, "Bad Magic\n");
+    return EINVALID;
+  }
+  DLOG(1, "phnum=%d phoff=%#x entry=%#x\n", pe->e_phnum, pe->e_phoff, entry);
+  for(i=0;i<pe->e_phnum;i++) {
+    if (pph->p_type == PT_LOAD) {
+      memsz += pph->p_memsz;
+      loadph = pph;
+    }
+    DLOG(1, " ph[%d]: type=%#x flags=%#x filesz=%#x offset=%#x memsz=%#x vaddr=%#x align=%#x\n",
+         i, pph->p_type, pph->p_flags, pph->p_filesz, pph->p_offset,
+         pph->p_memsz, pph->p_vaddr, pph->p_align);
+    pph = (void *) pph + pe->e_phentsize;
+  }
+  if(loadph == NULL) {
+    DLOG(1, "No loadable program header found.\n");
+    return EINVALID;
+  }
+
+  /* Create process */
+  if(process_new(&p) != OK) {
+    DLOG(1, "process_new failed\n");
+    return EINVALID;
+  }
+  p->entry = entry;
+
+  /* setup context */
+  p->ctxt.lr = (u32) entry;     /* starting address */
+  p->ctxt.psr = MODE_USR;       /* starting status register */
+
+  pagetable_t *l2;
+  u32 pages = (loadph->p_memsz + 0xFFF) >> PAGE_SIZE_LOG2;
+  u32 align = 1;                /* physical: shouldn't matter */
+  l2 = &p->tables->next->elt;
+
+  /* Create userspace region */
+
+  region_list_t *rl = region_list_pool_alloc();
+  if(rl == NULL) {
+    DLOG(1, "process_new: region_list_pool_alloc failed.\n");
+    /* FIXME: clean-up previous resources */
+    return ENOSPACE;
+  }
+  if(physical_alloc_pages(pages, align, &rl->elt.pstart) != OK) {
+    DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
+    /* FIXME: clean-up previous resources */
+    return ENOSPACE;
+  }
+
+  rl->elt.vstart = (void *) loadph->p_vaddr;
+  rl->elt.pt = l2;
+  rl->elt.page_count = pages;
+  rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
+  rl->elt.cache_buf = R_C | R_B; /* cached and buffered */
+  rl->elt.shared_ng = R_NG;      /* not global */
+  rl->elt.access = R_RW;         /* read-write user mode */
+  region_append(&p->regions, rl);
+  vmm_map_region(&rl->elt);
+
+  process_switch_to(p);
+  /* cheat, switch to process and use its mapping */
+
+  u8 *dest = (u8 *) loadph->p_vaddr;
+  u8 *src = &((u8 *) pstart)[loadph->p_offset];
+  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", loadph->p_filesz, src, dest);
+  for(i=0;i<loadph->p_filesz;i++) {
+    dest[i] = src[i];
+  }
+
+  *return_p = p;
+  return OK;
+}
+
+status programs_init(void)
+{
+  extern u32 _program_map_start, _program_map_count;
+  extern process_t *current;
+  u32 *progs = (u32 *) &_program_map_start, cnt = (u32) &_program_map_count;
+  process_t *p;
+  int i;
+
+  if(cnt < 1) {
+    DLOG(1, "programs_init: requires at least 1 program to run.\n");
+    return EINVALID;
+  }
+
+  current = NULL;
+  for(i=0;i<cnt;i++) {
+    DLOG(1, "programs_init: loading program found at %#x\n", progs[i]);
+    if(program_load((void *) progs[i], &p) != OK) {
+      DLOG(1, "program_load failed\n");
+      return EINVALID;
+    }
+    if(current == NULL) current = p;
+    else sched_wakeup(p);
+  }
+
+  process_switch_to(current);
+
+  DLOG(1, "Switching to usermode.\n");
+  sched_launch_first_process(p);
+
+  /* control flow should not return to here */
+  early_panic("unreachable");
+  return EUNDEFINED;
 }
 
 /*

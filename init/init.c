@@ -58,6 +58,7 @@ void NO_RETURN c_entry()
   void vmm_init(void);
   void process_init(void);
   void sched_init(void);
+  status programs_init(void);
   extern pagetable_t l1pt;
   extern void *_physical_start;
   u32 phystart = (u32) &_physical_start;
@@ -81,6 +82,8 @@ void NO_RETURN c_entry()
 #ifdef TEST_PROCESS
   status test_process(void); test_process();
 #endif
+
+  programs_init();
 
   print_uart3("-- HALTED --\n");
 

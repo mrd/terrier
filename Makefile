@@ -44,7 +44,7 @@ C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 S_FILES = init/startup.S intr/table.S
 PROGS = progs/idle progs/uart
 
-IMGNAME = puppy
+IMGNAME = terrier
 ADDRESS = 0x80008000
 TESTS =
 

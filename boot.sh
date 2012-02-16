@@ -2,7 +2,7 @@
 
 SERIAL=/dev/ttyS0
 
-IMAGE=puppy.uimg
+IMAGE=terrier.uimg
 LOADADDR=82000000
 GOCMD=bootm
 EXPECT="-- HALTED --"

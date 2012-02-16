@@ -52,7 +52,7 @@
 
 static pid_t runq_head;
 process_t *current;
-process_t *_next_process, *_prev_process;
+context_t *_next_context, *_prev_context;
 
 static status waitqueue_append(pid_t *q, process_t *p)
 {
@@ -88,10 +88,10 @@ void schedule(void)
   if(p == NULL) {
     /* go idle */
   } else {
-    _prev_process = current;
+    _prev_context = &current->ctxt;
     current = p;
     process_switch_to(p);
-    _next_process = p;
+    _next_context = &p->ctxt;
     DLOG(1, "switch_to: pid=%d\n", p->pid);
   }
 }
@@ -123,7 +123,7 @@ void sched_init(void)
   timer_gp_start(1);
   runq_head = NOPID;
   current = NULL;
-  _next_process = _prev_process = current;
+  _next_context = _prev_context = NULL;
 }
 
 /*

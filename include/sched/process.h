@@ -77,7 +77,7 @@ static inline void sched_launch_first_process(process_t *p)
       "LDMIA   %0, {r0-r14}^\n"         /* load user registers (incl. r13_usr, r14_usr) */
       /* and return to userspace */
       "LDR     r13, =svc_stack_top\n"   /* r13 = &svc_stack_top */
-      "MOVS    pc, lr"::"r"(p):"r0");   /* jump to userspace */
+      "MOVS    pc, lr"::"r"(&p->ctxt):"r0");   /* jump to userspace */
 }
 
 #endif

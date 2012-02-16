@@ -91,7 +91,7 @@ _far_call_return:
         MOV     r14, r13                   /* r14_svc = r14_irq */
 
         /* check if context switch needed. r13 is only register available. */
-        LDR     r13, _vector_table_data+28 /* r13 = &_prev_process */
+        LDR     r13, _vector_table_data+28 /* r13 = &_prev_context */
         LDR     r13, [r13]                 /* r13 = *r13 */
         CMP     r13, #0
 
@@ -107,7 +107,7 @@ _far_call_return:
         STMDB   r13, {r0,lr}   /* store status register, return address */
 
         /* now load the next process context */
-        LDR     r13, _vector_table_data+32 /* r13 = &_next_process */
+        LDR     r13, _vector_table_data+32 /* r13 = &_next_context */
         LDR     r13, [r13]                 /* r13 = *r13 */
         LDMIA   r13!, {r0,lr}   /* load status register, return address */
         MSR     spsr_cxsf, r0   /* prep saved process status register */
@@ -125,8 +125,8 @@ _vector_table_data:
         .word   _handle_data_abort
         .word   _handle_irq
         .word   _handle_fiq
-        .word   _prev_process
-        .word   _next_process
+        .word   _prev_context
+        .word   _next_context
         .word   svc_stack_top
 
         .globl  _vector_table_size

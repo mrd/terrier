@@ -232,12 +232,34 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
   DLOG(1, "_handle_undefined_instruction @%#x = %#x\n", lr - 4, *((u32 *)(lr - 4)));
 }
 
-void _handle_swi(u32 lr)
+void _handle_swi2(u32 lr, u32 *r4_r11)
 {
+  extern process_t *current;
+  extern u32 svc_stack_top;
+  u32 *stack = (&svc_stack_top) - 7;
   _prev_context = NULL;
   lr -= 4;                      /* the SWI is the previous instruction */
-  DLOG(1, "_handle_swi lr=%#x (%#x)\n",
-       lr, *((u32 *) lr));
+  DLOG(1, "_handle_swi lr=%#x (%#x), stack=%#x\n",
+       lr, *((u32 *) lr), stack);
+  DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", stack[0], stack[1], stack[2], stack[3]);
+  DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", r4_r11[0], r4_r11[1], r4_r11[2], r4_r11[3]);
+  DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", r4_r11[4], r4_r11[5], r4_r11[6], r4_r11[7]);
+  DLOG(1, "r12: %#.08x r14_irq: %#.08x spsr_irq: %#.08x\n", stack[4], stack[5], stack[6]);
+
+  switch(stack[0]) {
+  case 0:                       /* set entry */
+    current->entry = (void *) stack[1];
+    return;
+  }
+}
+
+void __attribute__((naked)) _handle_swi(u32 lr)
+{
+  ASM("STMFD sp!, {r4-r11,lr}\n\t"
+      "MOV r1, sp\n\t"
+      "BL _handle_swi2\n\t"
+      "LDMFD sp!, {r4-r11,lr}\n\t"
+      "BX lr");
 }
 
 void HANDLES("ABORT") _handle_prefetch_abort(void)

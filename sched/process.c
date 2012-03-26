@@ -207,6 +207,7 @@ status program_load(void *pstart, process_t **return_p)
     ((u32 *)&p->ctxt)[i] = 0;
 
   p->ctxt.lr = (u32) entry;     /* starting address */
+  p->ctxt.usr.r[15] = (u32) entry;     /* starting address */
   p->ctxt.psr = MODE_SYS;       /* starting status register */
 
   pagetable_t *l2;

@@ -50,7 +50,7 @@ typedef u32 pid_t;
 typedef struct {
   u32 psr, lr;
   struct {
-    u32 r[15];
+    u32 r[16];
   } usr;
 } context_t;
 

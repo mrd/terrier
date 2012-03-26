@@ -103,14 +103,21 @@ _far_call_return:
         ADD     r13, r13, #8
         STMIA   r13, {r0-r14}^ /* store user registers (incl. r13_usr, r14_usr) */
         /* now all GP registers available for use */
+        STR     lr, [r13, #0x3c]
         MRS     r0, spsr
         STMDB   r13, {r0,lr}   /* store status register, return address */
 
-        /* now load the next process context */
+        /* now setup the context for the next process to use */
         LDR     r13, _vector_table_data+32 /* r13 = &_next_context */
+        LDMIA   r13, {r13}^                /* r13_usr = *r13 */
         LDMIA   r13, {r13}                 /* r13 = *r13 */
-        ADD     r12, r13, #0x44
-        LDR     pc, [r12]       /* jump to entry point */
+        LDR     r0, [r13]                  /* r0 = spsr */
+        MSR     spsr_cx, r0                /* store spsr (control, extension) */
+        LDR     lr, [r13, #0x48]           /* lr = entry point */
+
+        LDR     r13, _vector_table_data+36 /* r13 = &svc_stack_top */
+
+        MOVS    pc, lr                     /* jump to entry point, load SPSR */
 
 _vector_table_data:
         .word   _handle_reset

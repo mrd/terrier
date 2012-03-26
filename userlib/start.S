@@ -1,24 +1,13 @@
         .globl _start
         .section .text
-_start: CMP     r13, #0
-        BEQ     _begin
+_start: CMP     r13, #0         /* r13==0 iff initial entry */
+        LDREQ   sp, =_stack
+        LDREQ   pc, =main
 
-        LDMIA   r13!, {r0,lr}   /* load status register, return address */
-        MSR     spsr_cxsf, r0   /* prep saved process status register */
-        LDMIA   r13, {r0-r14}^  /* load user registers (incl. r13_usr, r14_usr) */
-
-        /* and return to program */
-        LDR     r13, =_svc_stack_top
-        LDR     r13, [r13]
-        MOVS    pc, lr                     /* jump to program, restore spsr */
-
-_begin:
-        LDR     sp, =_stack
-        LDR     pc, =main
-
-        .section .data
-_svc_stack_top:
-        .word   0xc001e000
+        LDR     r0, [r13]
+        MSR     cpsr_sf, r0     /* restore cpsr (status, flags) */
+        ADD     r13, r13, #8
+        LDMIA   r13, {r0-r15}   /* load context, branch to it */
 
         .section .bss
         .space  1024

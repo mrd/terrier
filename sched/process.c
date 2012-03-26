@@ -203,8 +203,11 @@ status program_load(void *pstart, process_t **return_p)
   p->entry = entry;
 
   /* setup context */
+  for(i=0;i<sizeof(context_t)>>2;i++)
+    ((u32 *)&p->ctxt)[i] = 0;
+
   p->ctxt.lr = (u32) entry;     /* starting address */
-  p->ctxt.psr = MODE_USR;       /* starting status register */
+  p->ctxt.psr = MODE_SYS;       /* starting status register */
 
   pagetable_t *l2;
   u32 pages = (loadph->p_memsz + 0xFFF) >> PAGE_SIZE_LOG2;

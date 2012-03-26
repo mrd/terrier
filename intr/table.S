@@ -108,14 +108,9 @@ _far_call_return:
 
         /* now load the next process context */
         LDR     r13, _vector_table_data+32 /* r13 = &_next_context */
-        LDR     r13, [r13]                 /* r13 = *r13 */
-        LDMIA   r13!, {r0,lr}   /* load status register, return address */
-        MSR     spsr_cxsf, r0   /* prep saved process status register */
-        LDMIA   r13, {r0-r14}^  /* load user registers (incl. r13_usr, r14_usr) */
-
-        /* and return to userspace */
-        LDR     r13, _vector_table_data+36 /* r13 = &svc_stack_top */
-        MOVS    pc, lr                     /* jump to userspace */
+        LDMIA   r13, {r13}                 /* r13 = *r13 */
+        ADD     r12, r13, #0x44
+        LDR     pc, [r12]       /* jump to entry point */
 
 _vector_table_data:
         .word   _handle_reset

@@ -56,10 +56,10 @@ typedef struct {
 
 typedef struct {
   context_t ctxt;
+  void *entry;
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;
-  void *entry;
   pid_t next;
 } process_t;
 

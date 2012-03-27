@@ -162,6 +162,63 @@ void process_init(void)
     process[i].pid = NOPID;
 }
 
+void program_dump_sections(void *pstart)
+{
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Shdr *sh = (void *) pe + pe->e_shoff;
+  int shnum = pe->e_shnum, i;
+  int shstrndx = pe->e_shstrndx; /* section header string table index */
+  char *shstr = (void *) pe + ((Elf32_Shdr *) ((void *) sh + (shstrndx * pe->e_shentsize)))->sh_offset;
+
+  DLOG(1, "shstrndx=%d shstr=%#x\n", shstrndx, shstr);
+  for(i=0; i<shnum; i++) {
+    DLOG(1, "shnum=%d name=%d (%s) type=%d offs=%#x size=%#x link=%d info=%d entsz=%d\n",
+         i, sh->sh_name, shstr + sh->sh_name, sh->sh_type, sh->sh_offset, sh->sh_size,
+         sh->sh_link, sh->sh_info, sh->sh_entsize);
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
+  }
+}
+
+Elf32_Shdr *program_find_section(void *pstart, const char *name, u32 type)
+{
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Shdr *sh = (void *) pe + pe->e_shoff;
+  int shnum = pe->e_shnum, i;
+  int shstrndx = pe->e_shstrndx; /* section header string table index */
+  char *shstr = (void *) pe + ((Elf32_Shdr *) ((void *) sh + (shstrndx * pe->e_shentsize)))->sh_offset;
+
+  for(i=0; i<shnum; i++) {
+    if((type == 0 || type == sh->sh_type) &&
+       (name == NULL || strcmp(shstr + sh->sh_name, name) == 0))
+      return sh;
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
+  }
+  return NULL;
+}
+
+Elf32_Sym *program_find_symbol(void *pstart, const char *name)
+{
+  Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
+  Elf32_Shdr *strtabsh = program_find_section(pstart, ".strtab", SHT_STRTAB);
+  Elf32_Sym *sym;
+  char *str;
+  int i;
+
+  if(symtabsh == NULL || strtabsh == NULL)
+    return NULL;
+
+  sym = (void *) pstart + symtabsh->sh_offset;
+  str = (void *) pstart + strtabsh->sh_offset;
+
+  for(i=0; i< symtabsh->sh_size / sizeof(Elf32_Sym); i++) {
+    if(strcmp(str + sym[i].st_name, name) == 0)
+      return &sym[i];
+  }
+  return NULL;
+}
+
 status program_load(void *pstart, process_t **return_p)
 {
   process_t *p;

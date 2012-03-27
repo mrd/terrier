@@ -1,5 +1,5 @@
         .globl _start
-        .section .text
+        .section .entry
 _start: CMP     r13, #0         /* r13==0 iff initial entry */
         LDREQ   sp, =_stack
         LDREQ   pc, =main

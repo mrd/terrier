@@ -224,6 +224,7 @@ status program_load(void *pstart, process_t **return_p)
   process_t *p;
   Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
   Elf32_Phdr *pph = (void *) pe + pe->e_phoff, *loadph = NULL;
+  Elf32_Sym *sym;
   void *entry = (void *) pe->e_entry;
   int i, memsz = 0;
 
@@ -252,12 +253,24 @@ status program_load(void *pstart, process_t **return_p)
     return EINVALID;
   }
 
+  program_dump_sections(pstart);
+  DLOG(1, "_start=%#x _end_entry=%#x\n",
+       program_find_symbol(pstart, "_start")->st_value,
+       program_find_symbol(pstart, "_end_entry")->st_value);
+
+  sym = program_find_symbol(pstart, "_end_entry");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _end_entry\n");
+    return EINVALID;
+  }
+
   /* Create process */
   if(process_new(&p) != OK) {
     DLOG(1, "process_new failed\n");
     return EINVALID;
   }
   p->entry = entry;
+  p->end_entry = (void *) sym->st_value;
 
   /* setup context */
   for(i=0;i<sizeof(context_t)>>2;i++)

@@ -57,6 +57,7 @@ typedef struct {
 typedef struct {
   context_t ctxt;
   void *entry;
+  void *end_entry;
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;

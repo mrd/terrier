@@ -100,6 +100,13 @@ _far_call_return:
         LDREQ   r13, _vector_table_data+36 /* r13 = &svc_stack_top */
         MOVEQS  pc, lr                     /* jump to userspace */
 
+        LDR     r13, [r13, #0x4C] /* r13 = process_t.end_entry */
+        CMP     r13, r14
+        BGT     1f              /* skip if end_entry > return address */
+
+        LDR     r13, _vector_table_data+28 /* r13 = &_prev_context */
+        LDR     r13, [r13]                 /* r13 = *r13 */
+
         /* prev != NULL implies context switch: now save old context */
         ADD     r13, r13, #8
         STMIA   r13, {r0-r14}^ /* store user registers (incl. r13_usr, r14_usr) */
@@ -108,13 +115,14 @@ _far_call_return:
         MRS     r0, spsr
         STMDB   r13, {r0,lr}   /* store status register, return address */
 
+1:
         /* now setup the context for the next process to use */
         LDR     r13, _vector_table_data+32 /* r13 = &_next_context */
         LDMIA   r13, {r13}^                /* r13_usr = *r13 */
         LDMIA   r13, {r13}                 /* r13 = *r13 */
         LDR     r0, [r13]                  /* r0 = spsr */
         MSR     spsr_cx, r0                /* store spsr (control, extension) */
-        LDR     lr, [r13, #0x48]           /* lr = entry point */
+        LDR     lr, [r13, #0x48]           /* lr = entry point (process_t.entry) */
 
         LDR     r13, _vector_table_data+36 /* r13 = &svc_stack_top */
 

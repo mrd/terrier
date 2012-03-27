@@ -55,14 +55,15 @@ _vector_table:
         LDR     pc, _vector_table_data+24
 
 _swi_stub:
-        SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on SVC mode stack */
-        CPS     #MODE_SVC                 /* change to SVC mode */
+        /* in SVC mode */
+        SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on stack */
         STMFD   r13!, {r0-r3,r12}         /* put caller-save regs on stack */
         MOV     r0, lr                    /* set interrupt return address as argument */
         ADR     lr, _far_call_return      /* set return address */
         LDR     pc, _vector_table_data+8  /* far call */
 
 _irq_stub:
+        /* in IRQ mode */
         SUB     lr, lr, #4
         SRSDB   sp!, #MODE_SVC            /* save {r14, spsr} on SVC mode stack */
         CPS     #MODE_SVC                 /* change to SVC mode */

@@ -115,6 +115,16 @@ static inline void arm_wait_for_interrupt(void)
   ASM("MCR p15, 0, %0, c7, c0, 4"::"r"(0));
 }
 
+static inline int strcmp(const char *s1, const char *s2)
+{
+  /* FIXME: implement optimized assembly version */
+  int i;
+  for(i=0;s1[i] && s2[i];i++)
+    if(s1[i] != s2[i])
+      return s1[i] - s2[i];
+  return s1[i] - s2[i];
+}
+
 #endif
 
 /*

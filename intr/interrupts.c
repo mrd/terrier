@@ -207,7 +207,8 @@ struct {
   { "", 0, 0, 0 }
 };
 
-extern context_t *_prev_context;
+extern context_t *_prev_context, *_next_context;
+extern process_t *current;
 
 static int find_fault_status(u32 sr)
 {
@@ -237,7 +238,7 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   extern process_t *current;
   extern u32 svc_stack_top;
   u32 *stack = (&svc_stack_top) - 7;
-  _prev_context = NULL;
+  _prev_context = _next_context = &current->ctxt;
   lr -= 4;                      /* the SWI is the previous instruction */
   DLOG(1, "_handle_swi lr=%#x (%#x), stack=%#x\n",
        lr, *((u32 *) lr), stack);
@@ -297,7 +298,7 @@ void HANDLES("ABORT") _handle_data_abort(void)
 void _handle_irq(void)
 {
   u32 activeirq = intc->sir_irq.activeirq;
-  _prev_context = NULL;
+  _prev_context = _next_context = &current->ctxt;
   intc_mask_irq(activeirq);
   if (irq_table[activeirq])
     irq_table[activeirq](activeirq);

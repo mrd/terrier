@@ -86,7 +86,9 @@ _far_call_return:
         LDR     lr, [r13, #0x14]  /* lr = interrupt return address */
 
         /* _prev_context == current or actual previous context */
-        LDR     r12, _vector_table_data+28 /* r12 = &_prev_context */
+        MOVW    r12, #:lower16:_prev_context
+        MOVT    r12, #:upper16:_prev_context
+        /* r12 = &_prev_context */
         LDR     r12, [r12]                 /* r12 = *r12 */
 
         LDR     r1, [r12, #0x4c]  /* r1 = process_t.end_entry */
@@ -108,7 +110,9 @@ _far_call_return:
         ADD     r13, r13, #0x1c   /* unwind stack */
 
         /* now setup the context for the next process to use */
-        LDR     r12, _vector_table_data+32 /* r12 = &_next_context */
+        MOVW    r12, #:lower16:_next_context
+        MOVT    r12, #:upper16:_next_context
+        /* r12 = &_next_context */
         LDMIA   r12, {r13}^                /* r13_usr = *r12 */
         LDMIA   r12, {r12}                 /* r12 = *r12 */
         LDR     r0, [r12]                  /* r0 = spsr */
@@ -126,8 +130,6 @@ _vector_table_data:
         .word   _handle_data_abort
         .word   _handle_irq
         .word   _handle_fiq
-        .word   _prev_context
-        .word   _next_context
 
         .globl  _vector_table_size
 _vector_table_size:

@@ -237,6 +237,21 @@ status program_load(void *pstart, process_t **return_p)
     DLOG(1, "Bad Magic\n");
     return EINVALID;
   }
+
+  DLOG(1, "ELF type=%#x arch=%#x version=%#x entry=%#x flags=%#x\n",
+       pe->e_type, pe->e_machine, pe->e_version, pe->e_entry, pe->e_flags);
+
+  program_dump_sections(pstart);
+  DLOG(1, "_start=%#x _end_entry=%#x\n",
+       program_find_symbol(pstart, "_start")->st_value,
+       program_find_symbol(pstart, "_end_entry")->st_value);
+
+  sym = program_find_symbol(pstart, "_end_entry");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _end_entry\n");
+    return EINVALID;
+  }
+
   DLOG(1, "phnum=%d phoff=%#x entry=%#x\n", pe->e_phnum, pe->e_phoff, entry);
   for(i=0;i<pe->e_phnum;i++) {
     if (pph->p_type == PT_LOAD) {
@@ -250,17 +265,6 @@ status program_load(void *pstart, process_t **return_p)
   }
   if(loadph == NULL) {
     DLOG(1, "No loadable program header found.\n");
-    return EINVALID;
-  }
-
-  program_dump_sections(pstart);
-  DLOG(1, "_start=%#x _end_entry=%#x\n",
-       program_find_symbol(pstart, "_start")->st_value,
-       program_find_symbol(pstart, "_end_entry")->st_value);
-
-  sym = program_find_symbol(pstart, "_end_entry");
-  if(sym == NULL) {
-    DLOG(1, "unable to find _end_entry\n");
     return EINVALID;
   }
 

@@ -512,8 +512,8 @@ status programs_init(void)
 
   process_switch_to(current);
 
-  DLOG(1, "Switching to usermode.\n");
-  sched_launch_first_process(p);
+  DLOG(1, "Switching to first process. entry=%#x\n", current->entry);
+  sched_launch_first_process(current);
 
   /* control flow should not return to here */
   early_panic("unreachable");

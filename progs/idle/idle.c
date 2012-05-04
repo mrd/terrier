@@ -1,9 +1,14 @@
+unsigned int a = 1;
+
+void entry(void);
+
 int main(void)
 {
   //asm volatile("MOV r0, #0\n\tLDR r1, =entry\n\tSVC #0":::"r0", "r1");
   /* code that uses a lot of registers -- and gets messed up if registers are corrupted */
   asm volatile("MOV r0, #1\n MOV r1, #11\n MOV r2, #13\n MOV r4, #0":::"r0","r1","r2","r4");
   for(;;) {
+    entry();
     asm volatile("SVC #1");
     asm volatile("1: ADD r4, r4, #1\n"
                  "   ADD r6, r1, r2\n"
@@ -16,9 +21,6 @@ int main(void)
                  "   MOV r4, #0\n":::"r0","r1","r2","r3","r4","r5","r6");
 
   }
-  return 0;
+  return a;
 }
 
-void entry(void)
-{
-}

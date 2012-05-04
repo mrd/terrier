@@ -1,5 +1,5 @@
 NAME = idle
-C_FILES = idle.c
+C_FILES = idle.c test.c
 S_FILES =
 
 include ../../config.mk

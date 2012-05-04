@@ -219,14 +219,61 @@ Elf32_Sym *program_find_symbol(void *pstart, const char *name)
   return NULL;
 }
 
+Elf32_Sym *program_find_symbol_index(void *pstart, int ndx)
+{
+  Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
+  Elf32_Sym *sym;
+
+  if(symtabsh == NULL)
+    return NULL;
+
+  sym = (void *) pstart + symtabsh->sh_offset;
+
+  return &sym[ndx];
+}
+
+char *program_find_string(void *pstart, int strndx)
+{
+  Elf32_Shdr *strtabsh = program_find_section(pstart, ".strtab", SHT_STRTAB);
+  if(strtabsh == NULL)
+    return NULL;
+
+  return (char *) pstart + strtabsh->sh_offset + strndx;
+}
+
+void program_dump_symbols(void *pstart)
+{
+  Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
+  Elf32_Shdr *strtabsh = program_find_section(pstart, ".strtab", SHT_STRTAB);
+  Elf32_Sym *sym;
+  char *str;
+  int i;
+
+  if(symtabsh == NULL || strtabsh == NULL)
+    return;
+
+  sym = (void *) pstart + symtabsh->sh_offset;
+  str = (void *) pstart + strtabsh->sh_offset;
+
+  for(i=0; i< symtabsh->sh_size / sizeof(Elf32_Sym); i++) {
+    DLOG(1, "\"%s\" value=%#x size=%#x info=%#x other=%#x shndx=%d\n",
+         str + sym[i].st_name,
+         sym[i].st_value,
+         sym[i].st_size,
+         sym[i].st_info,
+         sym[i].st_other,
+         sym[i].st_shndx);
+  }
+}
+
 status program_load(void *pstart, process_t **return_p)
 {
   process_t *p;
   Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
-  Elf32_Phdr *pph = (void *) pe + pe->e_phoff, *loadph = NULL;
-  Elf32_Sym *sym;
   void *entry = (void *) pe->e_entry;
-  int i, memsz = 0;
+  Elf32_Sym *sym;
+  int i;
+  u32 memsz;
 
   /* Parse ELF */
   DLOG(1, "Magic: %X%X%X%X\n", pe->e_ident[0], pe->e_ident[1], pe->e_ident[2], pe->e_ident[3]);
@@ -241,7 +288,124 @@ status program_load(void *pstart, process_t **return_p)
   DLOG(1, "ELF type=%#x arch=%#x version=%#x entry=%#x flags=%#x\n",
        pe->e_type, pe->e_machine, pe->e_version, pe->e_entry, pe->e_flags);
 
+  if(pe->e_type != ET_REL) {
+    DLOG(1, "Not a relocatable file.\n");
+    return EINVALID;
+  }
+
+#define EF_ARM_EABI_VER5 0x05000000
+
+  if(pe->e_machine != EM_ARM || EF_ARM_EABI_VERSION(pe->e_flags) != EF_ARM_EABI_VER5) {
+    DLOG(1, "Not a valid ARM architecture file. (machine=%#x, flags=%#x) should be (%#x, %#x)\n",
+         pe->e_machine, pe->e_flags, EM_ARM, EF_ARM_EABI_VER5);
+    return EINVALID;
+  }
+
   program_dump_sections(pstart);
+
+  /* Select base address */
+
+  u32 base = 0x8000;            /* testing */
+
+  /* Extract sections and create layout */
+
+  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
+  Elf32_Shdr *reltext = program_find_section(pstart, ".rel.text", SHT_REL);
+  /* Elf32_Shdr *relatext = program_find_section(pstart, ".rela.text", SHT_RELA); */
+  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
+  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
+
+  u32 textshnum = 1;            /* temp */
+  u32 datashnum = 6;            /* temp */
+  u32 bssshnum  = 7;            /* temp */
+
+  /* Calculate addresses for .text, .data, .bss */
+
+  u32 textbase = base;
+  u32 database = textbase + text->sh_size;
+  u32 bssbase  = database + data->sh_size;
+  DLOG(1, "base addresses: text=%#x data=%#x bss=%#x\n", textbase, database, bssbase);
+
+  memsz = text->sh_size + data->sh_size + bss->sh_size;
+
+  /* Rewrite symtab based on shndx, and put symbols into proper spaces */
+
+  Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
+  sym = (void *) pstart + symtabsh->sh_offset;
+  for(i=0; i< symtabsh->sh_size / sizeof(Elf32_Sym); i++) {
+    if(sym[i].st_shndx == textshnum)
+      sym[i].st_value += textbase;
+    if(sym[i].st_shndx == datashnum)
+      sym[i].st_value += database;
+    if(sym[i].st_shndx == bssshnum)
+      sym[i].st_value += bssbase;
+  }
+
+  //program_dump_symbols(pstart);
+
+  /* Iterate through relocation sections and rewrite binary */
+
+  Elf32_Rel *rel = (void *) pstart + reltext->sh_offset;
+  for(i=0; i<reltext->sh_size/sizeof(Elf32_Rel); i++) {
+    u32 A, S, P;
+    u32 ndx = ELF32_R_SYM(rel[i].r_info);
+    u32 typ = ELF32_R_TYPE(rel[i].r_info);
+    u32 off = rel[i].r_offset;
+    u32 *ptr = (void *) pstart + text->sh_offset + off;
+    char *symstr;
+    sym = program_find_symbol_index(pstart, ndx);
+    if(sym == NULL) {
+      DLOG(1, "Unable to find sym=%d\n", ndx);
+      break;
+    }
+    symstr = program_find_string(pstart, sym->st_name);
+    if(symstr == NULL) {
+      DLOG(1, "Unable to find symbol %d name string index=%d\n", ndx, sym->st_name);
+      break;
+    }
+
+    DLOG(1, "Rewriting offset=%#x type=%#x ndx=%d (%s) ", off, typ, ndx, symstr);
+
+    S = sym->st_value;
+
+    u32 ins;
+    switch(typ) {
+    case R_ARM_ABS32:           /* Absolute 32-bit relocation */
+      A = *ptr;
+      *ptr = S + A;
+      DLOG(1, "A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      break;
+    case R_ARM_CALL:            /* branch with link instruction */
+      P = textbase + off;
+      A = (*ptr << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
+      *ptr &= 0xFF000000;
+      *ptr |= ((S + A - P) & 0x00FFFFFF) >> 2; /* re-encode */
+      DLOG(1, "A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
+      break;
+    case R_ARM_MOVT_ABS:        /* mov TOP */
+      S >>= 16;
+    case R_ARM_MOVW_ABS_NC:     /* mov WIDE */
+      /* *ptr = "...:imm4:Rd:imm12" */
+      /* addend = imm4:imm12 */
+      ins = *ptr;
+      A = ((ins & 0xF0000) >> 4) | (ins & 0xFFF);
+      u32 t = S + A;
+      /* re-encode instruction */
+      *ptr = (ins & 0xFFF00000) | ((t & 0xF000) << 4) | (ins & 0x0000F000) | (t & 0xFFF);
+      DLOG(1, "A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      break;
+    default:
+      DLOG(1, "Unknown relocation type.\n");
+      break;
+    }
+  }
+
+  /* Create process */
+  if(process_new(&p) != OK) {
+    DLOG(1, "process_new failed\n");
+    return EINVALID;
+  }
+
   DLOG(1, "_start=%#x _end_entry=%#x\n",
        program_find_symbol(pstart, "_start")->st_value,
        program_find_symbol(pstart, "_end_entry")->st_value);
@@ -252,27 +416,7 @@ status program_load(void *pstart, process_t **return_p)
     return EINVALID;
   }
 
-  DLOG(1, "phnum=%d phoff=%#x entry=%#x\n", pe->e_phnum, pe->e_phoff, entry);
-  for(i=0;i<pe->e_phnum;i++) {
-    if (pph->p_type == PT_LOAD) {
-      memsz += pph->p_memsz;
-      loadph = pph;
-    }
-    DLOG(1, " ph[%d]: type=%#x flags=%#x filesz=%#x offset=%#x memsz=%#x vaddr=%#x align=%#x\n",
-         i, pph->p_type, pph->p_flags, pph->p_filesz, pph->p_offset,
-         pph->p_memsz, pph->p_vaddr, pph->p_align);
-    pph = (void *) pph + pe->e_phentsize;
-  }
-  if(loadph == NULL) {
-    DLOG(1, "No loadable program header found.\n");
-    return EINVALID;
-  }
-
-  /* Create process */
-  if(process_new(&p) != OK) {
-    DLOG(1, "process_new failed\n");
-    return EINVALID;
-  }
+  entry += textbase;
   p->entry = entry;
   p->end_entry = (void *) sym->st_value;
 
@@ -285,7 +429,7 @@ status program_load(void *pstart, process_t **return_p)
   p->ctxt.psr = MODE_SYS;       /* starting status register */
 
   pagetable_t *l2;
-  u32 pages = (loadph->p_memsz + 0xFFF) >> PAGE_SIZE_LOG2;
+  u32 pages = (memsz + 0xFFF) >> PAGE_SIZE_LOG2;
   u32 align = 1;                /* physical: shouldn't matter */
   l2 = &p->tables->next->elt;
 
@@ -303,7 +447,7 @@ status program_load(void *pstart, process_t **return_p)
     return ENOSPACE;
   }
 
-  rl->elt.vstart = (void *) loadph->p_vaddr;
+  rl->elt.vstart = (void *) base;
   rl->elt.pt = l2;
   rl->elt.page_count = pages;
   rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
@@ -316,12 +460,27 @@ status program_load(void *pstart, process_t **return_p)
   process_switch_to(p);
   /* cheat, switch to process and use its mapping */
 
-  u8 *dest = (u8 *) loadph->p_vaddr;
-  u8 *src = &((u8 *) pstart)[loadph->p_offset];
-  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", loadph->p_filesz, src, dest);
-  for(i=0;i<loadph->p_filesz;i++) {
+  u8 *dest, *src;
+
+  /* copy text */
+  dest = (u8 *) textbase;
+  src = pstart + text->sh_offset;
+  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", text->sh_size, src, dest);
+  for(i=0;i<text->sh_size;i++)
     dest[i] = src[i];
-  }
+
+  /* copy data */
+  dest = (u8 *) database;
+  src = pstart + data->sh_offset;
+  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", data->sh_size, src, dest);
+  for(i=0;i<data->sh_size;i++)
+    dest[i] = src[i];
+
+  /* zero bss */
+  dest = (u8 *) bssbase;
+  DLOG(1, "program_load: zeroing %d bytes dest=%#x\n", bss->sh_size, dest);
+  for(i=0;i<bss->sh_size;i++)
+    dest[i] = 0;
 
   *return_p = p;
   return OK;

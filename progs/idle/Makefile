@@ -12,6 +12,10 @@ else
 CFLAGS += -O$(OPT)
 endif
 
+CFLAGS +=
+SFLAGS +=
+LDFLAGS += -r
+
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
 OBJS = $(C_OBJS) $(S_OBJS)
@@ -21,7 +25,7 @@ program: $(NAME).elf
 	$(LD) -r -b binary $< -o $@
 
 $(NAME).elf: $(OBJS)
-	$(LD) -T $(LDSCRIPT) $(USERLIB) $(OBJS) -o $@
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) $(USERLIB) $(OBJS) -o $@
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@

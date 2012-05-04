@@ -3,8 +3,8 @@ OUTPUT_ARCH(arm)
 ENTRY(_start)
 SECTIONS
 {
- PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x00008000));
- . = SEGMENT_START("text-segment", 0x00008000) + SIZEOF_HEADERS;
+ PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x00000000));
+ . = SEGMENT_START("text-segment", 0x00000000);
  .text : { *(.entry); _end_entry = .; *(.text) PROVIDE(_etext = .); }
  .rodata : { *(.rodata) }
  .data : { *(.data) }

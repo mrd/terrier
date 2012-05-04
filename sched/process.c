@@ -172,8 +172,8 @@ void program_dump_sections(void *pstart)
 
   DLOG(1, "shstrndx=%d shstr=%#x\n", shstrndx, shstr);
   for(i=0; i<shnum; i++) {
-    DLOG(1, "shnum=%d name=%d (%s) type=%d offs=%#x size=%#x link=%d info=%d entsz=%d\n",
-         i, sh->sh_name, shstr + sh->sh_name, sh->sh_type, sh->sh_offset, sh->sh_size,
+    DLOG(1, "shnum=%d name=%d (%s) type=%d addr=%#x offs=%#x size=%#x link=%d info=%d entsz=%d\n",
+         i, sh->sh_name, shstr + sh->sh_name, sh->sh_type, sh->sh_addr, sh->sh_offset, sh->sh_size,
          sh->sh_link, sh->sh_info, sh->sh_entsize);
     /* go to next section header */
     sh = (void *) sh + pe->e_shentsize;
@@ -266,47 +266,20 @@ void program_dump_symbols(void *pstart)
   }
 }
 
-status program_load(void *pstart, process_t **return_p)
+u32 program_memory_size(void *pstart)
 {
-  process_t *p;
-  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
-  void *entry = (void *) pe->e_entry;
-  Elf32_Sym *sym;
+  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
+  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
+  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
+
+  return text->sh_size + data->sh_size + bss->sh_size;
+}
+
+status program_relocate(void *pstart, u32 base, u32 *entry)
+{
   int i;
-  u32 memsz;
-
-  /* Parse ELF */
-  DLOG(1, "Magic: %X%X%X%X\n", pe->e_ident[0], pe->e_ident[1], pe->e_ident[2], pe->e_ident[3]);
-  if(!(pe->e_ident[EI_MAG0] == ELFMAG0 &&
-       pe->e_ident[EI_MAG1] == ELFMAG1 &&
-       pe->e_ident[EI_MAG2] == ELFMAG2 &&
-       pe->e_ident[EI_MAG3] == ELFMAG3)) {
-    DLOG(1, "Bad Magic\n");
-    return EINVALID;
-  }
-
-  DLOG(1, "ELF type=%#x arch=%#x version=%#x entry=%#x flags=%#x\n",
-       pe->e_type, pe->e_machine, pe->e_version, pe->e_entry, pe->e_flags);
-
-  if(pe->e_type != ET_REL) {
-    DLOG(1, "Not a relocatable file.\n");
-    return EINVALID;
-  }
-
-#define EF_ARM_EABI_VER5 0x05000000
-
-  if(pe->e_machine != EM_ARM || EF_ARM_EABI_VERSION(pe->e_flags) != EF_ARM_EABI_VER5) {
-    DLOG(1, "Not a valid ARM architecture file. (machine=%#x, flags=%#x) should be (%#x, %#x)\n",
-         pe->e_machine, pe->e_flags, EM_ARM, EF_ARM_EABI_VER5);
-    return EINVALID;
-  }
-
-  program_dump_sections(pstart);
-
-  /* Select base address */
-
-  u32 base = 0x8000;            /* testing */
-
+  Elf32_Sym *sym;
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
   /* Extract sections and create layout */
 
   Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
@@ -315,9 +288,17 @@ status program_load(void *pstart, process_t **return_p)
   Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
   Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
 
-  u32 textshnum = 1;            /* temp */
-  u32 datashnum = 6;            /* temp */
-  u32 bssshnum  = 7;            /* temp */
+#define CHK_SEC(var) if(var == NULL) { DLOG(1, "Unable to find section %s.\n", #var); return EINVALID; }
+  CHK_SEC(text);
+  CHK_SEC(reltext);
+  CHK_SEC(data);
+  CHK_SEC(bss);
+
+#define SECTION_INDEX(s) (((u32) (s) - (u32) pe - pe->e_shoff) / pe->e_shentsize)
+  u32 textshnum = SECTION_INDEX(text);
+  u32 datashnum = SECTION_INDEX(data);
+  u32 bssshnum  = SECTION_INDEX(bss);
+  DLOG(1, "section indices: text=%d data=%d bss=%d\n", textshnum, datashnum, bssshnum);
 
   /* Calculate addresses for .text, .data, .bss */
 
@@ -325,12 +306,15 @@ status program_load(void *pstart, process_t **return_p)
   u32 database = textbase + text->sh_size;
   u32 bssbase  = database + data->sh_size;
   DLOG(1, "base addresses: text=%#x data=%#x bss=%#x\n", textbase, database, bssbase);
-
-  memsz = text->sh_size + data->sh_size + bss->sh_size;
+  text->sh_addr = textbase;
+  data->sh_addr = database;
+  bss->sh_addr  = bssbase;
 
   /* Rewrite symtab based on shndx, and put symbols into proper spaces */
 
   Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
+  CHK_SEC(symtabsh);
+
   sym = (void *) pstart + symtabsh->sh_offset;
   for(i=0; i< symtabsh->sh_size / sizeof(Elf32_Sym); i++) {
     if(sym[i].st_shndx == textshnum)
@@ -400,13 +384,69 @@ status program_load(void *pstart, process_t **return_p)
     }
   }
 
+  *entry = textbase + pe->e_entry;
+  return OK;
+}
+
+status program_load(void *pstart, process_t **return_p)
+{
+  static u32 current_base = 0x8000; /* for now, start at 0x8000 and place programs consecutively */
+  process_t *p;
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  u32 entry;
+  Elf32_Sym *sym;
+  int i;
+  u32 memsz;
+
+  /* Parse ELF */
+  DLOG(1, "Magic: %X%X%X%X\n", pe->e_ident[0], pe->e_ident[1], pe->e_ident[2], pe->e_ident[3]);
+  if(!(pe->e_ident[EI_MAG0] == ELFMAG0 &&
+       pe->e_ident[EI_MAG1] == ELFMAG1 &&
+       pe->e_ident[EI_MAG2] == ELFMAG2 &&
+       pe->e_ident[EI_MAG3] == ELFMAG3)) {
+    DLOG(1, "Bad Magic\n");
+    return EINVALID;
+  }
+
+  DLOG(1, "ELF type=%#x arch=%#x version=%#x entry=%#x flags=%#x\n",
+       pe->e_type, pe->e_machine, pe->e_version, pe->e_entry, pe->e_flags);
+
+  if(pe->e_type != ET_REL) {
+    DLOG(1, "Not a relocatable file.\n");
+    return EINVALID;
+  }
+
+#define EF_ARM_EABI_VER5 0x05000000
+
+  if(pe->e_machine != EM_ARM || EF_ARM_EABI_VERSION(pe->e_flags) != EF_ARM_EABI_VER5) {
+    DLOG(1, "Not a valid ARM architecture file. (machine=%#x, flags=%#x) should be (%#x, %#x)\n",
+         pe->e_machine, pe->e_flags, EM_ARM, EF_ARM_EABI_VER5);
+    return EINVALID;
+  }
+
+  program_dump_sections(pstart);
+
+  /* Select base address */
+
+  if(program_relocate(pstart, current_base, &entry) != OK) {
+    DLOG(1, "program_relocate(%#x, %#x) failed.\n", pstart, current_base);
+    return EINVALID;
+  }
+
+  memsz = program_memory_size(pstart);
+  if(memsz == 0) {
+    DLOG(1, "program_memory_size == 0\n");
+    return EINVALID;
+  }
+
   /* Create process */
   if(process_new(&p) != OK) {
     DLOG(1, "process_new failed\n");
     return EINVALID;
   }
 
-  DLOG(1, "_start=%#x _end_entry=%#x\n",
+  DLOG(1, "entry=%#x _start=%#x _end_entry=%#x\n",
+       entry,
        program_find_symbol(pstart, "_start")->st_value,
        program_find_symbol(pstart, "_end_entry")->st_value);
 
@@ -416,8 +456,7 @@ status program_load(void *pstart, process_t **return_p)
     return EINVALID;
   }
 
-  entry += textbase;
-  p->entry = entry;
+  p->entry = (void *) entry;
   p->end_entry = (void *) sym->st_value;
 
   /* setup context */
@@ -447,7 +486,7 @@ status program_load(void *pstart, process_t **return_p)
     return ENOSPACE;
   }
 
-  rl->elt.vstart = (void *) base;
+  rl->elt.vstart = (void *) current_base;
   rl->elt.pt = l2;
   rl->elt.page_count = pages;
   rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
@@ -460,29 +499,36 @@ status program_load(void *pstart, process_t **return_p)
   process_switch_to(p);
   /* cheat, switch to process and use its mapping */
 
+  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
+  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
+  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
+
   u8 *dest, *src;
 
   /* copy text */
-  dest = (u8 *) textbase;
+  dest = (u8 *) text->sh_addr;
   src = pstart + text->sh_offset;
   DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", text->sh_size, src, dest);
   for(i=0;i<text->sh_size;i++)
     dest[i] = src[i];
 
   /* copy data */
-  dest = (u8 *) database;
+  dest = (u8 *) data->sh_addr;
   src = pstart + data->sh_offset;
   DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", data->sh_size, src, dest);
   for(i=0;i<data->sh_size;i++)
     dest[i] = src[i];
 
   /* zero bss */
-  dest = (u8 *) bssbase;
+  dest = (u8 *) bss->sh_addr;
   DLOG(1, "program_load: zeroing %d bytes dest=%#x\n", bss->sh_size, dest);
   for(i=0;i<bss->sh_size;i++)
     dest[i] = 0;
 
   *return_p = p;
+
+  current_base += pages * 0x1000; /* for next program load */
+
   return OK;
 }
 

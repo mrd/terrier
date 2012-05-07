@@ -49,6 +49,18 @@ status intc_set_irq_handler(u32 irq_num, void (*handler)(u32));
 status intc_mask_irq(u32 irq_num);
 status intc_unmask_irq(u32 irq_num);
 
+static inline void arm_set_vector_base_address(u32 addr)
+{
+  ASM("MCR p15, 0, %0, c12, c0, 0"::"r"(addr));
+}
+
+static inline u32 arm_get_vector_base_address(void)
+{
+  u32 addr;
+  ASM("MCR p15, 0, %0, c12, c0, 0":"=r"(addr));
+  return addr;
+}
+
 #endif
 
 /*

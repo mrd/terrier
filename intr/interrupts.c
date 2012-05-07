@@ -126,27 +126,12 @@ void intc_init(void)
   for(i=0;i<96;i++) irq_table[i] = NULL;
 }
 
-region_t intr_region = { 0x89000000, (void *) 0xFFF00000, &l1pt, 1, 20, R_C | R_B, 0, R_PM };
 void intr_init(void)
 {
-  extern u32 _vector_table_size;
-  int i; u32 *vt = (u32 *) 0xFFFF0000;
   extern void *_vector_table;
-  u32 *init_vt = (u32 *) &_vector_table;
 
-  if(vmm_map_region(&intr_region) != OK) {
-    early_panic("Unable to map interrupt vector table.");
-    return;
-  }
-
-  for(i=0;i < _vector_table_size;i++)
-    vt[i] = init_vt[i];
-  for(i=0;i < _vector_table_size;i++)
-    printf_uart3("%#x ", vt[i]);
-  putc_uart3('\n');
-  /* set vector table to 0xFFFF0000 */
-  arm_ctrl(CTRL_HIGHVT, CTRL_HIGHVT);
-
+  /* set up vector table base address */
+  arm_set_vector_base_address((u32) &_vector_table);
   intc_init();
 }
 

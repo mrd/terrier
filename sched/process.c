@@ -65,10 +65,12 @@ process_t *process_find(pid_t pid)
 /* Switch processes. Requires valid p. */
 status process_switch_to(process_t *p)
 {
+#ifdef USE_VMM
   vmm_activate_pagetable(&p->tables->elt);
   data_sync_barrier();
   arm_mmu_set_context_id(p->pid - 1);
   prefetch_flush();
+#endif
   return OK;
 }
 
@@ -78,6 +80,7 @@ status process_new(process_t **return_p)
   for(i=0; i<MAX_PROCESSES; i++) {
     if(process[i].pid == NOPID) {
       process_t *p = process + i;
+#ifdef USE_VMM
       pagetable_t pt, *l1, *l2;
       /* initialize level-1 pt */
 
@@ -143,7 +146,7 @@ status process_new(process_t **return_p)
       pagetable_append(&p->tables, ptl2);
       l2 = &ptl2->elt;
       vmm_activate_pagetable(l2);
-
+#endif
       p->regions = NULL;
 
       /* set pid */
@@ -390,13 +393,11 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
 
 status program_load(void *pstart, process_t **return_p)
 {
-  static u32 current_base = 0x8000; /* for now, start at 0x8000 and place programs consecutively */
   process_t *p;
   Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
   u32 entry;
   Elf32_Sym *sym;
   int i;
-  u32 memsz;
 
   /* Parse ELF */
   DLOG(1, "Magic: %X%X%X%X\n", pe->e_ident[0], pe->e_ident[1], pe->e_ident[2], pe->e_ident[3]);
@@ -426,22 +427,45 @@ status program_load(void *pstart, process_t **return_p)
 
   program_dump_sections(pstart);
 
-  /* Select base address */
+  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
+  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
+  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
 
-  if(program_relocate(pstart, current_base, &entry) != OK) {
-    DLOG(1, "program_relocate(%#x, %#x) failed.\n", pstart, current_base);
-    return EINVALID;
-  }
-
-  memsz = program_memory_size(pstart);
+  u32 memsz = program_memory_size(pstart);
   if(memsz == 0) {
     DLOG(1, "program_memory_size == 0\n");
     return EINVALID;
   }
 
+  u32 pages = (memsz + 0xFFF) >> PAGE_SIZE_LOG2, region_phys;
+  u32 align = (text->sh_addralign <= 0x1000 ? 1 : text->sh_addralign >> 12);
+
+  /* Create region in physical memory for program */
+
+  if(physical_alloc_pages(pages, align, &region_phys) != OK) {
+    DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
+    /* FIXME: clean-up previous resources */
+    return ENOSPACE;
+  }
+
+  /* Select base address */
+#ifdef USE_VMM
+  u32 base = VIRTUAL_BASE_ADDR;
+#else
+  u32 base = region_phys;
+#endif
+
+  if(program_relocate(pstart, base, &entry) != OK) {
+    DLOG(1, "program_relocate(%#x, %#x) failed.\n", pstart, region_phys);
+    /* FIXME: clean-up previous resources */
+    return EINVALID;
+  }
+
   /* Create process */
+
   if(process_new(&p) != OK) {
     DLOG(1, "process_new failed\n");
+    /* FIXME: clean-up previous resources */
     return EINVALID;
   }
 
@@ -463,30 +487,20 @@ status program_load(void *pstart, process_t **return_p)
   for(i=0;i<sizeof(context_t)>>2;i++)
     ((u32 *)&p->ctxt)[i] = 0;
 
-  p->ctxt.lr = (u32) entry;     /* starting address */
-  p->ctxt.usr.r[15] = (u32) entry;     /* starting address */
-  p->ctxt.psr = MODE_SYS;       /* starting status register */
+  p->ctxt.lr = (u32) entry;        /* starting address */
+  p->ctxt.usr.r[15] = (u32) entry; /* starting address */
+  p->ctxt.psr = MODE_SYS;          /* starting status register */
 
-  pagetable_t *l2;
-  u32 pages = (memsz + 0xFFF) >> PAGE_SIZE_LOG2;
-  u32 align = 1;                /* physical: shouldn't matter */
-  l2 = &p->tables->next->elt;
-
-  /* Create userspace region */
-
+#ifdef USE_VMM
+  pagetable_t *l2 = &p->tables->next->elt;
   region_list_t *rl = region_list_pool_alloc();
   if(rl == NULL) {
     DLOG(1, "process_new: region_list_pool_alloc failed.\n");
     /* FIXME: clean-up previous resources */
     return ENOSPACE;
   }
-  if(physical_alloc_pages(pages, align, &rl->elt.pstart) != OK) {
-    DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
-    /* FIXME: clean-up previous resources */
-    return ENOSPACE;
-  }
-
-  rl->elt.vstart = (void *) current_base;
+  rl->elt.pstart = region_phys;
+  rl->elt.vstart = (void *) base;
   rl->elt.pt = l2;
   rl->elt.page_count = pages;
   rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
@@ -498,10 +512,7 @@ status program_load(void *pstart, process_t **return_p)
 
   process_switch_to(p);
   /* cheat, switch to process and use its mapping */
-
-  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
-  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
-  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
+#endif
 
   u8 *dest, *src;
 
@@ -526,8 +537,6 @@ status program_load(void *pstart, process_t **return_p)
     dest[i] = 0;
 
   *return_p = p;
-
-  current_base += pages * 0x1000; /* for next program load */
 
   return OK;
 }

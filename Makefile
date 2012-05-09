@@ -64,6 +64,14 @@ CFLAGS += -O$(OPT)
 endif
 CFLAGS += $(patsubst %,-DTEST_%,$(TESTS))
 
+ifeq ($(USE_VMM),1)
+CFLAGS += -DUSE_VMM
+SFLAGS += -DUSE_VMM
+LDSCRIPT = ldscripts/$(IMGNAME)-vmm.ld
+else
+LDSCRIPT = ldscripts/$(IMGNAME).ld
+endif
+
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
 ##################################################
@@ -91,8 +99,8 @@ $(IMGNAME).bin.gz: $(IMGNAME).bin
 $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@
 
-$(IMGNAME).elf: $(OBJS) ldscripts/$(IMGNAME).ld program-map.ld
-	$(LD) -T ldscripts/$(IMGNAME).ld $(OBJS) $(POBJS) $(LIBGCC) -o $@
+$(IMGNAME).elf: $(OBJS) $(LDSCRIPT) program-map.ld
+	$(LD) -T $(LDSCRIPT) $(OBJS) $(POBJS) $(LIBGCC) -o $@
 
 program-map.ld: buildprograms
 	nm $(POBJS) | egrep "_binary_.*_start" | awk -- '{ printf "LONG(%s);\n", $$3 }' > $@

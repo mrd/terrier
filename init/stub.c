@@ -37,6 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef USE_VMM
+
 #include "types.h"
 #include "omap3/early_uart3.h"
 #include "arm/memory.h"
@@ -64,6 +66,8 @@ void stub_init(void)
   arm_ctrl(CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE,
            CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
 }
+
+#endif
 
 /*
  * Local Variables:

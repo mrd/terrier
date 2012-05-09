@@ -51,13 +51,15 @@
 
 #define MPU_INTC_BASE_PHYS_ADDR 0x48200000
 
-#define MPU_INTC_BASE_ADDR 0xF8200000
+#define MPU_INTC_BASE_ADDR 0x48200000
 
+#ifdef USE_VMM
 region_t mpu_intc_region = {
   MPU_INTC_BASE_PHYS_ADDR,
   (void *) MPU_INTC_BASE_ADDR,
   &l1pt, 1, 20, 0, 0, R_PM
 };
+#endif
 
 PACKED_STRUCT(intcps) {
   PACKED_FIELD(u32, revision);
@@ -113,10 +115,12 @@ static irq_handler_t irq_table[96];
 void intc_init(void)
 {
   int i;
+#ifdef USE_VMM
   if(vmm_map_region(&mpu_intc_region) != OK) {
     early_panic("Unable to map interrupt controller registers.");
     return;
   }
+#endif
 
   DLOG(1, "IP revision=%#x\n", intc->revision & 0xF);
   intc->sysconfig = 0x1;        /* Software reset */

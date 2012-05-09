@@ -47,6 +47,8 @@ typedef u32 pid_t;
 #define MAX_PROCESSES 16
 #define NOPID ((pid_t) 0)
 
+#define VIRTUAL_BASE_ADDR 0x8000 /* if using VMM */
+
 typedef struct {
   u32 psr, lr;
   struct {

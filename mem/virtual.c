@@ -37,6 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef USE_VMM
+
 #include "types.h"
 #include "mem/virtual.h"
 #include "arm/memory.h"
@@ -196,7 +198,7 @@ void vmm_init(void)
 {
   /* Below 1 GB use TTB0. Above 1 GB use TTB1. */
   arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
-  /* Presume l1pt is already active in TTB1, from stub. */
+  /* Presume l1pt is already active in TTB0/TTB1, from stub. */
   vmm_init_pagetable(&kernel_l2pt);
   vmm_map_region(&kernel_region);
   vmm_activate_pagetable(&kernel_l2pt);
@@ -251,6 +253,7 @@ status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
 
 POOL_DEFN(pagetable_list,pagetable_list_t,16,4);
 POOL_DEFN(region_list,region_list_t,16,4);
+#endif
 
 /*
  * Local Variables:

@@ -59,12 +59,15 @@ void NO_RETURN c_entry()
   void process_init(void);
   void sched_init(void);
   status programs_init(void);
+
+#ifdef USE_VMM
   extern pagetable_t l1pt;
   extern void *_physical_start;
   u32 phystart = (u32) &_physical_start;
 
   l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
   arm_mmu_flush_tlb();
+#endif
 
   perfmon_init();
   reset_uart3();
@@ -72,7 +75,9 @@ void NO_RETURN c_entry()
   physical_init();
   intr_init();
   timer_init();
+#ifdef USE_VMM
   vmm_init();
+#endif
   process_init();
   sched_init();
 

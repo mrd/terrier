@@ -42,8 +42,10 @@
 #include "arm/memory.h"
 #include "mem/virtual.h"
 
+#ifdef USE_VMM
 static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
 region_t l4wakeup_region = { 0x48300000, (void *) 0x48300000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 
 PACKED_STRUCT(control_module_id) {
   PACKED_FIELD(u32, _rsv1);
@@ -212,7 +214,7 @@ void identify_device(void)
                GETBITS(feat, 0, 4) ? " (LDRD/STRD)" : "");
 
 
-
+#ifdef USE_VMM
   if(vmm_map_region(&sdrc_region) != OK) {
     printf_uart3("Unable to map sdrc_region\n");
     return;
@@ -221,6 +223,8 @@ void identify_device(void)
     printf_uart3("Unable to map l4wakeup_region\n");
     return;
   }
+#endif
+
   idcode = cm_id->control_idcode;
   prodcode = cm_id->control_production_id;
   printf_uart3("IDCODE=%x PRODUCTION_ID=%x DIE_ID=%x%x%x%x\n",

@@ -41,9 +41,10 @@
 
         .global _reset
 _reset:
+#ifdef USE_VMM
         LDR sp, =temp_stub_stack     /* temporary stack */
         BL stub_init
-
+#endif
         /* Setup mode stacks */
         LDR sp, =svc_stack_top
         MSR cpsr_c, #MASK_ALL|MODE_FIQ

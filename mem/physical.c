@@ -46,9 +46,15 @@
 #include "debug/log.h"
 
 #define DEFAULT_CS0_START 0x80000000
+#ifdef USE_VMM
 #define BITMAP_VIRTADDR ((void *) 0xC0000000)
+#else
+#define BITMAP_VIRTADDR ((void *) 0x80000000)
+#endif
 
+#ifdef USE_VMM
 static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 
 typedef struct {
   u32 *map;
@@ -160,10 +166,12 @@ void physical_free_page(physaddr addr)
 
 void physical_init(void)
 {
+#ifdef USE_VMM
   if(vmm_map_region(&sdrc_region) != OK) {
     DLOG(1, "Unable to map sdrc_region.\n");
     return;
   }
+#endif
   extern void *_physical_start, *_kernel_pages;
   volatile u32 *SDRC_MCFG_0 = (u32 *) 0x6D000080;
   volatile u32 *SDRC_MCFG_1 = (u32 *) 0x6D0000B0;

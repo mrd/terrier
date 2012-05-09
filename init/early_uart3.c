@@ -43,7 +43,9 @@
 #include "arm/asm.h"
 #include <stdarg.h>
 
+#ifdef USE_VMM
 static region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 
 #define NS16650_REG(x) u8 x; u8 _unused_##x[3];
 
@@ -97,12 +99,14 @@ void reset_uart3(void)
 {
   u16 divisor = 0x001A;         /* 115200 baud */
 
+#ifdef USE_VMM
   if(vmm_map_region(&uart3_region) != OK) {
     void early_panic(char *);
     /* This is bad. Disable MMU and attempt to report the problem. */
     arm_ctrl(0, CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
     early_panic("Unable to map UART3 region.");
   }
+#endif
 
   UART3->ier = 0x00;            /* disable interrupts */
 

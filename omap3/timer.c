@@ -48,9 +48,11 @@
 #include "debug/log.h"
 #include "debug/cassert.h"
 
+#ifdef USE_VMM
 extern region_t l4wakeup_region;
 region_t l4perip_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
 region_t l4core_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 
 /* 32-kHz sync timer counter */
 static volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x48320010;
@@ -219,6 +221,7 @@ static void timing_loop(void)
 void timer_init(void)
 {
   int i;
+#ifdef USE_VMM
   if(vmm_map_region(&l4wakeup_region) != OK) {
     early_panic("Unable to map L4 wakeup registers.");
     return;
@@ -231,6 +234,7 @@ void timer_init(void)
     early_panic("Unable to map L4 core registers.");
     return;
   }
+#endif
 
   /* For some reason, this is defaulting to SYS_CLK on my board, even
    * though the manual says otherwise. Set it to 32K_FCLK, div-by-1. */

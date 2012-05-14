@@ -92,7 +92,7 @@ void schedule(void)
     current = p;
     process_switch_to(p);
     _next_context = &p->ctxt;
-    DLOG(1, "switch_to: pid=%d\n", p->pid);
+    DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
   }
 }
 

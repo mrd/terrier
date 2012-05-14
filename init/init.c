@@ -67,6 +67,9 @@ void NO_RETURN c_entry()
 
   l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
   arm_mmu_flush_tlb();
+#else
+  arm_ctrl(CTRL_DCACHE | CTRL_ICACHE,
+           CTRL_DCACHE | CTRL_ICACHE);
 #endif
 
   perfmon_init();

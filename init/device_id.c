@@ -91,7 +91,9 @@ void meminfo(void)
 
 void cacheinfo(void)
 {
-  u32 cache_type, tlb_type;
+  u32 cache_type, tlb_type, cr;
+  ASM("MRC p15, #0, %0, c1, c0, #0":"=r"(cr));
+  printf_uart3("control_register=%#x\n", cr);
   ASM("MRC p15, #0, %0, c0, c0, #1":"=r"(cache_type));
   printf_uart3("cache_type=%#x writeback_granule=%d dminline=%d iminline=%d l1policy=%s\n",
                cache_type,

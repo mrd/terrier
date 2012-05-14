@@ -39,6 +39,7 @@
 
 #include "types.h"
 #include "omap3/early_uart3.h"
+#include "arm/asm.h"
 #include <stdarg.h>
 
 static int current_debug_level = 3;
@@ -249,6 +250,7 @@ void debuglog(const char *src, int lvl, const char *fmt, ...)
   if(lvl <= current_debug_level) {
     va_list args;
     va_start(args, fmt);
+    printf_uart3("%.8x: ", arm_read_cycle_counter());
     print_uart3(src); print_uart3(": ");
     closure_vprintf(_putc_uart3, NULL, fmt, args);
     va_end(args);

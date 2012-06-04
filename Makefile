@@ -54,8 +54,8 @@ include config.mk
 
 ##################################################
 
-CFLAGS += -Iinclude
-SFLAGS += -Iinclude
+CFLAGS += -Iinclude -D$(CORE)
+SFLAGS += -Iinclude -D$(CORE)
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0

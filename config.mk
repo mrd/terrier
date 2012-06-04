@@ -1,3 +1,4 @@
+CORE = OMAP4460
 OPT = 2
 DEBUG = 0
 
@@ -8,5 +9,5 @@ AS = $(ARCH)-as
 OBJCOPY = $(ARCH)-objcopy
 MKIMAGE = mkimage
 QEMU = qemu-system-arm
-SFLAGS = -MMD -mcpu=cortex-a8
-CFLAGS = -Wall -MMD -mcpu=cortex-a8
+SFLAGS = -MMD -march=armv7-a
+CFLAGS = -Wall -MMD -march=armv7-a

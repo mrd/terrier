@@ -44,7 +44,12 @@
 #include <stdarg.h>
 
 #ifdef USE_VMM
+#ifdef OMAP3530
 static region_t uart3_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
+#ifdef OMAP4460
+static region_t uart3_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 #endif
 
 #define NS16650_REG(x) u8 x; u8 _unused_##x[3];
@@ -67,7 +72,13 @@ PACKED_STRUCT(ns16650_regs) {
 
 typedef volatile struct ns16650_regs *ns16650_regs_t;
 
+#ifdef OMAP3530
 ns16650_regs_t UART3 = (ns16650_regs_t) 0x49020000;
+#endif
+
+#ifdef OMAP4460
+ns16650_regs_t UART3 = (ns16650_regs_t) 0x48020000;
+#endif
 
 /***************************************************************************
  * THR_REG (offset 0x0)                                                    *
@@ -126,19 +137,20 @@ void reset_uart3(void)
   UART3->mdr1 = 0;              /* UART 16x mode */
 }
 
-void print_uart3(const char *s)
-{
-  while(*s != '\0') { /* Loop until end of string */
-    while((UART3->lsr & LSR_REG_TX_SR_E) == 0);
-    UART3->thr = (unsigned int)(*s); /* Transmit char */
-    s++; /* Next char */
-  }
-}
-
 void putc_uart3(const char c)
 {
   while((UART3->lsr & LSR_REG_TX_SR_E) == 0);
   UART3->thr = (unsigned int) c; /* Transmit char */
+}
+
+void print_uart3(const char *s)
+{
+  while(*s != '\0') { /* Loop until end of string */
+    if(*s == '\n')
+      putc_uart3('\r');
+    putc_uart3(*s);
+    s++; /* Next char */
+  }
 }
 
 void putx_uart3(u32 l)

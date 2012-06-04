@@ -43,10 +43,17 @@
 #include "mem/virtual.h"
 
 #ifdef USE_VMM
+#ifdef OMAP4460
+static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
+region_t l4wakeup_region = { 0x4A000000, (void *) 0x4A000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
+#ifdef OMAP3530
 static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
 region_t l4wakeup_region = { 0x48300000, (void *) 0x48300000, &l1pt, 1, 20, 0, 0, R_PM };
 #endif
+#endif
 
+#ifdef OMAP3530
 PACKED_STRUCT(control_module_id) {
   PACKED_FIELD(u32, _rsv1);
   PACKED_FIELD(u32, control_idcode); /* 0x4830A204 */
@@ -56,7 +63,27 @@ PACKED_STRUCT(control_module_id) {
   PACKED_FIELD(u32, control_die_id[4]); /* 0x4830A218 */
 } PACKED_END;
 static volatile struct control_module_id *cm_id = (struct control_module_id *) 0x4830A200;
+#endif
 
+#ifdef OMAP4460
+#define SYSCTRL_GENERAL_CORE 0x4A002000
+PACKED_STRUCT(omap4_control_module) {
+  PACKED_FIELD(u32, gen_core_revision);
+  PACKED_FIELD(u32, gen_core_hwinfo);
+  PACKED_FIELD(u32, _rsv1[2]);
+  PACKED_FIELD(u32, gen_core_sysconfig);
+  PACKED_FIELD(u32, _rsv2[123]);
+  PACKED_FIELD(u32, std_fuse_die_id_0);
+  PACKED_FIELD(u32, id_code);
+  PACKED_FIELD(u32, std_fuse_die_id_1);
+  PACKED_FIELD(u32, std_fuse_die_id_2);
+  PACKED_FIELD(u32, std_fuse_die_id_3);
+  PACKED_FIELD(u32, std_fuse_prod_id_0);
+  PACKED_FIELD(u32, std_fuse_prod_id_1);
+} PACKED_END;
+#endif
+
+#ifdef OMAP3530
 static struct { char *version; u32 idcode; } idcodes[] = {
   {"OMAP35x ES1.0"   , 0x0B6D602F},
   {"OMAP35x ES2.0"   , 0x1B7AE02F},
@@ -66,9 +93,11 @@ static struct { char *version; u32 idcode; } idcodes[] = {
   {"OMAP35x ES3.1.2" , 0x7B7AE02F},
   {NULL, 0}
 };
+#endif
 
 void meminfo(void)
 {
+#ifdef OMAP3530
   extern void *_physical_start, *_kernel_pages;
   volatile u32 *SDRC_MCFG_0 = (u32 *) 0x6D000080;
   volatile u32 *SDRC_MCFG_1 = (u32 *) 0x6D0000B0;
@@ -87,6 +116,7 @@ void meminfo(void)
   printf_uart3("    %#x - %#x kernel physical addresses\n", kp_start, kp_end);
   if (cs1_ramsize)
     printf_uart3("  %#x - %#x CS1 dynamic RAM\n", cs1_start, cs1_end);
+#endif
 }
 
 void cacheinfo(void)
@@ -108,19 +138,29 @@ void cacheinfo(void)
 
 void identify_device(void)
 {
-  int i;
-  u32 idcode;
-  u32 prodcode;
   u32 mainid;
   u32 feat;
+  char *core;
 
   ASM("MRC p15, #0, %0, c0, c0, #0":"=r"(mainid));
-  printf_uart3("MainID=%#x %s variant=%d arch=%#x %s rev=%d\n",
+  switch(GETBITS(mainid, 4, 12)) {
+  case 0xc08:
+    core = "Cortex-A8";
+    break;
+  case 0xc09:
+    core = "Cortex-A9";
+    break;
+  default:
+    core = "n/a";
+    break;
+  }
+  printf_uart3("MainID=%#x %s variant=%d arch=%#x %s (%#x) rev=%d\n",
                mainid,
                GETBITS(mainid, 24, 8) == 0x41 ? "ARM" : "n/a",
                GETBITS(mainid, 20, 4),
                GETBITS(mainid, 16, 4),
-               GETBITS(mainid, 4, 12) == 0xc08 ? "Cortex-A8" : "n/a",
+               core,
+               GETBITS(mainid, 4, 12),
                GETBITS(mainid, 0, 4));
   ASM("MRC p15, #0, %0, c0, c1, #0":"=r"(feat));
   printf_uart3("Proc_Feat0=%#x%s%s%s%s\n",
@@ -227,6 +267,20 @@ void identify_device(void)
   }
 #endif
 
+#ifdef OMAP4460
+  struct omap4_control_module *o4cm = (struct omap4_control_module *) SYSCTRL_GENERAL_CORE;
+  printf_uart3("rev=%#x hwinfo=%#x syscnf=%#x idcode=%#x dieID=%#x%x%x%x prodID=%#x%x\n",
+               o4cm->gen_core_revision, o4cm->gen_core_hwinfo, o4cm->gen_core_sysconfig,
+               o4cm->id_code,
+               o4cm->std_fuse_die_id_0, o4cm->std_fuse_die_id_1, o4cm->std_fuse_die_id_2, o4cm->std_fuse_die_id_3,
+               o4cm->std_fuse_prod_id_0, o4cm->std_fuse_prod_id_1);
+#endif
+
+#ifdef OMAP3530
+  int i;
+  u32 idcode;
+  u32 prodcode;
+
   idcode = cm_id->control_idcode;
   prodcode = cm_id->control_production_id;
   printf_uart3("IDCODE=%x PRODUCTION_ID=%x DIE_ID=%x%x%x%x\n",
@@ -240,6 +294,8 @@ void identify_device(void)
       printf_uart3("%s %s\n", idcodes[i].version, prodcode == 0xf0 ? "(GP device)" : "");
       break;
     }
+#endif
+
   meminfo();
   cacheinfo();
 }

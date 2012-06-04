@@ -1,12 +1,13 @@
 #!/bin/sh
 
-[ -z "$1" -o -z "$2" ] && exit 1
+[ -z "$1" -o -z "$2" -o -z "$3" ] && exit 1
 
 IMGFILE="$1"
 OUTPUT="$2"
+CORE="$3"
 
-sh util/bb_nandflash.sh u-boot/x-load.bin.ift $OUTPUT x-loader
-sh util/bb_nandflash.sh u-boot/u-boot.bin $OUTPUT u-boot
+sh util/bb_nandflash.sh u-boot/$CORE/x-load.bin.ift $OUTPUT x-loader
+sh util/bb_nandflash.sh u-boot/$CORE/u-boot.bin $OUTPUT u-boot
 sh util/bb_nandflash.sh $IMGFILE $OUTPUT kernel
 
 # for linux:

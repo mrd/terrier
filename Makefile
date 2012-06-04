@@ -81,6 +81,7 @@ S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
 OBJS = $(C_OBJS) $(S_OBJS)
 DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
 POBJS = $(patsubst %,%/program,$(PROGS))
+UBOOT = u-boot/$(CORE)/u-boot.bin
 
 ##################################################
 
@@ -90,8 +91,8 @@ all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
 $(IMGNAME).uimg: $(IMGNAME).bin.gz
 	$(MKIMAGE) -A arm -C gzip -O linux -T kernel -d $< -a $(ADDRESS) -e $(ADDRESS) $@
 
-$(IMGNAME)-nand.bin: $(IMGNAME).uimg u-boot/u-boot.bin util/bb_nandflash_ecc
-	sh util/nand.sh $< $@ 2> /dev/null
+$(IMGNAME)-nand.bin: $(IMGNAME).uimg $(UBOOT) util/bb_nandflash_ecc
+	sh util/nand.sh $< $@ $(CORE) 2> /dev/null
 
 $(IMGNAME).bin.gz: $(IMGNAME).bin
 	gzip -f $<

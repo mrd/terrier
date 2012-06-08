@@ -117,6 +117,22 @@ void meminfo(void)
   if (cs1_ramsize)
     printf_uart3("  %#x - %#x CS1 dynamic RAM\n", cs1_start, cs1_end);
 #endif
+#ifdef OMAP4460
+  volatile u32 *DMM = (u32 *) 0x4E000000;
+  u32 lisa_cnt = DMM[2] & 0x1F, i;
+  printf_uart3("DMM rev=%#x hwinfo=%#x lisainfo=%#x\n", DMM[0], DMM[1], DMM[2]);
+  lisa_cnt = lisa_cnt > 4 ? 4 : lisa_cnt; /* only seems to be 4 in the manual */
+  for(i=0;i<lisa_cnt;i++) {
+    printf_uart3("  LISA_MAP_%d: %#x sysaddr=%#x size=%dM addrspc=%d intlv=%d map=%d sdrcaddr=%#x\n",
+                 i, DMM[16+i],
+                 GETBITS(DMM[16+i], 24, 8),
+                 1 << (GETBITS(DMM[16+i], 20, 3) + 4),
+                 GETBITS(DMM[16+i], 18, 2),
+                 GETBITS(DMM[16+i], 16, 2),
+                 GETBITS(DMM[16+i], 8, 2),
+                 GETBITS(DMM[16+i], 0, 8));
+  }
+#endif
 }
 
 void cacheinfo(void)

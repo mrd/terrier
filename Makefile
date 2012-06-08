@@ -95,7 +95,7 @@ $(IMGNAME)-nand.bin: $(IMGNAME).uimg $(UBOOT) util/bb_nandflash_ecc
 	sh util/nand.sh $< $@ $(CORE) 2> /dev/null
 
 $(IMGNAME).bin.gz: $(IMGNAME).bin
-	gzip -f $<
+	gzip < $< > $@
 
 $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@

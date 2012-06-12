@@ -49,16 +49,27 @@
 #include "debug/log.h"
 #include "debug/cassert.h"
 
+#ifdef OMAP3530
 #define MPU_INTC_BASE_PHYS_ADDR 0x48200000
-
 #define MPU_INTC_BASE_ADDR 0x48200000
-
 #ifdef USE_VMM
 region_t mpu_intc_region = {
   MPU_INTC_BASE_PHYS_ADDR,
   (void *) MPU_INTC_BASE_ADDR,
   &l1pt, 1, 20, 0, 0, R_PM
 };
+#endif
+#endif
+#ifdef OMAP4460
+#define MPU_INTC_BASE_PHYS_ADDR 0x48200000
+#define MPU_INTC_BASE_ADDR 0x48200000
+#ifdef USE_VMM
+region_t mpu_intc_region = {
+  MPU_INTC_BASE_PHYS_ADDR,
+  (void *) MPU_INTC_BASE_ADDR,
+  &l1pt, 1, 20, 0, 0, R_PM
+};
+#endif
 #endif
 
 PACKED_STRUCT(intcps) {
@@ -111,6 +122,45 @@ static volatile struct intcps *intc = (struct intcps *) MPU_INTC_BASE_ADDR;
 
 static irq_handler_t irq_table[96];
 
+#ifdef OMAP4460
+volatile u32* PERIPHBASE = NULL;
+PACKED_STRUCT(distributor) {
+  PACKED_FIELD(u32, DCR);    /* distributor control */
+  PACKED_FIELD(u32, ICTR);   /* interrupt controller type */
+  PACKED_FIELD(u32, IIDR);   /* implementer identification */
+  PACKED_FIELD(u32, _rsvd1[29]);
+  PACKED_FIELD(u32, ISR[32]); /* interrupt security */
+  PACKED_FIELD(u32, ISER[32]);  /* interrupt set-enable */
+  PACKED_FIELD(u32, ICER[32]);  /* interrupt clear-enable */
+  PACKED_FIELD(u32, ISPR[32]);  /* interrupt set-pending */
+  PACKED_FIELD(u32, ICPR[32]);  /* interrupt clear-pending */
+  PACKED_FIELD(u32, ABR[32]);   /* active bit registers */
+  PACKED_FIELD(u32, _rsvd2[32]);
+  PACKED_FIELD(u32, IPR[256]);  /* interrupt priority registers */
+  PACKED_FIELD(u32, IPTR[256]); /* interrupt processor targets registers */
+  PACKED_FIELD(u32, ICFR[64]);  /* interrupt configuration registers */
+  PACKED_FIELD(u32, impl_defined[64]); /* implementation defined registers */
+  PACKED_FIELD(u32, _rsvd3[64]);
+  PACKED_FIELD(u32, SGIR);      /* software generated interrupt register */
+  PACKED_FIELD(u32, _rsvd4[51]);
+  PACKED_FIELD(u32, identification[12]); /* identification registers */
+} PACKED_END;
+CASSERT(offsetof(struct distributor, ISR) == 0x80, interrupts);
+CASSERT(offsetof(struct distributor, ISER) == 0x100, interrupts);
+CASSERT(offsetof(struct distributor, ICER) == 0x180, interrupts);
+CASSERT(offsetof(struct distributor, ISPR) == 0x200, interrupts);
+CASSERT(offsetof(struct distributor, ICPR) == 0x280, interrupts);
+CASSERT(offsetof(struct distributor, ABR) == 0x300, interrupts);
+CASSERT(offsetof(struct distributor, IPTR) == 0x800, interrupts);
+CASSERT(offsetof(struct distributor, SGIR) == 0xf00, interrupts);
+CASSERT(sizeof(struct distributor) == 0x1000, interrupts);
+PACKED_STRUCT(cpuinterface) {
+  PACKED_FIELD(u32, ICR);
+} PACKED_END;
+volatile struct distributor *DISTBASE;
+volatile struct cpuinterface *CPUBASE;
+#endif
+
 /* INTerrupt Controller initialization */
 void intc_init(void)
 {
@@ -122,11 +172,35 @@ void intc_init(void)
   }
 #endif
 
+#ifdef OMAP3530
   DLOG(1, "IP revision=%#x\n", intc->revision & 0xF);
   intc->sysconfig = 0x1;        /* Software reset */
   intc->n[0].mir_set = ~0;      /* Mask all IRQs */
   intc->n[1].mir_set = ~0;
   intc->n[2].mir_set = ~0;
+#endif
+#ifdef OMAP4460
+  DLOG(1, "CFGBASE=%#x\n", arm_config_base_address());
+  PERIPHBASE = (u32 *)arm_config_base_address();
+  DISTBASE = (void *)(PERIPHBASE + 1024);
+  CPUBASE = (void *)(PERIPHBASE + 64);
+  DLOG(1, "%#x %#x\n", DISTBASE->DCR, CPUBASE->ICR);
+
+  DLOG(1, "SCUCFG=%#x\n", PERIPHBASE[1]);
+  DLOG(1, "ICDDCR=%#x ICDICTR=%#x\n", PERIPHBASE[1024], PERIPHBASE[1025]);
+  DLOG(1, "%d processors; %d interrupts; %d external interrupt lines\n",
+       1 + GETBITS(PERIPHBASE[1025], 5, 3),
+       (1 + GETBITS(PERIPHBASE[1025], 0, 5)) << 5,
+       GETBITS(PERIPHBASE[1025], 0, 5) << 5);
+  DLOG(1, "Distributed implementor identification: %#x\n", PERIPHBASE[1024+2]);
+  DLOG(1, "CPU interface identification: %#x\n", PERIPHBASE[64+63]);
+  DLOG(1, "DISTBASE->identification=%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x\n",
+       DISTBASE->identification[0], DISTBASE->identification[1], DISTBASE->identification[2],
+       DISTBASE->identification[3], DISTBASE->identification[4], DISTBASE->identification[5],
+       DISTBASE->identification[6], DISTBASE->identification[7], DISTBASE->identification[8],
+       DISTBASE->identification[9], DISTBASE->identification[10], DISTBASE->identification[11]);
+#endif
+
   for(i=0;i<96;i++) irq_table[i] = NULL;
 }
 

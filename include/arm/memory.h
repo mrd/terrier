@@ -59,6 +59,13 @@ static inline void arm_ctrl(u32 set, u32 mask)
   ASM("MCR p15, #0, %0, c1, c0, #0"::"r"(cr));
 }
 
+static inline u32 arm_config_base_address(void)
+{
+  u32 r;
+  ASM("MRC p15,4,%0,c15,c0,0":"=r"(r));
+  return r;
+}
+
 /* Translation Table Base Control Register */
 
 /* A translation table base register is selected in the following fashion:

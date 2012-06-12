@@ -242,6 +242,8 @@ void closure_vprintf (void putc_clo (void *, char), void *data, const char *fmt,
 
 static void _putc_uart3(void *x, char c)
 {
+  if(c == '\n')
+    putc_uart3('\r');
   putc_uart3(c);
 }
 

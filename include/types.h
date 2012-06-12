@@ -92,7 +92,12 @@ typedef s32 status;
 #define BITMAP_CLR(table,index) ((table)[(index)>>5] &= ~(1 << ((index) & 31)))
 #define BITMAP_TST(table,index) ((table)[(index)>>5] & (1 << ((index) & 31)))
 
+#ifdef __GNUC__
+#define offsetof __builtin_offsetof
+#else
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+
 #define container_of(ptr, type, member) ({                      \
       const typeof( ((type *)0)->member ) *__mptr = (ptr);      \
       (type *)( (u8 *)__mptr - offsetof(type,member) );})

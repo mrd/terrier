@@ -53,7 +53,12 @@
 #endif
 
 #ifdef USE_VMM
+#ifdef OMAP3530
 static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
+#ifdef OMAP4460
+static region_t sdrc_region = { 0x4E000000, (void *) 0x4E000000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 #endif
 
 typedef struct {
@@ -173,6 +178,10 @@ void physical_init(void)
   }
 #endif
   extern void *_physical_start, *_kernel_pages;
+  u32 kern_pages  = (u32) &_kernel_pages;
+  u32 kp_start    = (u32) &_physical_start;
+
+#ifdef OMAP3530
   volatile u32 *SDRC_MCFG_0 = (u32 *) 0x6D000080;
   volatile u32 *SDRC_MCFG_1 = (u32 *) 0x6D0000B0;
   volatile u32 *SDRC_CS_CFG = (u32 *) 0x6D000040;
@@ -180,11 +189,21 @@ void physical_init(void)
   u32 cs1_ramsize = ((*SDRC_MCFG_1 >> 8) & 0x3FF) << 1;
   u32 cs1_start   = (((*SDRC_CS_CFG >> 8) & 0x3) | ((*SDRC_CS_CFG & 0xF) << 2)) * 0x2000000 + DEFAULT_CS0_START;
   u32 cs0_start   = DEFAULT_CS0_START;
-  u32 kern_pages  = (u32) &_kernel_pages;
-  u32 kp_start    = (u32) &_physical_start;
+#endif
+#ifdef OMAP4460
+  volatile u32 *DMM = (u32 *) 0x4E000000;
+  u32 cs0_ramsize = 1 << (GETBITS(DMM[16], 20, 3) + 4);
+  u32 cs0_start = GETBITS(DMM[16], 24, 8) << 24;
+  u32 cs1_start = 0;
+  u32 cs1_ramsize = 0;
+#endif
   u32 bitmap0_len = cs0_ramsize << (20 - PAGE_SIZE_LOG2 - 3);
   u32 bitmap1_len = cs1_ramsize << (20 - PAGE_SIZE_LOG2 - 3);
   u32 i;
+
+  DLOG(1,"cs0 ramsize=%dM start=%#x cs1 ramsize=%#x start=%#x\n",
+       cs0_ramsize, cs0_start, cs1_ramsize, cs1_start);
+  DLOG(1,"bitmap0_len=%#x bitmap1_len=%#x\n", bitmap0_len, bitmap1_len);
 
   bitmap[0].map = (u32 *) BITMAP_VIRTADDR;
   bitmap[0].map_bytes = bitmap0_len;

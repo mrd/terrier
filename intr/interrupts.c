@@ -72,6 +72,7 @@ region_t mpu_intc_region = {
 #endif
 #endif
 
+#ifdef OMAP3530
 PACKED_STRUCT(intcps) {
   PACKED_FIELD(u32, revision);
   u8 _rsvd1[12];
@@ -114,13 +115,12 @@ PACKED_STRUCT(intcps) {
     PACKED_FIELD(u32, _rsvd2:24);
   } PACKED_END ilr[96];
 } PACKED_END;
-/* CASSERT(offsetof(struct intcps, threshold) == 0x68, interrupts); */
-/* CASSERT(offsetof(struct intcps, n[2].pending_fiq) == 0xdc, interrupts); */
-/* CASSERT(offsetof(struct intcps, ilr) == 0x100, interrupts); */
+CASSERT(offsetof(struct intcps, threshold) == 0x68, interrupts);
+CASSERT(offsetof(struct intcps, n[2].pending_fiq) == 0xdc, interrupts);
+CASSERT(offsetof(struct intcps, ilr) == 0x100, interrupts);
 
 static volatile struct intcps *intc = (struct intcps *) MPU_INTC_BASE_ADDR;
-
-static irq_handler_t irq_table[96];
+#endif
 
 #ifdef OMAP4460
 volatile u32* PERIPHBASE = NULL;
@@ -154,12 +154,30 @@ CASSERT(offsetof(struct distributor, ABR) == 0x300, interrupts);
 CASSERT(offsetof(struct distributor, IPTR) == 0x800, interrupts);
 CASSERT(offsetof(struct distributor, SGIR) == 0xf00, interrupts);
 CASSERT(sizeof(struct distributor) == 0x1000, interrupts);
+
 PACKED_STRUCT(cpuinterface) {
-  PACKED_FIELD(u32, ICR);
+  PACKED_FIELD(u32, ICR);       /* CPU interface control register */
+  PACKED_FIELD(u32, PMR);       /* interrupt priority mask register */
+  PACKED_FIELD(u32, BPR);       /* binary point register */
+  PACKED_FIELD(u32, IAR);       /* interrupt acknowledge register */
+  PACKED_FIELD(u32, EOIR);      /* end of interrupt register */
+  PACKED_FIELD(u32, RPR);       /* running priority register */
+  PACKED_FIELD(u32, HPIR);      /* highest pending interrupt register */
+  PACKED_FIELD(u32, ABPR);      /* aliased binary point register */
+  PACKED_FIELD(u32, _rsvd1[8]);
+  PACKED_FIELD(u32, impl_defined[36]); /* implementation defined registers */
+  PACKED_FIELD(u32, _rsvd2[11]);
+  PACKED_FIELD(u32, IIDR);             /* CPU interface identification register */
 } PACKED_END;
+CASSERT(offsetof(struct cpuinterface, EOIR) == 0x10, interrupts);
+CASSERT(offsetof(struct cpuinterface, ABPR) == 0x1c, interrupts);
+CASSERT(sizeof(struct cpuinterface) == 0x100, interrupts);
+
 volatile struct distributor *DISTBASE;
 volatile struct cpuinterface *CPUBASE;
 #endif
+
+static irq_handler_t irq_table[96];
 
 /* INTerrupt Controller initialization */
 void intc_init(void)
@@ -184,17 +202,16 @@ void intc_init(void)
   PERIPHBASE = (u32 *)arm_config_base_address();
   DISTBASE = (void *)(PERIPHBASE + 1024);
   CPUBASE = (void *)(PERIPHBASE + 64);
-  DLOG(1, "%#x %#x\n", DISTBASE->DCR, CPUBASE->ICR);
 
-  DLOG(1, "SCUCFG=%#x\n", PERIPHBASE[1]);
-  DLOG(1, "ICDDCR=%#x ICDICTR=%#x\n", PERIPHBASE[1024], PERIPHBASE[1025]);
+  DLOG(1, "Snoop Control Unit CFG=%#x\n", PERIPHBASE[1]);
+  DLOG(1, "DIST DCR=%#x ICTR=%#x\n", DISTBASE->DCR, DISTBASE->ICTR);
   DLOG(1, "%d processors; %d interrupts; %d external interrupt lines\n",
-       1 + GETBITS(PERIPHBASE[1025], 5, 3),
-       (1 + GETBITS(PERIPHBASE[1025], 0, 5)) << 5,
-       GETBITS(PERIPHBASE[1025], 0, 5) << 5);
-  DLOG(1, "Distributed implementor identification: %#x\n", PERIPHBASE[1024+2]);
-  DLOG(1, "CPU interface identification: %#x\n", PERIPHBASE[64+63]);
-  DLOG(1, "DISTBASE->identification=%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x\n",
+       1 + GETBITS(DISTBASE->ICTR, 5, 3),
+       (1 + GETBITS(DISTBASE->ICTR, 0, 5)) << 5,
+       GETBITS(DISTBASE->ICTR, 0, 5) << 5);
+  DLOG(1, "DIST implementor identification=%#x\n", DISTBASE->IIDR);
+  DLOG(1, "CPU identification=%#x\n", CPUBASE->IIDR);
+  DLOG(1, "DIST identification=%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x\n",
        DISTBASE->identification[0], DISTBASE->identification[1], DISTBASE->identification[2],
        DISTBASE->identification[3], DISTBASE->identification[4], DISTBASE->identification[5],
        DISTBASE->identification[6], DISTBASE->identification[7], DISTBASE->identification[8],
@@ -221,6 +238,7 @@ status intc_set_irq_handler(u32 irq_num, void (*handler)(u32))
 
 status intc_mask_irq(u32 irq_num)
 {
+#ifdef OMAP3530
   if (irq_num < 32)
     intc->n[0].mir_set |= BIT(irq_num - 0);
   else if (irq_num < 64)
@@ -228,10 +246,16 @@ status intc_mask_irq(u32 irq_num)
   else
     intc->n[2].mir_set |= BIT(irq_num - 64);
   return OK;
+#endif
+#ifdef OMAP4460
+  BITMAP_SET(DISTBASE->ICER, irq_num);
+  return OK;
+#endif
 }
 
 status intc_unmask_irq(u32 irq_num)
 {
+#ifdef OMAP3530
   if (irq_num < 32)
     intc->n[0].mir_clear |= BIT(irq_num - 0);
   else if (irq_num < 64)
@@ -239,6 +263,11 @@ status intc_unmask_irq(u32 irq_num)
   else
     intc->n[2].mir_clear |= BIT(irq_num - 64);
   return OK;
+#endif
+#ifdef OMAP4460
+  BITMAP_SET(DISTBASE->ISER, irq_num);
+  return OK;
+#endif
 }
 
 #ifdef __GNUC__
@@ -360,14 +389,25 @@ void HANDLES("ABORT") _handle_data_abort(void)
 
 void _handle_irq(void)
 {
+#ifdef OMAP3530
   u32 activeirq = intc->sir_irq.activeirq;
+#endif
+#ifdef OMAP4460
+  u32 IAR = CPUBASE->IAR;
+  u32 activeirq = IAR;          /* FIXME */
+#endif
   _prev_context = _next_context = &current->ctxt;
   intc_mask_irq(activeirq);
   if (irq_table[activeirq])
     irq_table[activeirq](activeirq);
   else
     DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
+#ifdef OMAP3530
   intc->control = INTCPS_CONTROL_NEWIRQAGR;
+#endif
+#ifdef OMAP4460
+  CPUBASE->EOIR = IAR;
+#endif
   data_sync_barrier();
 }
 

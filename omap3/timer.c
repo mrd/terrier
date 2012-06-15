@@ -49,13 +49,25 @@
 #include "debug/cassert.h"
 
 #ifdef USE_VMM
-extern region_t l4wakeup_region;
+#ifdef OMAP3530
+extern region_t l4wakeup_region; /* 0x48300000 */
 region_t l4perip_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
 region_t l4core_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
 #endif
+#ifdef OMAP4460
+region_t l4perip_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
+region_t l4abe_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
+region_t l4wakeup_region = { 0x4A300000, (void *) 0x4A300000, &l1pt, 1, 20, 0, 0, R_PM };
+#endif
+#endif
 
 /* 32-kHz sync timer counter */
+#ifdef OMAP3530
 static volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x48320010;
+#endif
+#ifdef OMAP4460
+static volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x4A304010;
+#endif
 
 PACKED_STRUCT(gptimer) {
   PACKED_FIELD(u32, TIDR);
@@ -95,6 +107,7 @@ PACKED_STRUCT(gptimer) {
 /* GPTIMER1 - GPTIMER11 */
 static volatile struct gptimer *gptimer[] = {
   NULL,
+#ifdef OMAP3530
   (struct gptimer *) 0x48318000,
   (struct gptimer *) 0x49032000,
   (struct gptimer *) 0x49034000,
@@ -106,14 +119,37 @@ static volatile struct gptimer *gptimer[] = {
   (struct gptimer *) 0x49040000
   //,(struct gptimer *) 0x48086000
   //,(struct gptimer *) 0x48088000
+#endif
+#ifdef OMAP4460
+  (struct gptimer *) 0x4A318000,
+  (struct gptimer *) 0x48032000,
+  /* // GPTIMERS 1,2,11 are different from the others. Sigh.
+  (struct gptimer *) 0x48034000,
+  (struct gptimer *) 0x48036000,
+  (struct gptimer *) 0x49038000,
+  (struct gptimer *) 0x4903A000,
+  (struct gptimer *) 0x4903C000,
+  (struct gptimer *) 0x4903E000,
+  (struct gptimer *) 0x4803E000,
+  (struct gptimer *) 0x48086000,
+  (struct gptimer *) 0x48088000
+  */
+#endif
 };
 #define NUM_TIMERS ((sizeof(gptimer) / sizeof(struct gptimer *)) - 1)
 
+#ifdef OMAP3530
 /* GPTIMER1 source is set in CM_CLKSEL_WKUP. */
 /* Bit 0 -> 0=32K_FCLK. 1=SYS_CLK. */
 /* Bit 1:2 -> 1=div-by-1. 2=div-by-2 */
 /* others reserved */
 static volatile u32 *CM_CLKSEL_WKUP = (u32 *) 0x48004c40;
+#endif
+#ifdef OMAP4460
+/* Table 3-785. bit 24: 0 => SYS_CLK; 1 => 32kHz */
+static volatile u32 *CM_WKUP_GPTIMER1_CLKCTRL = (u32 *) 0x4A307840;
+#endif
+
 
 u32 timer_32khz_value(void)
 {
@@ -230,15 +266,28 @@ void timer_init(void)
     early_panic("Unable to map L4 peripheral registers.");
     return;
   }
+#ifdef OMAP3530
   if(vmm_map_region(&l4core_region) != OK) {
     early_panic("Unable to map L4 core registers.");
     return;
   }
 #endif
+#ifdef OMAP4460
+  if(vmm_map_region(&l4abe_region) != OK) {
+    early_panic("Unable to map L4 ABE registers.");
+    return;
+  }
+#endif
+#endif
 
+#ifdef OMAP3530
   /* For some reason, this is defaulting to SYS_CLK on my board, even
    * though the manual says otherwise. Set it to 32K_FCLK, div-by-1. */
   *CM_CLKSEL_WKUP = (*CM_CLKSEL_WKUP & (~0x7)) | 0x2;
+#endif
+#ifdef OMAP4460
+  DLOG(1, "CM_WKUP_GPTIMER1_CLKCTRL=%#x (%s)\n", *CM_WKUP_GPTIMER1_CLKCTRL, GETBITS(*CM_WKUP_GPTIMER1_CLKCTRL, 24, 1) ? "32kHz" : "SYS_CLK");
+#endif
 
   for(i=0;i<NUM_TIMERS;i++) {
     intc_set_irq_handler(0x25 + i, timer_irq_handler);

@@ -123,6 +123,7 @@ static volatile struct intcps *intc = (struct intcps *) MPU_INTC_BASE_ADDR;
 #endif
 
 #ifdef OMAP4460
+#define SPURIOUS_ID 1023        /* spurious interrupt ID number */
 volatile u32* PERIPHBASE = NULL;
 PACKED_STRUCT(distributor) {
   PACKED_FIELD(u32, DCR);    /* distributor control */
@@ -176,7 +177,7 @@ CASSERT(sizeof(struct cpuinterface) == 0x100, interrupts);
 volatile struct distributor *DISTBASE;
 volatile struct cpuinterface *CPUBASE;
 static u32 GICVERSION, num_cpus, num_ints, num_ext_ints;
-static u32 num_supported, num_permanent;
+static u32 num_supported, num_permanent, num_prio_levels, min_binary_point;
 static u32 supported[32], permanent[32];
 #endif
 
@@ -239,7 +240,16 @@ void intc_init(void)
     for(j=0; j<32; j++) num_permanent += GETBITS(permanent[i], j, 1);
   }
   DLOG(1, "Discovered %d supported and %d permanently enabled interrupts.\n", num_supported, num_permanent);
+  DISTBASE->IPR[8] = 0xFF;
+  num_prio_levels = 256 >> (31 - count_leading_zeroes(256 - DISTBASE->IPR[8]));
+  DLOG(1, "Discovered %d interrupt priority levels.\n", num_prio_levels);
   DISTBASE->DCR = 1;            /* renable distributor */
+
+  CPUBASE->BPR = 0;
+  min_binary_point = CPUBASE->BPR;
+  DLOG(1, "CPU minimum binary point=%d\n", min_binary_point);
+  CPUBASE->PMR = 0xFF;          /* set mask to lowest priority */
+  DLOG(1, "CPU PMR=%#x RPR=%#x\n", CPUBASE->PMR, CPUBASE->RPR);
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;
@@ -417,7 +427,11 @@ void _handle_irq(void)
   u32 activeirq = intc->sir_irq.activeirq;
 #endif
 #ifdef OMAP4460
+  /* read IAR to acknowledge interrupt */
   u32 IAR = CPUBASE->IAR;
+  /* IAR = ID number of highest priority pending interrupt or number
+   * that indicates spurious interrupt. */
+  if(IAR == SPURIOUS_ID) return; /* spurious interrupt */
   u32 activeirq = IAR;          /* FIXME */
 #endif
   _prev_context = _next_context = &current->ctxt;
@@ -431,6 +445,8 @@ void _handle_irq(void)
 #endif
 #ifdef OMAP4460
   CPUBASE->EOIR = IAR;
+  /* EOIR write causes priority drop and interrupt deactivation */
+  /* EOIR write must be from most recently acknowledged interrupt */
 #endif
   data_sync_barrier();
 }

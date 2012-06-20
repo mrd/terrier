@@ -175,7 +175,9 @@ CASSERT(sizeof(struct cpuinterface) == 0x100, interrupts);
 
 volatile struct distributor *DISTBASE;
 volatile struct cpuinterface *CPUBASE;
-u32 GICVERSION;
+static u32 GICVERSION, num_cpus, num_ints, num_ext_ints;
+static u32 num_supported, num_permanent;
+static u32 supported[32], permanent[32];
 #endif
 
 static irq_handler_t irq_table[96];
@@ -206,10 +208,11 @@ void intc_init(void)
 
   DLOG(1, "Snoop Control Unit CFG=%#x\n", PERIPHBASE[1]);
   DLOG(1, "DIST DCR=%#x ICTR=%#x\n", DISTBASE->DCR, DISTBASE->ICTR);
+  num_cpus = 1 + GETBITS(DISTBASE->ICTR, 5, 3);
+  num_ints = (1 + GETBITS(DISTBASE->ICTR, 0, 5)) << 5;
+  num_ext_ints = GETBITS(DISTBASE->ICTR, 0, 5) << 5;
   DLOG(1, "%d processors; %d interrupts; %d external interrupt lines\n",
-       1 + GETBITS(DISTBASE->ICTR, 5, 3),
-       (1 + GETBITS(DISTBASE->ICTR, 0, 5)) << 5,
-       GETBITS(DISTBASE->ICTR, 0, 5) << 5);
+       num_cpus, num_ints, num_ext_ints);
   DLOG(1, "DIST implementor identification=%#x\n", DISTBASE->IIDR);
   DLOG(1, "CPU identification=%#x\n", CPUBASE->IIDR);
   DLOG(1, "DIST identification=%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x:%x\n",
@@ -220,6 +223,23 @@ void intc_init(void)
   GICVERSION = GETBITS(DISTBASE->identification[6], 4, 4);
   DLOG(1, "Detected Generic Interrupt Controller Architecture v%d\n",
        GICVERSION);
+
+  /* probe supported and permanently enabled interrupts */
+  DISTBASE->DCR = 0;            /* disable distributor */
+  u32 j;
+  num_supported = num_permanent = 0;
+  for(i=0; i<32; i++) {
+    DISTBASE->ISER[i] = 0xFFFFFFFF;
+    supported[i] = DISTBASE->ISER[i];
+    for(j=0; j<32; j++) num_supported += GETBITS(supported[i], j, 1);
+  }
+  for(i=0; i<32; i++) {
+    DISTBASE->ICER[i] = 0xFFFFFFFF;
+    permanent[i] = DISTBASE->ICER[i];
+    for(j=0; j<32; j++) num_permanent += GETBITS(permanent[i], j, 1);
+  }
+  DLOG(1, "Discovered %d supported and %d permanently enabled interrupts.\n", num_supported, num_permanent);
+  DISTBASE->DCR = 1;            /* renable distributor */
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;

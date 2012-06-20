@@ -175,6 +175,7 @@ CASSERT(sizeof(struct cpuinterface) == 0x100, interrupts);
 
 volatile struct distributor *DISTBASE;
 volatile struct cpuinterface *CPUBASE;
+u32 GICVERSION;
 #endif
 
 static irq_handler_t irq_table[96];
@@ -216,6 +217,9 @@ void intc_init(void)
        DISTBASE->identification[3], DISTBASE->identification[4], DISTBASE->identification[5],
        DISTBASE->identification[6], DISTBASE->identification[7], DISTBASE->identification[8],
        DISTBASE->identification[9], DISTBASE->identification[10], DISTBASE->identification[11]);
+  GICVERSION = GETBITS(DISTBASE->identification[6], 4, 4);
+  DLOG(1, "Detected Generic Interrupt Controller Architecture v%d\n",
+       GICVERSION);
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;

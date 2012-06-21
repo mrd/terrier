@@ -49,6 +49,11 @@
 #include "debug/log.h"
 #include "debug/cassert.h"
 
+#ifdef OMAP4460
+#define GIC                     /* Generic Interrupt Controller */
+#define GICv1                   /* v1 */
+#endif
+
 #ifdef OMAP3530
 #define MPU_INTC_BASE_PHYS_ADDR 0x48200000
 #define MPU_INTC_BASE_ADDR 0x48200000
@@ -122,7 +127,7 @@ CASSERT(offsetof(struct intcps, ilr) == 0x100, interrupts);
 static volatile struct intcps *intc = (struct intcps *) MPU_INTC_BASE_ADDR;
 #endif
 
-#ifdef OMAP4460
+#ifdef GIC
 #define SPURIOUS_ID 1023        /* spurious interrupt ID number */
 volatile u32* PERIPHBASE = NULL;
 PACKED_STRUCT(distributor) {
@@ -201,7 +206,7 @@ void intc_init(void)
   intc->n[1].mir_set = ~0;
   intc->n[2].mir_set = ~0;
 #endif
-#ifdef OMAP4460
+#ifdef GIC
   DLOG(1, "CFGBASE=%#x\n", arm_config_base_address());
   PERIPHBASE = (u32 *)arm_config_base_address();
   DISTBASE = (void *)(PERIPHBASE + 1024);
@@ -250,6 +255,9 @@ void intc_init(void)
   DLOG(1, "CPU minimum binary point=%d\n", min_binary_point);
   CPUBASE->PMR = 0xFF;          /* set mask to lowest priority */
   DLOG(1, "CPU PMR=%#x RPR=%#x\n", CPUBASE->PMR, CPUBASE->RPR);
+
+  DLOG(1, "Testing SGI\n");
+  DISTBASE->SGIR = SETBITS(2, 24, 2) | SETBITS(3, 0, 4); /* send ID3 to self */
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;
@@ -281,7 +289,7 @@ status intc_mask_irq(u32 irq_num)
     intc->n[2].mir_set |= BIT(irq_num - 64);
   return OK;
 #endif
-#ifdef OMAP4460
+#ifdef GIC
   BITMAP_SET(DISTBASE->ICER, irq_num);
   return OK;
 #endif
@@ -298,8 +306,101 @@ status intc_unmask_irq(u32 irq_num)
     intc->n[2].mir_clear |= BIT(irq_num - 64);
   return OK;
 #endif
-#ifdef OMAP4460
+#ifdef GIC
   BITMAP_SET(DISTBASE->ISER, irq_num);
+  return OK;
+#endif
+}
+
+status intc_set_priority(u32 irq_num, u32 prio)
+{
+#ifdef OMAP3530
+  return EINVALID;
+#endif
+#ifdef GIC
+  /* each 32-bit word is split into 4 8-bit priority fields */
+  /* |........ ........ ........ ........|........ ........ ........ ........| */
+  /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
+  /* up to IRQ1020. Must use 32-bit access. */
+  u32 array_i = irq_num >> 2;
+  u32 bit_i = (irq_num & 0x3) << 3;
+  /* ASSERT(array_i * 32 + bit_i == irq_num * 8); */
+  u32 word = DISTBASE->IPR[array_i];
+  word &= ~(0xFF << bit_i);
+  word |= (prio & 0xFF) << bit_i;
+  DISTBASE->IPR[array_i] = word;
+  return OK;
+#endif
+}
+
+status intc_set_targets(u32 irq_num, u32 targets)
+{
+#ifdef OMAP3530
+  return EINVALID;
+#endif
+#ifdef GIC
+  /* each 32-bit word is split into 4 8-bit targets fields */
+  /* |........ ........ ........ ........|........ ........ ........ ........| */
+  /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
+  /* up to IRQ1020. Must use 32-bit access. */
+  u32 array_i = irq_num >> 2;
+  u32 bit_i = (irq_num & 0x3) << 3;
+  /* ASSERT(array_i * 32 + bit_i == irq_num * 8); */
+  u32 word = DISTBASE->IPTR[array_i];
+  word &= ~(0xFF << bit_i);
+  word |= (targets & 0xFF) << bit_i;
+  DISTBASE->IPTR[array_i] = word;
+  return OK;
+#endif
+}
+
+status intc_set_int_type(u32 irq_num, u32 is_edge)
+{
+#ifdef OMAP3530
+  return EINVALID;
+#endif
+#ifdef GIC
+  if(irq_num < 32) return EINVALID;
+  /* each 32-bit word is split into 16 2-bit config fields */
+  /* the most significant config bit is for edge/level type */
+  u32 array_i = irq_num >> 4;
+  u32 bit_i = ((irq_num & 0xF) << 1) + 1;
+  /* ASSERT(array_i * 32 + bit_i == irq_num * 2 + 1); */
+  u32 word = DISTBASE->ICFR[array_i];
+  word &= ~(1 << bit_i);
+  word |= (is_edge & 0x1) << bit_i;
+  DISTBASE->ICFR[array_i] = word;
+  return OK;
+#endif
+}
+
+u32 intc_get_running_priority(void)
+{
+#ifdef OMAP3530
+  return 0xff;
+#endif
+#ifdef GIC
+  return CPUBASE->RPR;
+#endif
+}
+
+u32 intc_get_priority_mask(void)
+{
+#ifdef OMAP3530
+  return 0xff;
+#endif
+#ifdef GIC
+  return CPUBASE->PMR;
+#endif
+}
+
+status intc_set_priority_mask(u32 prio)
+{
+#ifdef OMAP3530
+  return EINVALID;
+#endif
+#ifdef GIC
+  CPUBASE->PMR = prio & 0xff;
   return OK;
 #endif
 }
@@ -426,7 +527,7 @@ void _handle_irq(void)
 #ifdef OMAP3530
   u32 activeirq = intc->sir_irq.activeirq;
 #endif
-#ifdef OMAP4460
+#ifdef GIC
   /* read IAR to acknowledge interrupt */
   u32 IAR = CPUBASE->IAR;
   /* IAR = ID number of highest priority pending interrupt or number
@@ -443,7 +544,7 @@ void _handle_irq(void)
 #ifdef OMAP3530
   intc->control = INTCPS_CONTROL_NEWIRQAGR;
 #endif
-#ifdef OMAP4460
+#ifdef GIC
   CPUBASE->EOIR = IAR;
   /* EOIR write causes priority drop and interrupt deactivation */
   /* EOIR write must be from most recently acknowledged interrupt */

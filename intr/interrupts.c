@@ -264,8 +264,10 @@ void intc_init(void)
       break;                    /* first modifiable index */
   }
   DLOG(1, "Setting target for interrupt IDs >= %d to first CPU only.\n", i);
-  for(; i<NUM_INTS; i++)
-    intc_set_targets(i, 0x1);   /* set to single cpu */
+  for(; i<NUM_INTS; i++) {
+    intc_set_targets_intid(i, 0x1);   /* set to single cpu */
+    intc_set_int_type_intid(i, 0);    /* set to level mode */
+  }
 
   CPUBASE->BPR = 0;
   min_binary_point = CPUBASE->BPR;
@@ -602,6 +604,7 @@ void HANDLES("ABORT") _handle_data_abort(void)
 
 void _handle_irq(void)
 {
+  _prev_context = _next_context = &current->ctxt;
 #ifdef OMAP3530
   u32 activeirq = intc->sir_irq.activeirq;
 #endif
@@ -611,21 +614,29 @@ void _handle_irq(void)
   /* IAR = ID number of highest priority pending interrupt or number
    * that indicates spurious interrupt. */
   if(IAR == SPURIOUS_ID) return; /* spurious interrupt */
-  u32 activeirq = IAR;          /* FIXME */
+  u32 activeirq = IAR - 32;      /* shared peripheral IRQs start at 32 */
+  if(IAR >= 32) {
 #endif
-  _prev_context = _next_context = &current->ctxt;
-  intc_mask_irq(activeirq);
-  if (irq_table[activeirq])
-    irq_table[activeirq](activeirq);
-  else
-    DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
+    intc_mask_irq(activeirq);
+    if (irq_table[activeirq])
+      irq_table[activeirq](activeirq);
+    //    else
+      DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
 #ifdef OMAP3530
-  intc->control = INTCPS_CONTROL_NEWIRQAGR;
+    intc->control = INTCPS_CONTROL_NEWIRQAGR;
 #endif
 #ifdef GIC
+  }
   CPUBASE->EOIR = IAR;
   /* EOIR write causes priority drop and interrupt deactivation */
   /* EOIR write must be from most recently acknowledged interrupt */
+#if 0
+  DLOG(1, "ABR[%#x]=%d\n", IAR, !!BITMAP_TST(DISTBASE->ABR, IAR));
+  DLOG(1, "ISPR[%#x]=%d\n", IAR, !!BITMAP_TST(DISTBASE->ISPR, IAR));
+  DLOG(1, "ISER[%#x]=%d\n", IAR, !!BITMAP_TST(DISTBASE->ISER, IAR));
+  DLOG(1, "CPU PMR=%#x RPR=%#x\n", CPUBASE->PMR, CPUBASE->RPR);
+#endif
+
 #endif
   data_sync_barrier();
 }

@@ -2,7 +2,7 @@ DESCRIPTION
 -----------
 
 Beginnings of a barebones application or operating system using the
-Beagle Board (OMAP3).
+Beagle Board (OMAP3) or Panda Board (OMAP4).
 
 COMPILATION
 -----------
@@ -56,6 +56,22 @@ For example:
     Hello world!
     Match Found. Operation completed!
 
+
+Alternative direct USB boot for Panda Board:
+
+- Build kernel using 'make'
+- Hook up Panda Board to USB port using its OTG port
+- Open Minicom in another window
+- Run: ./usbboot direct-aboot.bin terrier.bin
+
+Alternative alternative USB+serial boot:
+
+- Open Minicom in another Window
+- Run: ./usbboot u-boot/OMAP4460/u-boot.bin
+- Bring up U-boot prompt in Minicom
+- Quit Minicom without Reset (C-a q)
+- Run: sh boot.sh
+
 NOTES
 -----
 
@@ -67,3 +83,7 @@ By default, the Makefile uses the CodeSourcery arm-none-linux-gnueabi
 The GNU/Linux TAR contains the necessary files. Just unpack it and put
 the 'bin' directory in your path. There are also projects out there,
 such as EmDebian, with these tools packaged for your distribution.
+
+usbboot and direct-aboot.bin are compiled from omap4boot:
+
+    http://github.com/swetland/omap4boot.git

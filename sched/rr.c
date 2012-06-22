@@ -106,9 +106,9 @@ static void sched_timer_handler(u32 activeirq)
   extern u32 irq_stack_top;
   u32 *sp = &irq_stack_top;
   sp -= 2;
-  DLOG(1, "sched_timer_handler %#x %#x\n", sp[0], sp[1]);
-  timer_gp_set(1, -QUANTUM);
+  DLOG(1, "sched_timer_handler activeirq=%#x stack=%#x %#x\n", activeirq, sp[0], sp[1]);
   timer_gp_ack_overflow_interrupt(1);
+  timer_gp_set(1, -QUANTUM);
   intc_unmask_irq(activeirq);
 
   waitqueue_append(&runq_head, current);
@@ -117,6 +117,7 @@ static void sched_timer_handler(u32 activeirq)
 
 void sched_init(void)
 {
+  DLOG(1, "init: QUANTUM=%#x\n", QUANTUM);
   timer_gp_set_handler(1, sched_timer_handler);
   timer_gp_set(1, -QUANTUM);
   timer_gp_enable_overflow_interrupt(1);

@@ -188,6 +188,12 @@ static u32 supported[32], permanent[32];
 #endif
 
 static irq_handler_t irq_table[96];
+status intc_set_int_type_intid(u32 id, u32 is_edge);
+status intc_set_targets_intid(u32 id, u32 targets);
+u32 intc_get_targets_intid(u32 id);
+status intc_set_priority_intid(u32 id, u32 prio);
+status intc_unmask_intid(u32 id);
+status intc_mask_intid(u32 id);
 
 /* INTerrupt Controller initialization */
 void intc_init(void)
@@ -252,9 +258,9 @@ void intc_init(void)
   DISTBASE->DCR = 1;            /* renable distributor */
 
   for(i=0; i<NUM_INTS; i++) {
-    u32 word = intc_get_targets(i);
-    intc_set_targets(i, ~word);
-    if(intc_get_targets(i) != word)
+    u32 word = intc_get_targets_intid(i);
+    intc_set_targets_intid(i, ~word);
+    if(intc_get_targets_intid(i) != word)
       break;                    /* first modifiable index */
   }
   DLOG(1, "Setting target for interrupt IDs >= %d to first CPU only.\n", i);
@@ -291,6 +297,14 @@ status intc_set_irq_handler(u32 irq_num, void (*handler)(u32))
   return OK;
 }
 
+#ifdef GIC
+status intc_mask_intid(u32 id)
+{
+  BITMAP_SET(DISTBASE->ICER, id);
+  return OK;
+}
+#endif
+
 status intc_mask_irq(u32 irq_num)
 {
 #ifdef OMAP3530
@@ -303,10 +317,17 @@ status intc_mask_irq(u32 irq_num)
   return OK;
 #endif
 #ifdef GIC
-  BITMAP_SET(DISTBASE->ICER, irq_num);
-  return OK;
+  return intc_mask_intid(irq_num + 32);
 #endif
 }
+
+#ifdef GIC
+status intc_unmask_intid(u32 id)
+{
+  BITMAP_SET(DISTBASE->ISER, id);
+  return OK;
+}
+#endif
 
 status intc_unmask_irq(u32 irq_num)
 {
@@ -320,10 +341,27 @@ status intc_unmask_irq(u32 irq_num)
   return OK;
 #endif
 #ifdef GIC
-  BITMAP_SET(DISTBASE->ISER, irq_num);
-  return OK;
+  return intc_unmask_intid(irq_num + 32);
 #endif
 }
+
+#ifdef GIC
+status intc_set_priority_intid(u32 id, u32 prio)
+{
+  /* each 32-bit word is split into 4 8-bit priority fields */
+  /* |........ ........ ........ ........|........ ........ ........ ........| */
+  /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
+  /* up to IRQ1020. Must use 32-bit access. */
+  u32 array_i = id >> 2;
+  u32 bit_i = (id & 0x3) << 3;
+  /* ASSERT(array_i * 32 + bit_i == id * 8); */
+  u32 word = DISTBASE->IPR[array_i];
+  word &= ~(0xFF << bit_i);
+  word |= (prio & 0xFF) << bit_i;
+  DISTBASE->IPR[array_i] = word;
+  return OK;
+}
+#endif
 
 status intc_set_priority(u32 irq_num, u32 prio)
 {
@@ -331,20 +369,24 @@ status intc_set_priority(u32 irq_num, u32 prio)
   return EINVALID;
 #endif
 #ifdef GIC
-  /* each 32-bit word is split into 4 8-bit priority fields */
+  return intc_set_priority_intid(irq_num + 32, prio);
+#endif
+}
+
+#ifdef GIC
+u32 intc_get_targets_intid(u32 id)
+{
+  /* each 32-bit word is split into 4 8-bit targets fields */
   /* |........ ........ ........ ........|........ ........ ........ ........| */
   /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
   /* up to IRQ1020. Must use 32-bit access. */
-  u32 array_i = irq_num >> 2;
-  u32 bit_i = (irq_num & 0x3) << 3;
-  /* ASSERT(array_i * 32 + bit_i == irq_num * 8); */
-  u32 word = DISTBASE->IPR[array_i];
-  word &= ~(0xFF << bit_i);
-  word |= (prio & 0xFF) << bit_i;
-  DISTBASE->IPR[array_i] = word;
-  return OK;
-#endif
+  u32 array_i = id >> 2;
+  u32 bit_i = (id & 0x3) << 3;
+  /* ASSERT(array_i * 32 + bit_i == id * 8); */
+  u32 word = DISTBASE->IPTR[array_i];
+  return (word << bit_i) & 0xFF;
 }
+#endif
 
 u32 intc_get_targets(u32 irq_num)
 {
@@ -352,17 +394,27 @@ u32 intc_get_targets(u32 irq_num)
   return 1;                     /* must be single-cpu anyhow */
 #endif
 #ifdef GIC
+  return intc_get_targets_intid(irq_num + 32);
+#endif
+}
+
+#ifdef GIC
+status intc_set_targets_intid(u32 id, u32 targets)
+{
   /* each 32-bit word is split into 4 8-bit targets fields */
   /* |........ ........ ........ ........|........ ........ ........ ........| */
   /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
   /* up to IRQ1020. Must use 32-bit access. */
-  u32 array_i = irq_num >> 2;
-  u32 bit_i = (irq_num & 0x3) << 3;
-  /* ASSERT(array_i * 32 + bit_i == irq_num * 8); */
+  u32 array_i = id >> 2;
+  u32 bit_i = (id & 0x3) << 3;
+  /* ASSERT(array_i * 32 + bit_i == id * 8); */
   u32 word = DISTBASE->IPTR[array_i];
-  return (word << bit_i) & 0xFF;
-#endif
+  word &= ~(0xFF << bit_i);
+  word |= (targets & 0xFF) << bit_i;
+  DISTBASE->IPTR[array_i] = word;
+  return OK;
 }
+#endif
 
 status intc_set_targets(u32 irq_num, u32 targets)
 {
@@ -370,20 +422,25 @@ status intc_set_targets(u32 irq_num, u32 targets)
   return EINVALID;
 #endif
 #ifdef GIC
-  /* each 32-bit word is split into 4 8-bit targets fields */
-  /* |........ ........ ........ ........|........ ........ ........ ........| */
-  /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
-  /* up to IRQ1020. Must use 32-bit access. */
-  u32 array_i = irq_num >> 2;
-  u32 bit_i = (irq_num & 0x3) << 3;
-  /* ASSERT(array_i * 32 + bit_i == irq_num * 8); */
-  u32 word = DISTBASE->IPTR[array_i];
-  word &= ~(0xFF << bit_i);
-  word |= (targets & 0xFF) << bit_i;
-  DISTBASE->IPTR[array_i] = word;
-  return OK;
+  return intc_set_targets_intid(irq_num + 32, targets);
 #endif
 }
+
+#ifdef GIC
+status intc_set_int_type_intid(u32 id, u32 is_edge)
+{
+  /* each 32-bit word is split into 16 2-bit config fields */
+  /* the most significant config bit is for edge/level type */
+  u32 array_i = id >> 4;
+  u32 bit_i = ((id & 0xF) << 1) + 1;
+  /* ASSERT(array_i * 32 + bit_i == id * 2 + 1); */
+  u32 word = DISTBASE->ICFR[array_i];
+  word &= ~(1 << bit_i);
+  word |= (is_edge & 0x1) << bit_i;
+  DISTBASE->ICFR[array_i] = word;
+  return OK;
+}
+#endif
 
 status intc_set_int_type(u32 irq_num, u32 is_edge)
 {
@@ -391,17 +448,7 @@ status intc_set_int_type(u32 irq_num, u32 is_edge)
   return EINVALID;
 #endif
 #ifdef GIC
-  if(irq_num < 32) return EINVALID;
-  /* each 32-bit word is split into 16 2-bit config fields */
-  /* the most significant config bit is for edge/level type */
-  u32 array_i = irq_num >> 4;
-  u32 bit_i = ((irq_num & 0xF) << 1) + 1;
-  /* ASSERT(array_i * 32 + bit_i == irq_num * 2 + 1); */
-  u32 word = DISTBASE->ICFR[array_i];
-  word &= ~(1 << bit_i);
-  word |= (is_edge & 0x1) << bit_i;
-  DISTBASE->ICFR[array_i] = word;
-  return OK;
+  return intc_set_int_type_intid(irq_num + 32, is_edge);
 #endif
 }
 

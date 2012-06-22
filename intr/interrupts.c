@@ -129,6 +129,7 @@ static volatile struct intcps *intc = (struct intcps *) MPU_INTC_BASE_ADDR;
 
 #ifdef GIC
 #define SPURIOUS_ID 1023        /* spurious interrupt ID number */
+#define NUM_INTS 1020           /* number of actual interrupt IDs */
 volatile u32* PERIPHBASE = NULL;
 PACKED_STRUCT(distributor) {
   PACKED_FIELD(u32, DCR);    /* distributor control */
@@ -250,11 +251,23 @@ void intc_init(void)
   DLOG(1, "Discovered %d interrupt priority levels.\n", num_prio_levels);
   DISTBASE->DCR = 1;            /* renable distributor */
 
+  for(i=0; i<NUM_INTS; i++) {
+    u32 word = intc_get_targets(i);
+    intc_set_targets(i, ~word);
+    if(intc_get_targets(i) != word)
+      break;                    /* first modifiable index */
+  }
+  DLOG(1, "Setting target for interrupt IDs >= %d to first CPU only.\n", i);
+  for(; i<NUM_INTS; i++)
+    intc_set_targets(i, 0x1);   /* set to single cpu */
+
   CPUBASE->BPR = 0;
   min_binary_point = CPUBASE->BPR;
   DLOG(1, "CPU minimum binary point=%d\n", min_binary_point);
   CPUBASE->PMR = 0xFF;          /* set mask to lowest priority */
   DLOG(1, "CPU PMR=%#x RPR=%#x\n", CPUBASE->PMR, CPUBASE->RPR);
+
+  CPUBASE->ICR |= 1; /* enable interrupt forwarding in CPU interface */
 
   DLOG(1, "Testing SGI\n");
   DISTBASE->SGIR = SETBITS(2, 24, 2) | SETBITS(3, 0, 4); /* send ID3 to self */
@@ -330,6 +343,24 @@ status intc_set_priority(u32 irq_num, u32 prio)
   word |= (prio & 0xFF) << bit_i;
   DISTBASE->IPR[array_i] = word;
   return OK;
+#endif
+}
+
+u32 intc_get_targets(u32 irq_num)
+{
+#ifdef OMAP3530
+  return 1;                     /* must be single-cpu anyhow */
+#endif
+#ifdef GIC
+  /* each 32-bit word is split into 4 8-bit targets fields */
+  /* |........ ........ ........ ........|........ ........ ........ ........| */
+  /*    IRQ0      IRQ1    IRQ2     IRQ3     IRQ4     IRQ5     IRQ6     IRQ7    */
+  /* up to IRQ1020. Must use 32-bit access. */
+  u32 array_i = irq_num >> 2;
+  u32 bit_i = (irq_num & 0x3) << 3;
+  /* ASSERT(array_i * 32 + bit_i == irq_num * 8); */
+  u32 word = DISTBASE->IPTR[array_i];
+  return (word << bit_i) & 0xFF;
 #endif
 }
 

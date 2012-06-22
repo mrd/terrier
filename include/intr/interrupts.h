@@ -49,6 +49,7 @@ status intc_set_irq_handler(u32 irq_num, void (*handler)(u32));
 status intc_mask_irq(u32 irq_num);
 status intc_unmask_irq(u32 irq_num);
 status intc_set_priority(u32 irq_num, u32 prio);
+u32 intc_get_targets(u32 irq_num);
 status intc_set_targets(u32 irq_num, u32 targets);
 status intc_set_int_type(u32 irq_num, u32 is_edge);
 u32 intc_get_running_priority(void);

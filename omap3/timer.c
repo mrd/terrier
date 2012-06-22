@@ -208,6 +208,7 @@ status timer_gp_enable_overflow_interrupt(int i)
 static inline void ack_timer_overflow_interrupt(int i)
 {
   gptimer[i]->TISR = 2;
+  gptimer[i]->TCLR |= GPTIMER_TCLR_ST; /* auto-disables upon overflow */
 }
 
 status timer_gp_ack_overflow_interrupt(int i)

@@ -39,7 +39,7 @@
 
 #include "types.h"
 #include "intr/interrupts.h"
-#include "omap3/early_uart3.h"
+#include "omap/early_uart3.h"
 #include "arm/memory.h"
 #include "arm/status.h"
 #include "arm/asm.h"

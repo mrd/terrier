@@ -42,7 +42,7 @@
 #include "mem/physical.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
-#include "omap3/timer.h"
+#include "omap/timer.h"
 #include "sched/process.h"
 #include "intr/interrupts.h"
 #define MODULE "sched_rr"

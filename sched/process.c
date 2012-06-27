@@ -46,7 +46,7 @@
 #include "sched/process.h"
 #include "sched/elf.h"
 #include "sched/sched.h"
-#include "omap3/early_uart3.h"
+#include "omap/early_uart3.h"
 #define MODULE "process"
 #include "debug/log.h"
 

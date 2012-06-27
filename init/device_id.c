@@ -38,7 +38,7 @@
  */
 
 #include "types.h"
-#include "omap3/early_uart3.h"
+#include "omap/early_uart3.h"
 #include "arm/memory.h"
 #include "mem/virtual.h"
 

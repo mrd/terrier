@@ -1,5 +1,5 @@
 /*
- * Begin initialization in C.
+ * Symmetric Multiprocessing Support
  *
  * -------------------------------------------------------------------
  *
@@ -37,68 +37,16 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _OMAP3_SMP_H_
+#define _OMAP3_SMP_H_
+
 #include "types.h"
-#include "omap/early_uart3.h"
-#include "omap/smp.h"
-#include "arm/memory.h"
-#include "arm/asm.h"
-#include "mem/virtual.h"
 
-void perfmon_init(void)
-{
-  arm_perfmon_pmnc(PERFMON_PMNC_E, PERFMON_PMNC_E);
-  arm_perfmon_cntens(PERFMON_CNTENS_C);
-}
+#define MAX_CPUS 4
 
-void NO_RETURN c_entry()
-{
-  void identify_device(void);
-  void physical_init(void);
-  void intr_init(void);
-  void timer_init(void);
-  void vmm_init(void);
-  void process_init(void);
-  void sched_init(void);
-  status programs_init(void);
+status smp_init(void);
 
-#ifdef USE_VMM
-  extern pagetable_t l1pt;
-  extern void *_physical_start;
-  u32 phystart = (u32) &_physical_start;
-
-  l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
-  arm_mmu_flush_tlb();
-#else
-  arm_ctrl(CTRL_DCACHE | CTRL_ICACHE,
-           CTRL_DCACHE | CTRL_ICACHE);
 #endif
-
-  perfmon_init();
-  reset_uart3();
-  identify_device();
-  physical_init();
-  intr_init();
-  smp_init();
-  timer_init();
-#ifdef USE_VMM
-  vmm_init();
-#endif
-  process_init();
-  sched_init();
-
-#ifdef TEST_CSWITCH
-  status test_cswitch(void); test_cswitch();
-#endif
-#ifdef TEST_PROCESS
-  status test_process(void); test_process();
-#endif
-
-  programs_init();
-
-  print_uart3("-- HALTED --\n");
-
-  for(;;) arm_wait_for_interrupt();
-}
 
 /*
  * Local Variables:

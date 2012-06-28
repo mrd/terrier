@@ -64,9 +64,21 @@
 #endif
 
 #ifdef __GNUC__
+#define NO_INLINE __attribute__((noinline))
+#else
+#error "NO_INLINE unsupported"
+#endif
+
+#ifdef __GNUC__
 #define ASM asm volatile
 #else
 #error "ASM unsupported"
+#endif
+
+#ifdef __GNUC__
+#define NAKED __attribute__((naked))
+#else
+#error "NAKED unsupported"
 #endif
 
 #define NULL ((void *) 0)

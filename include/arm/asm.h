@@ -118,6 +118,26 @@ static inline void arm_wait_for_interrupt(void)
   ASM("MCR p15, 0, %0, c7, c0, 4"::"r"(0));
 }
 
+/* 4.3.3 Multiprocessor affinity register (MPIDR) */
+static inline u32 arm_multiprocessor_affinity(void)
+{
+  u32 r;
+  ASM("MRC p15,0,%0,c0,c0,5":"=r"(r));
+  return r;
+}
+
+/* 4.3.10 Aux Control Register (ACTLR) */
+static inline u32 arm_aux_control(u32 set, u32 mask)
+{
+  u32 r;
+  ASM("MRC p15,0,%0,c1,c0,1":"=r"(r));
+  r &= ~mask;
+  r |= set;
+  ASM("MCR p15,0,%0,c1,c0,1"::"r"(r));
+  return r;
+}
+
+
 static inline int strcmp(const char *s1, const char *s2)
 {
   /* FIXME: implement optimized assembly version */

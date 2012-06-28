@@ -561,7 +561,7 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   }
 }
 
-void __attribute__((naked)) _handle_swi(u32 lr)
+void NAKED _handle_swi(u32 lr)
 {
   ASM("STMFD sp!, {r4-r11,lr}\n\t"
       "MOV r1, sp\n\t"

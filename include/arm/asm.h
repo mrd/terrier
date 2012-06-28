@@ -48,7 +48,8 @@
  * instructions. */
 static inline void data_sync_barrier(void)
 {
-  ASM("MCR p15, #0, %0, c7, c10, #4"::"r"(0));
+  //ASM("MCR p15, #0, %0, c7, c10, #4"::"r"(0));
+  ASM("DSB");                   /* ARMv7 */
 }
 
 /* The purpose of the data memory barrier operation is to ensure that
@@ -58,7 +59,8 @@ static inline void data_sync_barrier(void)
  * depends on it. */
 static inline void data_mem_barrier(void)
 {
-  ASM("MCR p15, #0, %0, c7, c10, #5"::"r"(0));
+  //ASM("MCR p15, #0, %0, c7, c10, #5"::"r"(0));
+  ASM("DMB");
 }
 
 /* Flushing the instruction prefetch buffer has the effect that all
@@ -67,7 +69,8 @@ static inline void data_mem_barrier(void)
  * after the execution of this instruction. */
 static inline void prefetch_flush(void)
 {
-  ASM("MCR p15, #0, %0, c7, c5, #4"::"r"(0));
+  //ASM("MCR p15, #0, %0, c7, c5, #4"::"r"(0));
+  ASM("ISB");
 }
 
 static inline u32 count_leading_zeroes(u32 x)

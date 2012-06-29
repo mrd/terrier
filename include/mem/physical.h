@@ -42,6 +42,7 @@
 
 #include "types.h"
 
+physaddr physical_alloc_page(void);
 status physical_alloc_pages(u32 n, u32 align, physaddr *start);
 void physical_free_page(physaddr addr);
 void physical_init(void);

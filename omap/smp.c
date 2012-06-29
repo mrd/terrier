@@ -44,6 +44,7 @@
 #include "arm/memory.h"
 #include "arm/status.h"
 #include "arm/asm.h"
+#include "mem/physical.h"
 #include "mem/virtual.h"
 #define MODULE "smp"
 #include "debug/log.h"

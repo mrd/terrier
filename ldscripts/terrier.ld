@@ -44,6 +44,13 @@
 ENTRY(_reset)
 SECTIONS
 {
+ /* Place per-CPU data in phantom segment, to be dynamically allocated */
+ . = 0x0;
+ _percpustart = .;
+ .percpu (NOLOAD) : { *(.percpu) } : NONE
+ _percpuend = ALIGN(0x1000);
+ _percpu_pages_plus_one = (_percpuend - _percpustart) / 0x1000 + 1;
+
  . = 0x80008000;
  _physical_start = .;
  _kernel_start = .;
@@ -57,6 +64,9 @@ SECTIONS
    _program_map_start = .;
    INCLUDE program-map.ld;      /* list of program objects included */
    _program_map_end = .;
+   /* Insert a read-only null-terminated array of pointers to constructors */
+   _percpu_ctor_list = .;
+   *(.percpu.ctor); LONG(0)
  }
  _program_map_count = (_program_map_end - _program_map_start) >> 2;
 

@@ -69,8 +69,9 @@ extern u32 *_per_cpu_spaces[];
 #define cpu_index() GETBITS(arm_multiprocessor_affinity(),0,2)
 
 /* read/write macros */
-#define cpu_read(x) _per_cpu_spaces[cpu_index()][((u32) &x)>>2]
-#define cpu_write(x,v) _per_cpu_spaces[cpu_index()][((u32) &x)>>2] = v;
+#define cpu_read(x) (_per_cpu_spaces[cpu_index()][((u32) &x)>>2])
+#define cpu_write(x,v) _per_cpu_spaces[cpu_index()][((u32) &x)>>2] = v
+#define cpu_pointer(n,x) (&_per_cpu_spaces[n][((u32) &x)>>2])
 
 status per_cpu_init(void);
 

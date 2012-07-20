@@ -46,6 +46,8 @@
 #include "arm/asm.h"
 #include "mem/physical.h"
 #include "mem/virtual.h"
+#include "arm/smp/spinlock.h"
+#include "arm/smp/per-cpu.h"
 #define MODULE "smp"
 #include "debug/log.h"
 #include "debug/cassert.h"
@@ -75,6 +77,8 @@ static volatile struct scu *SCU;
 static volatile u32 stage, curboot;
 static u32 *tempstack;
 u32 num_cpus;
+status smp_init_per_cpu_spaces(void);
+status smp_init_invoke_percpu_constructors(void);
 
 /* First real function for auxiliary CPUs. */
 static void NO_INLINE smp_aux_cpu_init()
@@ -101,6 +105,8 @@ static void NO_INLINE smp_aux_cpu_init()
   stage=5;
 
   /* complete remaining init asynchronously */
+  smp_init_invoke_percpu_constructors();
+
   /* ... */
 }
 
@@ -139,6 +145,9 @@ status smp_init(void)
     DLOG(1, "WTF: num_cpus=%d > MAX_CPUS=%d\n", num_cpus, MAX_CPUS);
     return EINVALID;
   }
+
+  if(smp_init_per_cpu_spaces() != OK) return ENOSPACE;
+  smp_init_invoke_percpu_constructors();
 
   /* remember: even if we are using virtual addresses, the auxiliary
    * CPU is not yet configured for that. */
@@ -195,6 +204,56 @@ status smp_init(void)
        GETBITS(scucfg, 7, 1) ? "cpu3 " : "");
 
   DLOG(1, "SCU power status=%#x\n", SCU->cpu_power_status);
+
+  return OK;
+}
+
+u32 *_per_cpu_spaces[MAX_CPUS];
+
+status smp_init_invoke_percpu_constructors(void)
+{
+  extern void (*_percpu_ctor_list)();
+  void (**ctor) ();
+  for (ctor = &_percpu_ctor_list; *ctor; ctor++)
+    (*ctor) ();
+  return OK;
+}
+
+status smp_init_per_cpu_spaces(void)
+{
+  u32 i,j;
+  extern u32 _percpu_pages_plus_one;
+  physaddr pstart;
+
+  /* gcc's optimizer doesn't believe a symbol's address can be zero;
+   * an if-statement trying to test (num_pages == 0) will end up being
+   * elided by the compiler. */
+  if((u32) &_percpu_pages_plus_one == 1) return OK;
+
+  u32 num_pages = ((u32) &_percpu_pages_plus_one) - 1;
+
+  for(i=0;i<num_cpus;i++) {
+    if(physical_alloc_pages(num_pages, 1, &pstart) != OK) {
+      DLOG(1,"smp_init_per_cpu_spaces: unable to allocate physical pages, count=%d\n", num_pages);
+      return ENOSPACE;
+    }
+
+#ifdef VMM
+    region_t rtmp = { pstart, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+    if(vmm_map_region_find_vstart(&rtmp) != OK) {
+      DLOG(1, "smp_init_per_cpu_spaces: vmm_map_region_find_vstart failed.\n");
+      /* FIXME: clean-up previous resources */
+      return ENOSPACE;
+    }
+    _per_cpu_spaces[i] = rtmp.vstart;
+#else
+    _per_cpu_spaces[i] = (u32 *) pstart;
+#endif
+    DLOG(1, "smp_init_per_cpu_spaces: cpu=%d space=%#x\n", i, _per_cpu_spaces[i]);
+
+    for(j=0;j<(num_pages << PAGE_SIZE_LOG2);j++)
+      _per_cpu_spaces[i][j] = 0;
+  }
 
   return OK;
 }

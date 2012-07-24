@@ -39,6 +39,7 @@
 
 #include "types.h"
 #include "omap/early_uart3.h"
+#include "arm/smp/spinlock.h"
 #include "arm/asm.h"
 #include <stdarg.h>
 
@@ -247,15 +248,19 @@ static void _putc_uart3(void *x, char c)
   putc_uart3(c);
 }
 
+static DEFSPINLOCK(loglock);
+
 void debuglog(const char *src, int lvl, const char *fmt, ...)
 {
   if(lvl <= current_debug_level) {
     va_list args;
+    spinlock_lock(&loglock);
     va_start(args, fmt);
     printf_uart3("%.8x: ", arm_read_cycle_counter());
     print_uart3(src); print_uart3(": ");
     closure_vprintf(_putc_uart3, NULL, fmt, args);
     va_end(args);
+    spinlock_unlock(&loglock);
   }
 }
 
@@ -263,9 +268,11 @@ void debuglog_no_prefix(int lvl, const char *fmt, ...)
 {
   if(lvl <= current_debug_level) {
     va_list args;
+    spinlock_lock(&loglock);
     va_start(args, fmt);
     closure_vprintf(_putc_uart3, NULL, fmt, args);
     va_end(args);
+    spinlock_unlock(&loglock);
   }
 }
 

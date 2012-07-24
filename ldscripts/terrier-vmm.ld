@@ -94,7 +94,7 @@ SECTIONS
  _kernel_readonly_end = .;
 
  .data : AT ( LOADADDR (.text) + _kernel_readonly_end - _kernel_start ) SUBALIGN(4) { *(.data) }
- .bss : AT ( LOADADDR (.data) + SIZEOF (.data) ) { *(.bss) }
+ .bss : AT ( LOADADDR (.data) + SIZEOF (.data) ) { _kernel_bss_start = .; *(.bss); _kernel_bss_end = .; }
 
  . = ALIGN(0x1000);
 

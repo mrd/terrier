@@ -50,6 +50,14 @@ void perfmon_init(void)
   arm_perfmon_cntens(PERFMON_CNTENS_C);
 }
 
+void clear_bss(void)
+{
+  extern u32 _kernel_bss_start, _kernel_bss_end;
+  u32 *ptr = &_kernel_bss_start, count = (u32) &_kernel_bss_end - (u32) &_kernel_bss_start;
+  count >>= 2;
+  for(; count>0; count--) *ptr++ = 0;
+}
+
 void NO_RETURN c_entry()
 {
   void identify_device(void);
@@ -73,6 +81,7 @@ void NO_RETURN c_entry()
            CTRL_DCACHE | CTRL_ICACHE);
 #endif
 
+  clear_bss();
   perfmon_init();
   reset_uart3();
   identify_device();

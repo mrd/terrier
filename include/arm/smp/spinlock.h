@@ -41,6 +41,7 @@
 #define _SMP_SPINLOCK_H_
 #include "types.h"
 #include "status.h"
+#include "arm/smp/per-cpu.h"
 
 typedef struct { u32 flag; } spinlock_t;
 #define SPINLOCK_INIT { 0 }
@@ -49,7 +50,13 @@ typedef struct { u32 flag; } spinlock_t;
 static inline status spinlock_lock(spinlock_t *lock)
 {
 #ifdef __GNUC__
-  while (__sync_lock_test_and_set(&lock->flag, 1));
+  u32 i = cpu_index() + 1, j;
+  while ((j = __sync_val_compare_and_swap(&lock->flag, 0, i))) {
+    if(j == i) {
+      printf_uart3("cpu%d: lock=%#x held_by=%d\n", cpu_index(), lock, j - 1);
+      early_panic("recursive spin lock");
+    }
+  }
   return OK;
 #else
 #error "spinlocks unimplemented for this compiler"

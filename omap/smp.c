@@ -88,12 +88,12 @@ static void *alloc_stack(void)
     return NULL;
   }
 
-#ifdef VMM
+#ifdef USE_VMM
   region_t rtmp = { pstart, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
   if(vmm_map_region_find_vstart(&rtmp) != OK) {
     DLOG(1, "smp_init_per_cpu_spaces: vmm_map_region_find_vstart failed.\n");
     /* FIXME: clean-up previous resources */
-    return ENOSPACE;
+    return NULL;
   }
   return rtmp.vstart;
 #else

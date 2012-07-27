@@ -148,6 +148,8 @@ static void NO_INLINE smp_aux_cpu_init()
 /* Beginning of the world for auxiliary CPUs. */
 static void NAKED NO_RETURN smp_aux_entry_point(void)
 {
+  extern void *_l1table_phys;
+
   /* Quickly check if this is the current CPU being booted; if not,
    * then go back to sleep. */
   ASM("1:\n"
@@ -162,7 +164,7 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
   arm_mmu_flush_tlb();
   arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
   arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
-  arm_mmu_set_ttb1((physaddr) l1table_phys);
+  arm_mmu_set_ttb1((physaddr) &_l1table_phys);
   /* Enable MMU */
   arm_ctrl(CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE,
            CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);

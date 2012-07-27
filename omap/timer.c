@@ -57,7 +57,7 @@ region_t l4core_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, 
 #ifdef OMAP4460
 region_t l4perip_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
 region_t l4abe_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
-region_t l4wakeup_region = { 0x4A300000, (void *) 0x4A300000, &l1pt, 1, 20, 0, 0, R_PM };
+extern region_t l4wakeup_region; // = { 0x4A300000, (void *) 0x4A300000, &l1pt, 1, 20, 0, 0, R_PM };
 #endif
 #endif
 

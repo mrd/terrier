@@ -40,7 +40,7 @@
 #ifdef USE_VMM
 
 #include "types.h"
-#include "omap3/early_uart3.h"
+#include "omap/early_uart3.h"
 #include "arm/memory.h"
 
 void stub_init(void)

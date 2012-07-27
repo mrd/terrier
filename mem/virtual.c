@@ -166,6 +166,7 @@ status vmm_map_region(region_t *r)
     arm_cache_clean_invl_data_mva_poc(ptr--);
   }
 
+  DLOG(4,"vmm_map_region: *** mapped %d pages: %#x ==> %#x\n", r->page_count, r->pstart, r->vstart);
   return OK;
 }
 
@@ -238,6 +239,7 @@ status vmm_map_region_find_vstart(region_t *r)
     }
   }
 
+  DLOG(2, "vmm_map_region_find_vstart(%#x): unable to find free space for %d page(s).\n", r, r->page_count);
   return ENOSPACE;
 }
 

@@ -105,8 +105,13 @@ static void *alloc_stack(void)
 static void NO_INLINE smp_aux_cpu_init()
 {
   u32 mpidr, actlr;
-  stage = 1;
-  while(stage==1);
+  mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
+
+  /* test out LDREX/STREX */
+  ASM("MOV r1, #1\n1: DMB; LDREX r0,[%0]\nSTREX r0, r1, [%0]\nCMP r0, #0\nBNE 1b"::"r"(&stage):"r0","r1");
+  //stage = 1;
+  ASM("1: DMB; LDREX r0,[%0]; CMP r0, #1; BEQ 1b"::"r"(&stage):"r0");
+  //while(stage==1);
 
   mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
   DLOG(1,"HELLO WORLD from cpu%d!\n", GETBITS(mpidr,0,2));
@@ -141,15 +146,16 @@ static void NO_INLINE smp_aux_cpu_init()
   void intc_secondary_cpu_init(void);
   intc_secondary_cpu_init();
   smp_init_invoke_percpu_constructors();
+  arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
 
   /* ... */
 }
 
+extern void *_l1table_phys;
+
 /* Beginning of the world for auxiliary CPUs. */
 static void NAKED NO_RETURN smp_aux_entry_point(void)
 {
-  extern void *_l1table_phys;
-
   /* Quickly check if this is the current CPU being booted; if not,
    * then go back to sleep. */
   ASM("1:\n"
@@ -158,17 +164,8 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
       "CMP r0,%0\n"
       "WFENE\n"
       "BNE 1b"::"r"(curboot));
-  data_sync_barrier();
 
-#ifdef USE_VMM
-  arm_mmu_flush_tlb();
-  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
-  arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
-  arm_mmu_set_ttb1((physaddr) &_l1table_phys);
-  /* Enable MMU */
-  arm_ctrl(CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE,
-           CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
-#endif
+  data_sync_barrier();
 
   /* Be strict about register usage and asm output here; the C
    * compiler doesn't know about register banking */
@@ -200,11 +197,28 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
   for(;;);
 }
 
+#ifdef USE_VMM
+static void NAKED NO_RETURN smp_aux_vmm_entry_point(void)
+{
+  arm_mmu_flush_tlb();
+  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
+  arm_mmu_set_ttb0((physaddr) &_l1table_phys);
+  arm_mmu_set_ttb1((physaddr) &_l1table_phys);
+
+  /* Enable MMU */
+  arm_ctrl(CTRL_MMU // | CTRL_DCACHE | CTRL_ICACHE
+          ,CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
+
+  /* jump to high memory */
+  ASM("MOV pc, %0"::"r"(smp_aux_entry_point));
+}
+#endif
+
 /* See also 5.3.4 Cortex-A9 MPCore: Multiprocessor bring-up */
 
 status smp_init(void)
 {
-  u32 mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0), i;
+  u32 mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0), i, j;
   DLOG(1,"init\n");
 
   /* Snoop Control Unit registers come first in PERIPHBASE map. */
@@ -242,15 +256,23 @@ status smp_init(void)
     }
 
     /* 27.4.4.1 TRM OMAP4460: Startup */
+#ifdef USE_VMM
+    /* physical address of starting point */
+    if(vmm_get_phys_addr(&smp_aux_vmm_entry_point, &AUX_CORE_BOOT[1]) != OK) {
+      DLOG(1, "Unable to get physical address of smp_aux_vmm_entry_point.\n");
+      return EINVALID;
+    }
+#else
     AUX_CORE_BOOT[1] = (u32) &smp_aux_entry_point; /* physical address of starting point */
+#endif
     AUX_CORE_BOOT[0] = ~0;                         /* toggle status flag */
-
-    DLOG(1, "AUX_CORE_BOOT(%#x)=%#x, %#x\n", AUX_CORE_BOOT, AUX_CORE_BOOT[0], AUX_CORE_BOOT[1]);
 
     data_sync_barrier();
     ASM("SEV");                   /* set-event: wake up waiting CPUs */
 
-    while(stage==0);
+    //while(stage==0);
+
+    ASM("1: LDREX r0,[%0]; CMP r0, #0; BEQ 1b"::"r"(&stage):"r0");
 
     SCU->control |= 1;            /* enable SCU */
 

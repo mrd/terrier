@@ -256,7 +256,7 @@ void debuglog(const char *src, int lvl, const char *fmt, ...)
     va_list args;
     spinlock_lock(&loglock);
     va_start(args, fmt);
-    printf_uart3("%.8x: ", arm_read_cycle_counter());
+    printf_uart3("%.8x: P%d: ", arm_read_cycle_counter(), cpu_index());
     print_uart3(src); print_uart3(": ");
     closure_vprintf(_putc_uart3, NULL, fmt, args);
     va_end(args);

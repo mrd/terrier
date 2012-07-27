@@ -73,9 +73,6 @@ void NO_RETURN c_entry()
   extern pagetable_t l1pt;
   extern void *_physical_start;
   u32 phystart = (u32) &_physical_start;
-
-  l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub */
-  arm_mmu_flush_tlb();
 #else
   arm_ctrl(CTRL_DCACHE | CTRL_ICACHE,
            CTRL_DCACHE | CTRL_ICACHE);
@@ -87,11 +84,22 @@ void NO_RETURN c_entry()
   identify_device();
   physical_init();
   intr_init();
-  smp_init();
-  timer_init();
+
 #ifdef USE_VMM
   vmm_init();
 #endif
+
+#ifdef OMAP4460
+  smp_init();
+#endif
+
+#ifdef USE_VMM
+  l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub after SMP init */
+  arm_mmu_flush_tlb();
+#endif
+
+  timer_init();
+
   process_init();
   sched_init();
 

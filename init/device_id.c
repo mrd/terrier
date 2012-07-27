@@ -44,7 +44,7 @@
 
 #ifdef USE_VMM
 #ifdef OMAP4460
-static region_t sdrc_region = { 0x6D000000, (void *) 0x6D000000, &l1pt, 1, 20, 0, 0, R_PM };
+static region_t sdrc_region = { 0x4E000000, (void *) 0x4E000000, &l1pt, 1, 20, 0, 0, R_PM }; /* DMM region */
 region_t l4wakeup_region = { 0x4A000000, (void *) 0x4A000000, &l1pt, 1, 20, 0, 0, R_PM };
 #endif
 #ifdef OMAP3530

@@ -104,7 +104,7 @@ $(IMGNAME).elf: $(OBJS) $(LDSCRIPT) program-map.ld
 	$(LD) -T $(LDSCRIPT) $(OBJS) $(POBJS) $(LIBGCC) -o $@
 
 program-map.ld: buildprograms
-	nm $(POBJS) | egrep "_binary_.*_start" | awk -- '{ printf "LONG(%s);\n", $$3 }' > $@
+	$(NM) $(POBJS) | egrep "_binary_.*_start" | awk -- '{ printf "LONG(%s);\n", $$3 }' > $@
 
 .PHONY: buildprograms userlib
 buildprograms: userlib

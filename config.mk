@@ -6,6 +6,7 @@ ARCH = arm-none-linux-gnueabi
 CC = $(ARCH)-gcc
 LD = $(ARCH)-ld
 AS = $(ARCH)-as
+NM = $(ARCH)-nm
 OBJCOPY = $(ARCH)-objcopy
 MKIMAGE = mkimage
 QEMU = qemu-system-arm

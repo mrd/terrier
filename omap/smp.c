@@ -173,10 +173,10 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
   /* Be strict about register usage and asm output here; the C
    * compiler doesn't know about register banking */
   register u32 fiqstk asm("r0") = (u32) &newstack[0][1024];
-  register u32 irqstk asm("r1") = (u32) &newstack[0][1024];
-  register u32 undstk asm("r2") = (u32) &newstack[0][1024];
-  register u32 abtstk asm("r3") = (u32) &newstack[0][1024];
-  register u32 svcstk asm("r4") = (u32) &newstack[0][1024];
+  register u32 irqstk asm("r1") = (u32) &newstack[1][1024];
+  register u32 undstk asm("r2") = (u32) &newstack[2][1024];
+  register u32 abtstk asm("r3") = (u32) &newstack[3][1024];
+  register u32 svcstk asm("r4") = (u32) &newstack[4][1024];
 
   /* setup mode stacks */
   ASM("CPS %0; MOV sp, %1\n"
@@ -238,6 +238,7 @@ status smp_init(void)
       newstack[j] = alloc_stack();
       if(newstack[j] == NULL)
         return ENOSPACE;
+      DLOG(1, "&newstack[%d][1024]=%#x\n", j, &newstack[j][1024]);
     }
 
     /* 27.4.4.1 TRM OMAP4460: Startup */

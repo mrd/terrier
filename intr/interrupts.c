@@ -195,6 +195,13 @@ status intc_set_priority_intid(u32 id, u32 prio);
 status intc_unmask_intid(u32 id);
 status intc_mask_intid(u32 id);
 
+void intc_secondary_cpu_init(void)
+{
+  CPUBASE->BPR = min_binary_point;
+  CPUBASE->PMR = 0xFF;          /* set mask to lowest priority */
+  CPUBASE->ICR |= 1; /* enable interrupt forwarding in CPU interface */
+}
+
 /* INTerrupt Controller initialization */
 void intc_init(void)
 {

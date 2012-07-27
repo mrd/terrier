@@ -75,10 +75,31 @@ CASSERT(offsetof(struct scu, non_secure_access_control) == 0x54, scu);
 
 static volatile struct scu *SCU;
 static volatile u32 stage, curboot;
-static u32 *tempstack;
+static u32 *newstack[5];        /* hold stack addresses for secondary processor */
 u32 num_cpus;
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
+
+static void *alloc_stack(void)
+{
+  physaddr pstart;
+  if(physical_alloc_pages(1, 1, &pstart) != OK) {
+    DLOG(1,"alloc_stack: unable to allocate physical page\n");
+    return NULL;
+  }
+
+#ifdef VMM
+  region_t rtmp = { pstart, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+  if(vmm_map_region_find_vstart(&rtmp) != OK) {
+    DLOG(1, "smp_init_per_cpu_spaces: vmm_map_region_find_vstart failed.\n");
+    /* FIXME: clean-up previous resources */
+    return ENOSPACE;
+  }
+  return rtmp.vstart;
+#else
+  return (void *) pstart;
+#endif
+}
 
 /* First real function for auxiliary CPUs. */
 static void NO_INLINE smp_aux_cpu_init()
@@ -105,6 +126,20 @@ static void NO_INLINE smp_aux_cpu_init()
   stage=5;
 
   /* complete remaining init asynchronously */
+
+#ifdef USE_VMM
+  arm_mmu_flush_tlb();
+#else
+  arm_ctrl(CTRL_DCACHE | CTRL_ICACHE,
+           CTRL_DCACHE | CTRL_ICACHE);
+#endif
+
+  void perfmon_init(void);
+  perfmon_init();
+  extern void *_vector_table;
+  arm_set_vector_base_address((u32) &_vector_table);
+  void intc_secondary_cpu_init(void);
+  intc_secondary_cpu_init();
   smp_init_invoke_percpu_constructors();
 
   /* ... */
@@ -122,10 +157,44 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
       "WFENE\n"
       "BNE 1b"::"r"(curboot));
   data_sync_barrier();
-  /* set up the temporary call stack */
-  ASM("mov sp, %0"::"r" (&tempstack[1024]));
+
+#ifdef USE_VMM
+  arm_mmu_flush_tlb();
+  arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
+  arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
+  arm_mmu_set_ttb1((physaddr) l1table_phys);
+  /* Enable MMU */
+  arm_ctrl(CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE,
+           CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
+#endif
+
+  /* Be strict about register usage and asm output here; the C
+   * compiler doesn't know about register banking */
+  register u32 fiqstk asm("r0") = (u32) &newstack[0][1024];
+  register u32 irqstk asm("r1") = (u32) &newstack[0][1024];
+  register u32 undstk asm("r2") = (u32) &newstack[0][1024];
+  register u32 abtstk asm("r3") = (u32) &newstack[0][1024];
+  register u32 svcstk asm("r4") = (u32) &newstack[0][1024];
+
+  /* setup mode stacks */
+  ASM("CPS %0; MOV sp, %1\n"
+      "CPS %2; MOV sp, %3\n"
+      "CPS %4; MOV sp, %5\n"
+      "CPS %6; MOV sp, %7\n"
+      "CPS %8; MOV sp, %9"::
+      "i"(MODE_FIQ),"r"(fiqstk),
+      "i"(MODE_IRQ),"r"(irqstk),
+      "i"(MODE_ABT),"r"(abtstk),
+      "i"(MODE_UND),"r"(undstk),
+      "i"(MODE_SVC),"r"(svcstk));
+
+  /* Mode: SVC */
+
   /* call into a real function frame */
   smp_aux_cpu_init();
+
+  ASM("CPS %0"::"i"(MODE_SYS));
+
   for(;;);
 }
 
@@ -149,14 +218,6 @@ status smp_init(void)
   if(smp_init_per_cpu_spaces() != OK) return ENOSPACE;
   smp_init_invoke_percpu_constructors();
 
-  /* remember: even if we are using virtual addresses, the auxiliary
-   * CPU is not yet configured for that. */
-  tempstack = (u32 *) physical_alloc_page();
-  if(tempstack == NULL) {
-      DLOG(1, "Unable to allocate stack.\n");
-      return ENOSPACE;
-  }
-
   SCU->invalidate_all_registers_in_secure_state = ~0; /* invalidate tag RAM */
 
   DLOG(1, "MPIDR=%#x %s cpuid=%d\n", mpidr,
@@ -169,6 +230,13 @@ status smp_init(void)
     curboot = i;
     stage = 0;
     DLOG(1, "Booting cpu%d\n", i);
+
+    /* create stacks for CPU modes */
+    for(j=0;j<sizeof(newstack)/sizeof(newstack[0]);j++) {
+      newstack[j] = alloc_stack();
+      if(newstack[j] == NULL)
+        return ENOSPACE;
+    }
 
     /* 27.4.4.1 TRM OMAP4460: Startup */
     AUX_CORE_BOOT[1] = (u32) &smp_aux_entry_point; /* physical address of starting point */
@@ -207,6 +275,8 @@ status smp_init(void)
 
   return OK;
 }
+
+/* Per-CPU initialization */
 
 u32 *_per_cpu_spaces[MAX_CPUS];
 

@@ -49,6 +49,15 @@ void print_uart3(const char *);
 void printf_uart3(const char *fmt, ...);
 void early_panic(char *);
 
+#ifdef OMAP4460
+/* really barebones debugging function */
+static inline void _primitive_putc(const char c)
+{
+  register u32 r;
+  ASM("1: ldrb %0, [%1, #20]\n" "tst %0, #64\n" "beq 1b\n" "strb %2, [%1]":"=r" (r):"r" (0x48020000),"r" (c));
+}
+#endif
+
 #endif
 
 /*

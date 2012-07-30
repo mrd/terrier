@@ -41,6 +41,7 @@
 #define _ARM_MEMORY_H_
 
 #include "types.h"
+#include "arm/asm.h"
 
 #define PAGE_SIZE_LOG2 12
 #define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
@@ -125,7 +126,7 @@ static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
     v4 |= (v << 8);
     v4 |= (v << 16);
     v4 |= (v << 24);
-        
+
     count = 1 << (exp - 2);
 
     for(; count > 0; --count)
@@ -176,11 +177,11 @@ static inline void arm_mmu_flush_tlb(void)
 
 /* MVA - Modified Virtual Address (64-byte aligned) (ARMv6+ accepts any address)
  * SAW - Set and Way
- * 
+ *
  * PoC - Point of Coherency - The time when the imposition of any more
  * cache becomes transparent for instruction, data, and translation
  * table walk accesses to that address by any processor in the system.
- * 
+ *
  * PoU - Point of Unification - The time when the instruction and data
  * caches, and the TLB translation table walks have merged for a
  * uniprocessor system.
@@ -202,22 +203,10 @@ static inline void arm_cache_invl_branch_pred_array(void)
   ASM("MCR p15, #0, %0, c7, c5, #6"::"r"(0));
 }
 
-/* Invalidate entire data cache */
-static inline void arm_cache_invl_data(void)
-{
-  /* Loop through set/way */
-}
-
 /* Invalidate data (or unified) cache by MVA to PoC */
 static inline void arm_cache_invl_data_mva_poc(void *vaddr)
 {
   ASM("MCR p15, #0, %0, c7, c6, #1"::"r"(vaddr));
-}
-
-/* Clean entire data cache. */
-static inline void arm_cache_clean_data(void)
-{
-  /* Loop through set/way */
 }
 
 /* Clean data or unified cache by MVA to PoC. */
@@ -232,11 +221,41 @@ static inline void arm_cache_clean_invl_data_mva_poc(void *vaddr)
   ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(vaddr));
 }
 
-/* Clean and invalidate entire data cache */
-static inline void arm_cache_clean_invl_data(void)
-{
-  /* Loop through set/way */
+#define DEF_CACHE_OP_ALL_SETWAY(name,op)                                \
+  static inline void name(void)                                         \
+  {                                                                     \
+  /* Loop through set/way */                                            \
+  u32 clidr, l;                                                         \
+  ASM("MRC p15, #1, %0, c0, c0, #1":"=r"(clidr));                       \
+  for(l=0;l<7;l++) {                                                    \
+    u32 ctype = GETBITS(clidr,l+l+l,3), ccsidr, numsets, assocs;        \
+    if(ctype >= 2) {                                                    \
+      /* CSSELR: Select current CCSIDR by Level and Type=0 (Data or Unified) */ \
+      ASM("MCR p15, #2, %0, c0, c0, #0"::"r"((l<<1)|0));                \
+      /* CCSIDR: Cache Size ID registers */                             \
+      ASM("MRC p15, #1, %0, c0, c0, #0":"=r"(ccsidr));                  \
+      assocs = GETBITS(ccsidr,3,10)+1;                                  \
+      numsets = GETBITS(ccsidr,13,15)+1;                                \
+      u32 A = ceiling_log2(assocs);                                     \
+      u32 S = ceiling_log2(numsets);                                    \
+      u32 L = GETBITS(ccsidr, 0, 3)+4;                                  \
+      u32 s, w;                                                         \
+      for(w=0;w<assocs;w++) {                                           \
+        for(s=0;s<numsets;s++) {                                        \
+          u32 Rt = SETBITS(l,1,3) | SETBITS(s,L,S) | SETBITS(w,32-A,A); \
+          ASM(op::"r"(Rt));                                             \
+        }                                                               \
+      }                                                                 \
+    }                                                                   \
+  }                                                                     \
 }
+
+/* Clean and invalidate entire data cache */
+DEF_CACHE_OP_ALL_SETWAY(arm_cache_clean_invl_data,"MCR p15, #0, %0, c7, c14, #2");
+/* Clean entire data cache. */
+DEF_CACHE_OP_ALL_SETWAY(arm_cache_clean_data,"MCR p15, #0, %0, c7, c10, #2");
+/* Invalidate entire data cache */
+DEF_CACHE_OP_ALL_SETWAY(arm_cache_invl_data,"MCR p15, #0, %0, c7, c6, #2");
 
 /* The least significant byte is the Address Space ID. The remainder
  * forms a general-purpose process ID. There can be many process IDs

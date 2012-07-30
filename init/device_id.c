@@ -135,9 +135,13 @@ void meminfo(void)
 #endif
 }
 
+static char *cache_type_desc[] = {
+  "None", "I-only", "D-only", "Separate I&D", "Unified", "Reserved", "Reserved", "Reserved"
+};
+
 void cacheinfo(void)
 {
-  u32 cache_type, tlb_type, cr;
+  u32 cache_type, tlb_type, cr, clidr, i;
   ASM("MRC p15, #0, %0, c1, c0, #0":"=r"(cr));
   printf_uart3("control_register=%#x\n", cr);
   ASM("MRC p15, #0, %0, c0, c0, #1":"=r"(cache_type));
@@ -150,6 +154,48 @@ void cacheinfo(void)
   ASM("MRC p15, #0, %0, c0, c0, #3":"=r"(tlb_type));
   printf_uart3("tlb_type=%#x ILsize=%d DLsize=%d separate_I_D=%d\n",
                tlb_type, GETBITS(tlb_type, 16, 8), GETBITS(tlb_type, 8, 8), GETBITS(tlb_type, 0, 1));
+  ASM("MRC p15, #1, %0, c0, c0, #1":"=r"(clidr));
+  printf_uart3("cache level ID reg=%#x LoUU=%d LoC=%d LoUIS=%d\n",
+               clidr,
+               GETBITS(clidr, 27, 3),
+               GETBITS(clidr, 24, 3),
+               GETBITS(clidr, 21, 3));
+  for(i=0;i<7;i++) {
+    u32 ctype = GETBITS(clidr,i*3,3), ccsidr;
+    if(ctype) {
+      printf_uart3("  L%d: %s\n", i+1, cache_type_desc[ctype]);
+      if(ctype != 1) {
+        /* CSSELR: Select current CCSIDR by Level and Type=0 (Data or Unified) */
+        ASM("MCR p15, #2, %0, c0, c0, #0"::"r"((i<<1)|0));
+        /* CCSIDR: Cache Size ID registers */
+        ASM("MRC p15, #1, %0, c0, c0, #0":"=r"(ccsidr));
+        printf_uart3("  L%d D: CCSIDR=%#x linesize=%d assoc=%d numsets=%d %s%s%s%s\n",
+                     i+1, ccsidr,
+                     1<<(GETBITS(ccsidr, 0, 3)+2),
+                     GETBITS(ccsidr,3,10)+1,
+                     GETBITS(ccsidr,13,15)+1,
+                     GETBITS(ccsidr,28,1)? "WT " : "",
+                     GETBITS(ccsidr,29,1)? "WB " : "",
+                     GETBITS(ccsidr,30,1)? "RA " : "",
+                     GETBITS(ccsidr,31,1)? "WA " : "");
+      }
+      if(ctype == 1 || ctype == 3) {
+        /* CSSELR: Select current CCSIDR by Level and Type=1 (Instruction) */
+        ASM("MCR p15, #2, %0, c0, c0, #0"::"r"((i<<1)|1));
+        /* CCSIDR: Cache Size ID registers */
+        ASM("MRC p15, #1, %0, c0, c0, #0":"=r"(ccsidr));
+        printf_uart3("  L%d I: CCSIDR=%#x linesize=%d assoc=%d numsets=%d %s%s%s%s\n",
+                     i+1, ccsidr,
+                     1<<(GETBITS(ccsidr, 0, 3)+2),
+                     GETBITS(ccsidr,3,10)+1,
+                     GETBITS(ccsidr,13,15)+1,
+                     GETBITS(ccsidr,28,1)? "WT " : "",
+                     GETBITS(ccsidr,29,1)? "WB " : "",
+                     GETBITS(ccsidr,30,1)? "RA " : "",
+                     GETBITS(ccsidr,31,1)? "WA " : "");
+      }
+    }
+  }
 }
 
 void identify_device(void)

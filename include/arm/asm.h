@@ -80,6 +80,14 @@ static inline u32 count_leading_zeroes(u32 x)
   return n;
 }
 
+static inline u32 ceiling_log2(u32 x)
+{
+  u32 n = 31 - count_leading_zeroes(x);
+  if(n && (x & ~((~0) << n)) != 0)
+    n++;
+  return n;
+}
+
 /* See ARM Cortex-A8 Tech. Ref. Manual sections 3.2.42-53 */
 static inline u32 arm_read_cycle_counter(void)
 {

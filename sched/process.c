@@ -66,13 +66,29 @@ process_t *process_find(pid_t pid)
 status process_switch_to(process_t *p)
 {
 #ifdef USE_VMM
+  //Set TTBCR.PD0 = 1
+  //ISB
+  //Change ASID to new value
+  //Change Translation Table Base Register to new value
+  //ISB
+  //Set TTBCR.PD0 = 0
+
+  arm_mmu_ttbcr(MMU_TTBCR_PD0, MMU_TTBCR_PD0);
+
+  prefetch_flush();
+  arm_mmu_set_context_id(p->pid-1);
   vmm_activate_pagetable(&p->tables->elt);
   data_sync_barrier();
-  arm_mmu_set_context_id(p->pid - 1);
   prefetch_flush();
+  arm_cache_invl_instr();
+  arm_cache_invl_branch_pred_array();
+
+  arm_mmu_ttbcr(0, MMU_TTBCR_PD0);
 #endif
   return OK;
 }
+
+#define PT_ATTRS R_C | R_B, R_S
 
 status process_new(process_t **return_p)
 {
@@ -89,7 +105,7 @@ status process_new(process_t **return_p)
         DLOG(1, "process_new: physical_alloc_pages for pagetable failed.\n");
         return ENOSPACE;
       }
-      region_t rtmp = { pt.ptpaddr, NULL, &kernel_l2pt, 4, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+      region_t rtmp = { pt.ptpaddr, NULL, &kernel_l2pt, 4, PAGE_SIZE_LOG2, PT_ATTRS, R_PM };
       /* map to kernel virtual memory */
       if(vmm_map_region_find_vstart(&rtmp) != OK) {
         DLOG(1, "process_new: vmm_map_region_find_vstart for pagetable failed.\n");
@@ -122,7 +138,7 @@ status process_new(process_t **return_p)
         /* FIXME: clean-up previous resources */
         return ENOSPACE;
       }
-      region_t rtmp2 = { pt.ptpaddr, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+      region_t rtmp2 = { pt.ptpaddr, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, PT_ATTRS, R_PM };
       /* map to kernel virtual memory */
       if(vmm_map_region_find_vstart(&rtmp2) != OK) {
         DLOG(1, "process_new: vmm_map_region_find_vstart for pagetable failed.\n");
@@ -504,14 +520,18 @@ status program_load(void *pstart, process_t **return_p)
   rl->elt.pt = l2;
   rl->elt.page_count = pages;
   rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
+
   rl->elt.cache_buf = R_C | R_B; /* cached and buffered */
   rl->elt.shared_ng = R_NG;      /* not global */
+
   rl->elt.access = R_RW;         /* read-write user mode */
   region_append(&p->regions, rl);
   vmm_map_region(&rl->elt);
 
   process_switch_to(p);
   /* cheat, switch to process and use its mapping */
+
+  arm_cache_clean_invl_data();
 #endif
 
   u8 *dest, *src;
@@ -537,6 +557,8 @@ status program_load(void *pstart, process_t **return_p)
     dest[i] = 0;
 
   *return_p = p;
+
+  arm_cache_clean_invl_data();
 
   return OK;
 }

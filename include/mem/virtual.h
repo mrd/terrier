@@ -64,8 +64,8 @@ typedef struct {
   pagetable_t *pt;              /* pagetable managing this region */
   u32 page_count;               /* number of pages in this region */
   u16 page_size_log2;           /* size of pages in this region (log2) */
-#define R_C 1                   /* set "cached" bit */
-#define R_B 2                   /* set "buffered" bit */
+#define R_B 1                   /* set "buffered" bit */
+#define R_C 2                   /* set "cached" bit */
   u8 cache_buf:4;               /* cache/buffer attributes */
 #define R_S 1                   /* set "shared" bit */
 #define R_NG 2                  /* set "not-global" bit */

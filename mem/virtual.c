@@ -54,13 +54,38 @@ pagetable_t l1pt = { (void *) 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1
 ALIGNED(0x400, u32, kernel_l2table[256]);
 extern void *_kernel_l2table_phys, *_kernel_pages;
 pagetable_t kernel_l2pt = { (void *) 0xC0000000, (physaddr) &_kernel_l2table_phys, (u32 *) &kernel_l2table, &l1pt, PT_COARSE, 0 };
-region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages, 12, R_C | R_B, 0, R_PM };
+region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages, 12, 0, R_S, R_PM };
+
+/* ARMv7 Short-descriptor first-level Section entry */
+/* Section base physical address [20:31] */
+/* Non Secure [19:19] */
+/* Non Global [17:17] */
+/* Shared [16:16] */
+/* Access Permissions [10:11,15] */
+/* TEX [12:14] */
+/* Domain [5:8] */
+/* Execute-Never [4:4] */
+/* Cacheable [3:3] */
+/* Bufferable [2:2] */
+/* Type [1:1] = 1 */
+/* Privileged Execute-Never [0:0] */
+
+/* ARMv7 Short-descriptor second-level small page entry */
+/* Small page base physical address [12:31] */
+/* Non Global [11:11] */
+/* Shared [10:10] */
+/* Access Permissions [4:5,9] */
+/* TEX [6:8] */
+/* Cacheable [3:3] */
+/* Bufferable [2:2] */
+/* Type [1:1] = 1 */
+/* Execute-Never [0:0] */
 
 static u32 pt_sizes_log2[] = { 0, 14, 10 };                  /* size of pagetables */
 static u32 pt_start_masks[] = { 0, 0xFFFFFFFF, 0x000FFFFF }; /* valid pt virtual start */
 static u32 pt_entry_masks[] = { 0, 0x000FFFFF, 0x00000FFF }; /* valid region virtual start */
 static u32 pt_entry_sizes_log2[] = { 0, 20, 12 };            /* size that an entry covers */
-static u32 pt_type_bits[] = { 0, 0x12, 0x2 };                /* ARM-specific tag bits */
+static u32 pt_type_bits[] = { 0, 0x2, 0x2 };                 /* ARM-specific tag bits */
 static u32 pt_ap_offsets[] = { 0, 10, 4 };                   /* Access Perms. offset in entry */
 static u32 pt_ap_masks[] = { 0, 0x3, 0x3 };                  /* Access Perms. bitmask */
 static u32 pt_dom_offsets[] = { 0, 5, 0 };                   /* Domain offset in entry */
@@ -181,9 +206,15 @@ status vmm_activate_pagetable(pagetable_t *pt)
     current_base_table = pt;
     break;
   case PT_COARSE:
+    /* ARMv7 Short-descriptor first-level Page Table entry */
+    /* Page table base address [10:31] */
+    /* Domain [5:8] */
+    /* Non-Secure [3:3] */
+    /* Privileged Execute-Never [2:2] */
+    /* Type [0:1] = 0b01 */
     entry = pt->ptpaddr & 0xFFFFFC00;
     entry |= (pt->domain & 0xF) << 5;
-    entry |= 0x11;
+    entry |= 0x01;
     idx = (u32) pt->vstart >> 20;
     pt->parent_pt->ptvaddr[idx] = entry;
     break;

@@ -95,6 +95,7 @@ void NO_RETURN c_entry()
 
 #ifdef USE_VMM
   l1pt.ptvaddr[phystart >> 20] = 0; /* unmap stub after SMP init */
+  arm_cache_clean_invl_data();
   arm_mmu_flush_tlb();
 #endif
 

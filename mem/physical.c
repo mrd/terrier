@@ -80,6 +80,7 @@ physaddr physical_alloc_page(void)
         for(k=0;k<8;k++)
           if(!BITMAP_TST(bitmap[i].map, (j<<3) + k)) {
             BITMAP_SET(bitmap[i].map, (j<<3) + k);
+            DLOG(4, "physical_alloc_page: returning %#x\n", bitmap[i].start + (((j<<3) + k) << PAGE_SIZE_LOG2));
             return bitmap[i].start + (((j<<3) + k) << PAGE_SIZE_LOG2);
           }
   return 0;
@@ -137,6 +138,7 @@ status physical_alloc_pages(u32 n, u32 align, physaddr *start)
       BITMAP_SET(bitmap[m].map, (byt << 3) + bit);
       if(--count == 0) {
         *start = bitmap[saved_m].start + (((saved_byt << 3) + saved_bit) << PAGE_SIZE_LOG2);
+        DLOG(4, "physical_alloc_pages(%d, %d) returning %#x\n", n, align, *start);
         return OK;
       }
     }
@@ -234,6 +236,7 @@ void physical_init(void)
     for(i=0; i < (bitmap1_len >> PAGE_SIZE_LOG2); i++)
       BITMAP_SET(bitmap[0].map, i + (((u32) BITMAP_VIRTADDR + bitmap[0].map_bytes - (u32) bitmap[0].map) >> PAGE_SIZE_LOG2));
 
+  DLOG(1, "kp_start=%#x kern_pages=%#x kp_end=%#x\n", kp_start, kern_pages, kp_start + (kern_pages << PAGE_SIZE_LOG2));
   /* mark space used by kernel */
   for(i=0; i < kern_pages; i++)
     BITMAP_SET(bitmap[0].map, ((kp_start - bitmap[0].start) >> PAGE_SIZE_LOG2) + i);

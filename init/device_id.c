@@ -40,6 +40,7 @@
 #include "types.h"
 #include "omap/early_uart3.h"
 #include "arm/memory.h"
+#include "arm/asm.h"
 #include "mem/virtual.h"
 
 #ifdef USE_VMM
@@ -161,7 +162,7 @@ void cacheinfo(void)
                GETBITS(clidr, 24, 3),
                GETBITS(clidr, 21, 3));
   for(i=0;i<7;i++) {
-    u32 ctype = GETBITS(clidr,i*3,3), ccsidr;
+    u32 ctype = GETBITS(clidr,i*3,3), ccsidr, numsets, assocs;
     if(ctype) {
       printf_uart3("  L%d: %s\n", i+1, cache_type_desc[ctype]);
       if(ctype != 1) {
@@ -169,15 +170,27 @@ void cacheinfo(void)
         ASM("MCR p15, #2, %0, c0, c0, #0"::"r"((i<<1)|0));
         /* CCSIDR: Cache Size ID registers */
         ASM("MRC p15, #1, %0, c0, c0, #0":"=r"(ccsidr));
+        assocs = GETBITS(ccsidr,3,10)+1;
+        numsets = GETBITS(ccsidr,13,15)+1;
         printf_uart3("  L%d D: CCSIDR=%#x linesize=%d assoc=%d numsets=%d %s%s%s%s\n",
                      i+1, ccsidr,
-                     1<<(GETBITS(ccsidr, 0, 3)+2),
-                     GETBITS(ccsidr,3,10)+1,
-                     GETBITS(ccsidr,13,15)+1,
+                     1<<(GETBITS(ccsidr, 0, 3)+4), /* words -> bytes */
+                     assocs,
+                     numsets,
                      GETBITS(ccsidr,28,1)? "WT " : "",
                      GETBITS(ccsidr,29,1)? "WB " : "",
                      GETBITS(ccsidr,30,1)? "RA " : "",
                      GETBITS(ccsidr,31,1)? "WA " : "");
+        u32 A = ceiling_log2(assocs);
+        u32 S = ceiling_log2(numsets);
+        u32 L = GETBITS(ccsidr, 0, 3)+4;
+        u32 s, w;
+        for(w=0;w<assocs;w++) {
+          for(s=0;s<numsets;s++) {
+            u32 Rt = SETBITS(i,1,3) | SETBITS(s,L,S) | SETBITS(w,32-A,A);
+            ASM("MCR p15, #0, %0, c7, c14, #2"::"r"(Rt));
+          }
+        }
       }
       if(ctype == 1 || ctype == 3) {
         /* CSSELR: Select current CCSIDR by Level and Type=1 (Instruction) */
@@ -186,7 +199,7 @@ void cacheinfo(void)
         ASM("MRC p15, #1, %0, c0, c0, #0":"=r"(ccsidr));
         printf_uart3("  L%d I: CCSIDR=%#x linesize=%d assoc=%d numsets=%d %s%s%s%s\n",
                      i+1, ccsidr,
-                     1<<(GETBITS(ccsidr, 0, 3)+2),
+                     1<<(GETBITS(ccsidr, 0, 3)+4), /* words -> bytes */
                      GETBITS(ccsidr,3,10)+1,
                      GETBITS(ccsidr,13,15)+1,
                      GETBITS(ccsidr,28,1)? "WT " : "",

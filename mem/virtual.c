@@ -183,6 +183,8 @@ status vmm_map_region(region_t *r)
   entry |= (r->cache_buf & 3) << 2; /* cache/buf bits */
   entry |= (r->shared_ng & 3) << pt_sng_offsets[t]; /* shared/not-global */
 
+  arm_cache_clean_invl_data();
+
   for(i = r->page_count - 1; i >= 0; i--) {
     *ptr = entry + (i << pt_entry_sizes_log2[t]);
     /* The MMU is allowed to skip over caches when doing its
@@ -191,7 +193,10 @@ status vmm_map_region(region_t *r)
     arm_cache_clean_invl_data_mva_poc(ptr--);
   }
 
-  DLOG(4,"vmm_map_region: *** mapped %d pages: %#x ==> %#x\n", r->page_count, r->pstart, r->vstart);
+  arm_mmu_flush_tlb();
+
+  DLOG(4,"vmm_map_region: *** mapped %d pages: %#x ==> %#x (%#x)\n", r->page_count, r->pstart, r->vstart, entry);
+
   return OK;
 }
 
@@ -217,6 +222,8 @@ status vmm_activate_pagetable(pagetable_t *pt)
     entry |= 0x01;
     idx = (u32) pt->vstart >> 20;
     pt->parent_pt->ptvaddr[idx] = entry;
+    DLOG(4, "*** activate: ptpaddr=%#x ptvaddr=%#x idx=%#x entry=%#x\n", pt->parent_pt->ptpaddr, pt->parent_pt->ptvaddr, idx,
+         pt->parent_pt->ptvaddr[idx]);
     break;
   default:
     DLOG(1, "Pagetable has invalid type=%d\n", pt->type);
@@ -235,6 +242,9 @@ void vmm_init(void)
   vmm_map_region(&kernel_region);
   vmm_activate_pagetable(&kernel_l2pt);
   arm_mmu_flush_tlb();
+  u32 ttbcr;
+  ASM("MRC p15, 0, %0, c2, c0, 2":"=r"(ttbcr));
+  DLOG(1,"vmm_init: TTBCR=%#x\n", ttbcr);
 }
 
 status vmm_map_region_find_vstart(region_t *r)

@@ -107,11 +107,9 @@ static void NO_INLINE smp_aux_cpu_init()
   u32 mpidr, actlr;
   mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
 
-  /* test out LDREX/STREX */
-  ASM("MOV r1, #1\n1: DMB; LDREX r0,[%0]\nSTREX r0, r1, [%0]\nCMP r0, #0\nBNE 1b"::"r"(&stage):"r0","r1");
-  //stage = 1;
-  ASM("1: DMB; LDREX r0,[%0]; CMP r0, #1; BEQ 1b"::"r"(&stage):"r0");
-  //while(stage==1);
+  arm_cache_clean_invl_data();
+  stage = 1;
+  while(stage==1) arm_cache_clean_invl_data();
 
   mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
   DLOG(1,"HELLO WORLD from cpu%d!\n", GETBITS(mpidr,0,2));
@@ -122,7 +120,7 @@ static void NO_INLINE smp_aux_cpu_init()
   DLOG(1, "Stage %d\n", stage);
 
   stage=3;
-  while(stage==3);
+  while(stage==3) arm_cache_clean_invl_data();
 
   arm_aux_control(BIT(6), BIT(6)); /* set SMP */
   arm_ctrl(CTRL_DCACHE | CTRL_ICACHE, /* enable caches */
@@ -134,9 +132,6 @@ static void NO_INLINE smp_aux_cpu_init()
 
 #ifdef USE_VMM
   arm_mmu_flush_tlb();
-#else
-  arm_ctrl(CTRL_DCACHE | CTRL_ICACHE,
-           CTRL_DCACHE | CTRL_ICACHE);
 #endif
 
   void perfmon_init(void);
@@ -267,24 +262,24 @@ status smp_init(void)
 #endif
     AUX_CORE_BOOT[0] = ~0;                         /* toggle status flag */
 
+    arm_cache_clean_data(); /* stage system won't work without this flush */
     data_sync_barrier();
+
     ASM("SEV");                   /* set-event: wake up waiting CPUs */
 
-    //while(stage==0);
-
-    ASM("1: LDREX r0,[%0]; CMP r0, #0; BEQ 1b"::"r"(&stage):"r0");
+    while(stage==0) arm_cache_clean_invl_data();
 
     SCU->control |= 1;            /* enable SCU */
 
     DLOG(1, "Stage %d\n", stage);
     stage=2;
-    while(stage==2);
+    while(stage==2) arm_cache_clean_invl_data();
 
     arm_aux_control(BIT(6), BIT(6)); /* set SMP */
 
     DLOG(1, "Stage %d\n", stage);
     stage=4;
-    while(stage==4);
+    while(stage==4) arm_cache_clean_invl_data();
   }
 
   u32 scucfg = SCU->configuration;
@@ -297,6 +292,9 @@ status smp_init(void)
        GETBITS(scucfg, 7, 1) ? "cpu3 " : "");
 
   DLOG(1, "SCU power status=%#x\n", SCU->cpu_power_status);
+
+  /* ensure caches enabled */
+  arm_ctrl(CTRL_DCACHE | CTRL_ICACHE, CTRL_DCACHE | CTRL_ICACHE);
 
   return OK;
 }

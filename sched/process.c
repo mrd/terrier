@@ -79,6 +79,7 @@ status process_switch_to(process_t *p)
   arm_mmu_set_context_id(p->pid-1);
   vmm_activate_pagetable(&p->tables->elt);
   data_sync_barrier();
+
   prefetch_flush();
   arm_cache_invl_instr();
   arm_cache_invl_branch_pred_array();
@@ -112,6 +113,7 @@ status process_new(process_t **return_p)
         /* FIXME: clean-up previous resources */
         return ENOSPACE;
       }
+
       /* fill out remaining struct */
       pt.ptvaddr = rtmp.vstart;
       pt.parent_pt = &pt;       /* temp */
@@ -145,6 +147,7 @@ status process_new(process_t **return_p)
         /* FIXME: clean-up previous resources */
         return ENOSPACE;
       }
+
       /* fill out remaining struct */
       pt.ptvaddr = rtmp2.vstart;
       pt.parent_pt = l1;
@@ -529,9 +532,8 @@ status program_load(void *pstart, process_t **return_p)
   vmm_map_region(&rl->elt);
 
   process_switch_to(p);
-  /* cheat, switch to process and use its mapping */
 
-  arm_cache_clean_invl_data();
+  /* cheat, switch to process and use its mapping */
 #endif
 
   u8 *dest, *src;
@@ -558,6 +560,7 @@ status program_load(void *pstart, process_t **return_p)
 
   *return_p = p;
 
+  /* ensure programs are written to main memory */
   arm_cache_clean_invl_data();
 
   return OK;

@@ -54,7 +54,7 @@ pagetable_t l1pt = { (void *) 0x00000000, (physaddr) &_l1table_phys, (u32 *) &l1
 ALIGNED(0x400, u32, kernel_l2table[256]);
 extern void *_kernel_l2table_phys, *_kernel_pages;
 pagetable_t kernel_l2pt = { (void *) 0xC0000000, (physaddr) &_kernel_l2table_phys, (u32 *) &kernel_l2table, &l1pt, PT_COARSE, 0 };
-region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages, 12, 0, R_S, R_PM };
+region_t kernel_region = { 0x80000000, (void *) 0xC0000000, &kernel_l2pt, (u32) &_kernel_pages + 9, 12, R_C | R_B, R_S, R_PM };
 
 /* ARMv7 Short-descriptor first-level Section entry */
 /* Section base physical address [20:31] */

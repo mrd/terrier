@@ -284,6 +284,19 @@ status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
   return OK;
 }
 
+void vmm_dump_kernel_l2pt(u32 start, u32 end)
+{
+  u32 i, mod=0;
+  DLOG(1, "vmm_dump_kernel_l2pt(%#x, %#x):\n", start, end);
+  for(i=start;i<end;i++) {
+    if(mod == 0) printf_uart3("%x: ", i);
+    printf_uart3("%.08X ", kernel_l2pt.ptvaddr[i]);
+    mod++;
+    if(mod == 4) { printf_uart3("\n"); mod = 0; }
+  }
+  if(mod != 0) printf_uart3("\n");
+}
+
 POOL_DEFN(pagetable_list,pagetable_list_t,16,4);
 POOL_DEFN(region_list,region_list_t,16,4);
 #endif

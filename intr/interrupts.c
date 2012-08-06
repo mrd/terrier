@@ -624,11 +624,10 @@ void _handle_irq(void)
   u32 activeirq = IAR - 32;      /* shared peripheral IRQs start at 32 */
   if(IAR >= 32) {
 #endif
+    DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
     intc_mask_irq(activeirq);
     if (irq_table[activeirq])
       irq_table[activeirq](activeirq);
-    //    else
-      DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
 #ifdef OMAP3530
     intc->control = INTCPS_CONTROL_NEWIRQAGR;
 #endif

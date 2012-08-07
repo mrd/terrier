@@ -49,22 +49,31 @@ void stub_init(void)
   u32 *l1table_phys = (u32 *) &_l1table_phys;
   u32 phystart = (u32) &_physical_start, krnstart = (u32) &_kernel_start;
 
+  arm_ctrl(0, CTRL_DCACHE);
+  arm_ctrl(0, CTRL_ICACHE);
+
   arm_memset_log2(l1table_phys, 0, 14);
 
   /* Map stub as identity, and kernel virtual -> physical */
-  l1table_phys[phystart >> 20] = (phystart & 0xFFF00000) | 0xc1e;
-  l1table_phys[krnstart >> 20] = (phystart & 0xFFF00000) | 0xc1e;
-  
-  arm_mmu_flush_tlb();
+  l1table_phys[phystart >> 20] = (phystart & 0xFFF00000) | 0x412;
+  l1table_phys[krnstart >> 20] = (phystart & 0xFFF00000) | 0x412;
+
+  /* Clean/Invl before enabling caches */
+  arm_cache_clean_invl_data();
+  arm_ctrl(CTRL_DCACHE, CTRL_DCACHE); /* Enable Data Cache */
+
+  arm_cache_invl_instr();
+  arm_ctrl(CTRL_ICACHE, CTRL_ICACHE); /* Enable Instr Cache */
+
   arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
 
   /* Stub will remain mapped during early initialization. */
   arm_mmu_set_ttb0((physaddr) l1table_phys);
   arm_mmu_set_ttb1((physaddr) l1table_phys);
 
-  /* Enable MMU */
-  arm_ctrl(CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE
-          ,CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
+  arm_mmu_flush_tlb();
+  prefetch_flush();
+  arm_ctrl(CTRL_MMU, CTRL_MMU); /* Enable MMU */
 }
 
 #endif

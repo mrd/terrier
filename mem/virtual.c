@@ -183,7 +183,7 @@ status vmm_map_region(region_t *r)
   entry |= (r->cache_buf & 3) << 2; /* cache/buf bits */
   entry |= (r->shared_ng & 3) << pt_sng_offsets[t]; /* shared/not-global */
 
-  arm_cache_clean_invl_data();
+  arm_cache_clean_invl_data();  /* HACK */
 
   for(i = r->page_count - 1; i >= 0; i--) {
     *ptr = entry + (i << pt_entry_sizes_log2[t]);

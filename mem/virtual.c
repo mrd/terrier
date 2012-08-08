@@ -44,6 +44,7 @@
 #include "arm/memory.h"
 #include "arm/asm.h"
 #define MODULE "vmm"
+#include "omap/early_uart3.h"
 #include "debug/log.h"
 #include "debug/cassert.h"
 
@@ -183,8 +184,6 @@ status vmm_map_region(region_t *r)
   entry |= (r->cache_buf & 3) << 2; /* cache/buf bits */
   entry |= (r->shared_ng & 3) << pt_sng_offsets[t]; /* shared/not-global */
 
-  arm_cache_clean_invl_data();  /* HACK */
-
   for(i = r->page_count - 1; i >= 0; i--) {
     *ptr = entry + (i << pt_entry_sizes_log2[t]);
     /* The MMU is allowed to skip over caches when doing its
@@ -222,6 +221,9 @@ status vmm_activate_pagetable(pagetable_t *pt)
     entry |= 0x01;
     idx = (u32) pt->vstart >> 20;
     pt->parent_pt->ptvaddr[idx] = entry;
+    /* MMU may skip L1 cache when reading page tables */
+    arm_cache_clean_invl_data_mva_poc(&pt->parent_pt->ptvaddr[idx]);
+
     DLOG(4, "*** activate: ptpaddr=%#x ptvaddr=%#x idx=%#x entry=%#x\n", pt->parent_pt->ptpaddr, pt->parent_pt->ptvaddr, idx,
          pt->parent_pt->ptvaddr[idx]);
     break;

@@ -5,7 +5,7 @@ SECTIONS
 {
  PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x00000000));
  . = SEGMENT_START("text-segment", 0x00000000);
- .text : { *(.entry); _end_entry = .; *(.text) PROVIDE(_etext = .); }
+ .text : { *(.entry); _end_entry = .; *(.text*) PROVIDE(_etext = .); }
  .rodata : { *(.rodata) }
  .data : { *(.data) }
  .bss : { *(.bss) }

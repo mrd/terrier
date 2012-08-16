@@ -74,9 +74,9 @@ CASSERT(offsetof(struct scu, filtering_start_address) == 0x40, scu);
 CASSERT(offsetof(struct scu, non_secure_access_control) == 0x54, scu);
 
 static volatile struct scu *SCU;
-ALIGNED(32, static volatile u32, stage);
-ALIGNED(32, static volatile u32, curboot);
-ALIGNED(32, static u32, *newstack[5]);        /* hold stack addresses for secondary processor */
+ALIGNED(CACHE_LINE, static volatile u32, stage);
+ALIGNED(CACHE_LINE, static volatile u32, curboot);
+ALIGNED(CACHE_LINE, static u32, *newstack[5]);        /* hold stack addresses for secondary processor */
 u32 num_cpus;
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
@@ -123,6 +123,8 @@ static void NO_INLINE smp_aux_cpu_init()
   while(stage==3);
 
   arm_aux_control(BIT(6), BIT(6)); /* set SMP */
+  arm_cache_invl_data();
+  arm_cache_invl_instr();
   arm_ctrl(CTRL_DCACHE | CTRL_ICACHE, /* enable caches */
            CTRL_DCACHE | CTRL_ICACHE);
 
@@ -302,7 +304,7 @@ status smp_init(void)
 
 /* Per-CPU initialization */
 
-u32 *_per_cpu_spaces[MAX_CPUS];
+ALIGNED(CACHE_LINE,u32, *_per_cpu_spaces[MAX_CPUS]);
 
 status smp_init_invoke_percpu_constructors(void)
 {

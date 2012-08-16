@@ -118,7 +118,7 @@ userlib:
 .PHONY: clean test tags cscope
 
 clean:
-	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin ucmd ukermit program-map.ld
+	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin $(IMGNAME).map $(IMGNAME).bin.gz ucmd ukermit program-map.ld
 	rm -f $(OBJS) $(DFILES)
 	for p in $(PROGS); do make -C $$p clean; done
 	make -C userlib clean

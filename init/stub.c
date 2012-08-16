@@ -49,6 +49,7 @@ void stub_init(void)
   u32 *l1table_phys = (u32 *) &_l1table_phys;
   u32 phystart = (u32) &_physical_start, krnstart = (u32) &_kernel_start;
 
+  /* disable caches */
   arm_ctrl(0, CTRL_DCACHE);
   arm_ctrl(0, CTRL_ICACHE);
 
@@ -58,12 +59,9 @@ void stub_init(void)
   l1table_phys[phystart >> 20] = (phystart & 0xFFF00000) | 0x412;
   l1table_phys[krnstart >> 20] = (phystart & 0xFFF00000) | 0x412;
 
-  /* Clean/Invl before enabling caches */
+  /* Clean/Invl caches; leave disabled */
   arm_cache_clean_invl_data();
-  arm_ctrl(CTRL_DCACHE, CTRL_DCACHE); /* Enable Data Cache */
-
   arm_cache_invl_instr();
-  arm_ctrl(CTRL_ICACHE, CTRL_ICACHE); /* Enable Instr Cache */
 
   arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
 

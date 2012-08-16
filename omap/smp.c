@@ -74,8 +74,9 @@ CASSERT(offsetof(struct scu, filtering_start_address) == 0x40, scu);
 CASSERT(offsetof(struct scu, non_secure_access_control) == 0x54, scu);
 
 static volatile struct scu *SCU;
-static volatile u32 stage, curboot;
-static u32 *newstack[5];        /* hold stack addresses for secondary processor */
+ALIGNED(32, static volatile u32, stage);
+ALIGNED(32, static volatile u32, curboot);
+ALIGNED(32, static u32, *newstack[5]);        /* hold stack addresses for secondary processor */
 u32 num_cpus;
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
@@ -107,9 +108,8 @@ static void NO_INLINE smp_aux_cpu_init()
   u32 mpidr, actlr;
   mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
 
-  arm_cache_clean_invl_data();
   stage = 1;
-  while(stage==1) arm_cache_clean_invl_data();
+  while(stage==1);
 
   mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
   DLOG(1,"HELLO WORLD from cpu%d!\n", GETBITS(mpidr,0,2));
@@ -120,13 +120,14 @@ static void NO_INLINE smp_aux_cpu_init()
   DLOG(1, "Stage %d\n", stage);
 
   stage=3;
-  while(stage==3) arm_cache_clean_invl_data();
+  while(stage==3);
 
   arm_aux_control(BIT(6), BIT(6)); /* set SMP */
   arm_ctrl(CTRL_DCACHE | CTRL_ICACHE, /* enable caches */
            CTRL_DCACHE | CTRL_ICACHE);
 
-  stage=5;
+  arm_cache_invl_data_mva_poc((void *) &stage);
+  stage=5; arm_cache_clean_invl_data_mva_poc((void *) &stage);
 
   /* complete remaining init asynchronously */
 
@@ -159,7 +160,6 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
       "CMP r0,%0\n"
       "WFENE\n"
       "BNE 1b"::"r"(curboot));
-
   data_sync_barrier();
 
   /* Be strict about register usage and asm output here; the C
@@ -193,16 +193,18 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
 }
 
 #ifdef USE_VMM
+/* Quick stub for beginning of the world when using VMM */
 static void NAKED NO_RETURN smp_aux_vmm_entry_point(void)
 {
-  arm_mmu_flush_tlb();
+  arm_ctrl(0, CTRL_DCACHE | CTRL_ICACHE); /* disable caches */
+
   arm_mmu_domain_access_ctrl(~0, ~0); /* set all domains = MANAGER */
   arm_mmu_set_ttb0((physaddr) &_l1table_phys);
   arm_mmu_set_ttb1((physaddr) &_l1table_phys);
 
   /* Enable MMU */
-  arm_ctrl(CTRL_MMU // | CTRL_DCACHE | CTRL_ICACHE
-          ,CTRL_MMU | CTRL_DCACHE | CTRL_ICACHE);
+  arm_ctrl(CTRL_MMU, CTRL_MMU);
+  arm_mmu_flush_tlb();
 
   /* jump to high memory */
   ASM("MOV pc, %0"::"r"(smp_aux_entry_point));
@@ -218,6 +220,7 @@ status smp_init(void)
 
   /* Snoop Control Unit registers come first in PERIPHBASE map. */
   SCU = (void *) arm_config_base_address();
+  DLOG(1, "ARM config base addr=%#x\n", SCU);
 
   /* find number of CPUs */
   num_cpus = GETBITS(SCU->configuration, 0, 2) + 1;
@@ -257,29 +260,30 @@ status smp_init(void)
       DLOG(1, "Unable to get physical address of smp_aux_vmm_entry_point.\n");
       return EINVALID;
     }
+    DLOG(1, "Setting AUX_CORE_BOOT[1]=%#x\n", AUX_CORE_BOOT[1]);
 #else
     AUX_CORE_BOOT[1] = (u32) &smp_aux_entry_point; /* physical address of starting point */
 #endif
     AUX_CORE_BOOT[0] = ~0;                         /* toggle status flag */
 
-    arm_cache_clean_data(); /* stage system won't work without this flush */
     data_sync_barrier();
 
-    ASM("SEV");                   /* set-event: wake up waiting CPUs */
+    /* set-event: wake up waiting CPUs */
+    ASM("SEV");
 
-    while(stage==0) arm_cache_clean_invl_data();
+    while(stage==0);
 
     SCU->control |= 1;            /* enable SCU */
 
     DLOG(1, "Stage %d\n", stage);
     stage=2;
-    while(stage==2) arm_cache_clean_invl_data();
+    while(stage==2);
 
     arm_aux_control(BIT(6), BIT(6)); /* set SMP */
 
     DLOG(1, "Stage %d\n", stage);
     stage=4;
-    while(stage==4) arm_cache_clean_invl_data();
+    while(stage==4);
   }
 
   u32 scucfg = SCU->configuration;
@@ -292,9 +296,6 @@ status smp_init(void)
        GETBITS(scucfg, 7, 1) ? "cpu3 " : "");
 
   DLOG(1, "SCU power status=%#x\n", SCU->cpu_power_status);
-
-  /* ensure caches enabled */
-  arm_ctrl(CTRL_DCACHE | CTRL_ICACHE, CTRL_DCACHE | CTRL_ICACHE);
 
   return OK;
 }

@@ -316,7 +316,6 @@ status smp_init_invoke_percpu_constructors(void)
 status smp_init_per_cpu_spaces(void)
 {
   u32 i,j,num_pages;
-  extern u32 _percpu_pages_plus_one;
   physaddr pstart;
 
   /* gcc's optimizer doesn't believe a symbol's address can be zero;

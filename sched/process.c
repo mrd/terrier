@@ -379,14 +379,14 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
     case R_ARM_ABS32:           /* Absolute 32-bit relocation */
       A = *ptr;
       *ptr = S + A;
-      DLOG(1, "A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      DLOG_NO_PREFIX(1, "ABS32: A=%#x S=%#x result=%#x\n", A, S, *ptr);
       break;
     case R_ARM_CALL:            /* branch with link instruction */
       P = textbase + off;
       A = (*ptr << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
       *ptr &= 0xFF000000;
       *ptr |= ((S + A - P) & 0x00FFFFFF) >> 2; /* re-encode */
-      DLOG(1, "A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
+      DLOG_NO_PREFIX(1, "CALL: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
       break;
     case R_ARM_MOVT_ABS:        /* mov TOP */
       S >>= 16;
@@ -398,10 +398,10 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
       u32 t = S + A;
       /* re-encode instruction */
       *ptr = (ins & 0xFFF00000) | ((t & 0xF000) << 4) | (ins & 0x0000F000) | (t & 0xFFF);
-      DLOG(1, "A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      DLOG_NO_PREFIX(1, "MOVT/MOVW: A=%#x S=%#x result=%#x\n", A, S, *ptr);
       break;
     default:
-      DLOG(1, "Unknown relocation type.\n");
+      DLOG_NO_PREFIX(1, "Unknown relocation type.\n");
       break;
     }
   }

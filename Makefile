@@ -101,7 +101,7 @@ $(IMGNAME).bin: $(IMGNAME).elf
 	$(OBJCOPY) -O binary $< $@
 
 $(IMGNAME).elf: $(OBJS) $(LDSCRIPT) program-map.ld
-	$(LD) -T $(LDSCRIPT) $(OBJS) $(POBJS) $(LIBGCC) -o $@
+	$(LD) -M -T $(LDSCRIPT) $(OBJS) $(POBJS) $(LIBGCC) -o $@ > $(IMGNAME).map
 
 program-map.ld: buildprograms
 	$(NM) $(POBJS) | egrep "_binary_.*_start" | awk -- '{ printf "LONG(%s);\n", $$3 }' > $@

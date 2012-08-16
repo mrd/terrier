@@ -4,6 +4,7 @@
 *.bin
 *.elf
 *.uimg
+*.map
 ucmd
 ukermit
 bb_nandflash_ecc

@@ -55,8 +55,6 @@ SECTIONS
  _physical_start = .;
  _kernel_start = .;
 
- /* The virtual address is taken from the counter, but the physical
-  * address must be specified with AT. */
 
  .text : { init/startup.o(.text) *(.text) }
  .rodata : AT ( LOADADDR (.text) + SIZEOF (.text) ) {
@@ -98,7 +96,7 @@ SECTIONS
  und_stack_top = .;
 
  _kernel_end = ALIGN(0x1000);
-
+ _physical_end = _kernel_end;
  _kernel_pages = 1 + ((_kernel_end - _kernel_start) / 0x1000);
  _kernel_readonly_pages = (_kernel_readonly_end - _kernel_start) / 0x1000;
  _kernel_readwrite_pages = (_kernel_end - _kernel_readonly_end) / 0x1000;

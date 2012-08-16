@@ -142,6 +142,7 @@ static inline void arm_mmu_set_ttb0(physaddr ttbp)
 {
   u32 ttb = (u32) ttbp;
   ttb &= 0xffffc000;
+  ttb |= 0x18;
   ASM("MCR p15, #0, %0, c2, c0, #0"::"r"(ttb));
 }
 
@@ -158,6 +159,7 @@ static inline void arm_mmu_set_ttb1(physaddr ttbp)
 {
   u32 ttb = (u32) ttbp;
   ttb &= 0xffffc000;
+  ttb |= 0x18;
   ASM("MCR p15, #0, %0, c2, c0, #1"::"r"(ttb));
 }
 

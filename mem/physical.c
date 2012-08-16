@@ -93,6 +93,7 @@ status physical_alloc_pages(u32 n, u32 align, physaddr *start)
   int m = 0, byt = 0, bit = 0, count = n, mode = 0;
   int saved_m = 0, saved_byt = 0, saved_bit = 0;
 
+  if(n == 0) return EINVALID;
   if(align == 0) align = 1;
 
   /* Modes: 0=search; 1=mark */

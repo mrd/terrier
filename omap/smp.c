@@ -315,16 +315,18 @@ status smp_init_invoke_percpu_constructors(void)
 
 status smp_init_per_cpu_spaces(void)
 {
-  u32 i,j;
+  u32 i,j,num_pages;
   extern u32 _percpu_pages_plus_one;
   physaddr pstart;
 
   /* gcc's optimizer doesn't believe a symbol's address can be zero;
-   * an if-statement trying to test (num_pages == 0) will end up being
+   * an if-statement trying to test (&_percpu_pages == 0) will end up being
    * elided by the compiler. */
-  if((u32) &_percpu_pages_plus_one == 1) return OK;
+  ASM("MOVW %0, #:lower16:_percpu_pages_plus_one\n" "MOVT %0, #:upper16:_percpu_pages_plus_one":"=r" (num_pages));
+  num_pages--;
 
-  u32 num_pages = ((u32) &_percpu_pages_plus_one) - 1;
+  DLOG(1, "smp_init_per_cpu_spaces: num_pages=%d\n", num_pages);
+  if(num_pages == 0) return OK;
 
   for(i=0;i<num_cpus;i++) {
     if(physical_alloc_pages(num_pages, 1, &pstart) != OK) {

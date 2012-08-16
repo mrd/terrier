@@ -44,10 +44,13 @@
 
 #ifdef MODULE
 #define DLOG(lvl,fmt,...) debuglog(MODULE,lvl,fmt,##__VA_ARGS__)
+#define DLOG_NO_PREFIX(lvl,fmt,...) debuglog_no_prefix(lvl,fmt,##__VA_ARGS__)
+#define DLOG_DUMP(lvl,start,end) debuglog_dump(MODULE,lvl,start,end)
 #endif
 
 void debuglog(const char *src, int lvl, const char *fmt, ...);
 void debuglog_no_prefix(int lvl, const char *fmt, ...);
+void debuglog_dump(const char *src, int lvl, u32* start, u32* end);
 
 #endif
 

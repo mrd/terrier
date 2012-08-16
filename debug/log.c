@@ -276,6 +276,19 @@ void debuglog_no_prefix(int lvl, const char *fmt, ...)
   }
 }
 
+void debuglog_dump(const char *src, int lvl, u32* start, u32* end)
+{
+  u32 *ptr, mod=0;
+  debuglog(src, lvl, "debuglog_dump(%#x, %#x):\n", start, end);
+  for(ptr=start;ptr<end;ptr++) {
+    if(mod == 0) debuglog_no_prefix(lvl, "%.08x: ", ptr);
+    debuglog_no_prefix(lvl, "%.08X ", *ptr);
+    mod++;
+    if(mod == 4) { debuglog_no_prefix(lvl, "\n"); mod = 0; }
+  }
+  if(mod != 0) debuglog_no_prefix(lvl, "\n");
+}
+
 /*
  * Local Variables:
  * indent-tabs-mode: nil

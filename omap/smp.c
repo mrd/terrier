@@ -109,7 +109,7 @@ static inline void smp_dump_coherency_state(void)
   u32 auxc; ASM("MRC p15, #0, %0, c1, c0, #1":"=r"(auxc));
   DLOG(1, "*** CTRL=%#x AUXCTRL=%#x SCUCTRL=%#x\n", ctrl, auxc, scuc);
   DLOG(1, "*** MMU=%d SMP=%d FW=%d SCUenabled=%d Dcache=%d Icache=%d\n",
-       !!(ctrl & CTRL_MMU), !!(auxc & BIT(6)), !!(auxc & BIT(0)), !!(scuc & 1),
+       !!(ctrl & CTRL_MMU), !!(auxc & ACTLR_SMP), !!(auxc & ACTLR_FW), !!(scuc & 1),
        !!(ctrl & CTRL_DCACHE), !!(ctrl & CTRL_ICACHE));
 }
 
@@ -134,7 +134,7 @@ static void NO_INLINE smp_aux_cpu_init()
   stage=3;
   while(stage==3);
 
-  arm_aux_control(BIT(6), BIT(6)); /* set SMP */
+  arm_aux_control(ACTLR_SMP | ACTLR_FW, ACTLR_SMP | ACTLR_FW); /* set SMP|FW */
 
   stage=5;
 
@@ -307,7 +307,7 @@ status smp_init(void)
     stage=2;
     while(stage==2);
 
-    arm_aux_control(BIT(6), BIT(6)); /* set SMP */
+    arm_aux_control(ACTLR_SMP | ACTLR_FW, ACTLR_SMP | ACTLR_FW); /* set SMP|FW */
 
     DLOG(1, "Stage %d\n", stage);
     stage=4;

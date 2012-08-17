@@ -135,6 +135,8 @@ static inline u32 arm_multiprocessor_affinity(void)
 }
 
 /* 4.3.10 Aux Control Register (ACTLR) */
+#define ACTLR_FW  BIT(0)
+#define ACTLR_SMP BIT(6)
 static inline u32 arm_aux_control(u32 set, u32 mask)
 {
   u32 r;

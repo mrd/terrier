@@ -56,6 +56,14 @@ static inline void _primitive_putc(const char c)
   register u32 r;
   ASM("1: ldrb %0, [%1, #20]\n" "tst %0, #64\n" "beq 1b\n" "strb %2, [%1]":"=r" (r):"r" (0x48020000),"r" (c));
 }
+
+static inline void printf_uart3_regs(u32 regs[16])
+{
+  printf_uart3(" r0: %#.08x  r1: %#.08x  r2: %#.08x  r3: %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
+  printf_uart3(" r4: %#.08x  r5: %#.08x  r6: %#.08x  r7: %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
+  printf_uart3(" r8: %#.08x  r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
+  printf_uart3("r12: %#.08x r13: %#.08x r14: %#.08x r15: %#.08x\n", regs[12], regs[13], regs[14], regs[15]);
+}
 #endif
 
 #endif

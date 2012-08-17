@@ -42,6 +42,8 @@
 #include "types.h"
 #include "status.h"
 #include "arm/smp/per-cpu.h"
+#include "arm/asm.h"
+#include "arm/memory.h"
 
 typedef struct { u32 flag; } spinlock_t;
 #define SPINLOCK_INIT { 0 }
@@ -53,6 +55,7 @@ static inline status spinlock_lock(spinlock_t *lock)
   u32 i = cpu_index() + 1, j;
   while ((j = __sync_val_compare_and_swap(&lock->flag, 0, i))) {
     if(j == i) {
+      DO_WITH_REGS(regs) { printf_uart3_regs(regs); } END_WITH_REGS;
       printf_uart3("cpu%d: lock=%#x held_by=%d\n", cpu_index(), lock, j - 1);
       early_panic("recursive spin lock");
     }

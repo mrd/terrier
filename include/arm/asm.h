@@ -145,7 +145,6 @@ static inline u32 arm_aux_control(u32 set, u32 mask)
   return r;
 }
 
-
 static inline int strcmp(const char *s1, const char *s2)
 {
   /* FIXME: implement optimized assembly version */
@@ -155,6 +154,12 @@ static inline int strcmp(const char *s1, const char *s2)
       return s1[i] - s2[i];
   return s1[i] - s2[i];
 }
+
+/* put registers into a stack allocated array for inspection */
+#define DO_WITH_REGS(regs) do {                                         \
+  u32 *regs;                                                            \
+  ASM("STMDB r13, {r0-r15}\nSUB r13, r13, #64\nMOV %0, r13":"=r"(regs));
+#define END_WITH_REGS ASM("ADD r13, r13, #64"); } while(0)
 
 #endif
 

@@ -102,16 +102,28 @@ static void *alloc_stack(void)
 #endif
 }
 
+static inline void smp_dump_coherency_state(void)
+{
+  u32 scuc = SCU->control;
+  u32 ctrl; ASM("MRC p15, #0, %0, c1, c0, #0":"=r"(ctrl));
+  u32 auxc; ASM("MRC p15, #0, %0, c1, c0, #1":"=r"(auxc));
+  DLOG(1, "*** CTRL=%#x AUXCTRL=%#x SCUCTRL=%#x\n", ctrl, auxc, scuc);
+  DLOG(1, "*** MMU=%d SMP=%d FW=%d SCUenabled=%d Dcache=%d Icache=%d\n",
+       !!(ctrl & CTRL_MMU), !!(auxc & BIT(6)), !!(auxc & BIT(0)), !!(scuc & 1),
+       !!(ctrl & CTRL_DCACHE), !!(ctrl & CTRL_ICACHE));
+}
+
 /* First real function for auxiliary CPUs. */
 static void NO_INLINE smp_aux_cpu_init()
 {
   u32 mpidr, actlr;
-  mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
+  mpidr = arm_multiprocessor_affinity();
+  ASM("MRC p15, #0, %0, c1, c0, #1":"=r"(actlr));
 
   stage = 1;
   while(stage==1);
 
-  mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0);
+  mpidr = arm_multiprocessor_affinity();
   DLOG(1,"HELLO WORLD from cpu%d!\n", GETBITS(mpidr,0,2));
   DLOG(1,"MPIDR=%#x %s cpuid=%d\n", mpidr,
        GETBITS(mpidr,30,1) ?"(uniprocessor)" : "(mpcore)",
@@ -123,13 +135,17 @@ static void NO_INLINE smp_aux_cpu_init()
   while(stage==3);
 
   arm_aux_control(BIT(6), BIT(6)); /* set SMP */
+
+  stage=5;
+
   arm_cache_invl_data();
   arm_cache_invl_instr();
   arm_ctrl(CTRL_DCACHE | CTRL_ICACHE, /* enable caches */
            CTRL_DCACHE | CTRL_ICACHE);
 
-  arm_cache_invl_data_mva_poc((void *) &stage);
-  stage=5; arm_cache_clean_invl_data_mva_poc((void *) &stage);
+  /* wait for all caches to be enabled */
+  while(stage != 6)
+    arm_cache_invl_data_mva_poc((void *) &stage);
 
   /* complete remaining init asynchronously */
 
@@ -146,7 +162,16 @@ static void NO_INLINE smp_aux_cpu_init()
   smp_init_invoke_percpu_constructors();
   arm_mmu_ttbcr(SETBITS(2,0,3), MMU_TTBCR_N | MMU_TTBCR_PD0 | MMU_TTBCR_PD1);
 
+  smp_dump_coherency_state();
+  DLOG(1,"continuing initialization...\n");
+
   /* ... */
+  for(;;) {
+    /* stupid little loop to show the aux cpu is alive and kicking occasionally */
+    ASM("MOVW r0, 0xFFFF\nMOVT r0,0x8F\n1: SUB r0, r0, #1\nCMP r0, #0\nBNE 1b":::"r0");
+    DLOG(1,"***beep beep beep beep beep beep beep beep beep beep beep beep beep beep***\n");
+    smp_dump_coherency_state();
+  }
 }
 
 extern void *_l1table_phys;
@@ -217,8 +242,9 @@ static void NAKED NO_RETURN smp_aux_vmm_entry_point(void)
 
 status smp_init(void)
 {
-  u32 mpidr = arm_multiprocessor_affinity(), actlr = arm_aux_control(0, ~0), i, j;
+  u32 mpidr = arm_multiprocessor_affinity(), actlr, i, j;
   DLOG(1,"init\n");
+  ASM("MRC p15, #0, %0, c1, c0, #1":"=r"(actlr));
 
   /* Snoop Control Unit registers come first in PERIPHBASE map. */
   SCU = (void *) arm_config_base_address();
@@ -288,6 +314,8 @@ status smp_init(void)
     while(stage==4);
   }
 
+  smp_dump_coherency_state();
+
   u32 scucfg = SCU->configuration;
   DLOG(1, "Booted all %d processors\n", num_cpus);
   DLOG(1, "SCU control=%#x config=%#x num_cpus=%d\n", SCU->control, scucfg, num_cpus);
@@ -298,6 +326,16 @@ status smp_init(void)
        GETBITS(scucfg, 7, 1) ? "cpu3 " : "");
 
   DLOG(1, "SCU power status=%#x\n", SCU->cpu_power_status);
+
+  arm_cache_invl_data();
+  arm_ctrl(CTRL_DCACHE, CTRL_DCACHE); /* Enable Data Cache */
+
+  arm_cache_invl_instr();
+  arm_ctrl(CTRL_ICACHE, CTRL_ICACHE); /* Enable Instr Cache */
+
+  smp_dump_coherency_state();
+  /* tell waiting processors that caches are all enabled */
+  stage = 6; arm_cache_clean_data_mva_poc((void *) &stage);
 
   return OK;
 }

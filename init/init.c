@@ -90,14 +90,15 @@ void NO_RETURN c_entry()
 #endif
 
 #ifdef OMAP4460
+#ifndef NO_SMP
   smp_init();
-
-  /* Now, ensure caches enabled */
-  arm_cache_clean_invl_data();
+#else
+  arm_cache_invl_data();
   arm_ctrl(CTRL_DCACHE, CTRL_DCACHE); /* Enable Data Cache */
 
   arm_cache_invl_instr();
   arm_ctrl(CTRL_ICACHE, CTRL_ICACHE); /* Enable Instr Cache */
+#endif
 #endif
 
 #ifdef USE_VMM

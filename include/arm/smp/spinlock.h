@@ -45,9 +45,9 @@
 #include "arm/asm.h"
 #include "arm/memory.h"
 
-typedef struct { u32 flag; } spinlock_t;
+typedef PACKED_STRUCT(spinlock) { PACKED_FIELD(u32, flag); PACKED_FIELD(u32, _pad[7]); } PACKED_END spinlock_t;
 #define SPINLOCK_INIT { 0 }
-#define DEFSPINLOCK(x) spinlock_t x = SPINLOCK_INIT;
+#define DEFSPINLOCK(x) ALIGNED(CACHE_LINE, spinlock_t, x) = SPINLOCK_INIT;
 
 static inline status spinlock_lock(spinlock_t *lock)
 {

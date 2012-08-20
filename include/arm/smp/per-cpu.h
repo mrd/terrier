@@ -56,6 +56,8 @@
 /* Define a per-CPU variable */
 #define DEF_PER_CPU(type,var) \
   CASSERT(sizeof(type)==4,_per_cpu_var_size_must_be_4); PER_CPU_ATTR type var
+#define DEF_PER_CPU_EXTERN(type,var) \
+  CASSERT(sizeof(type)==4,_per_cpu_var_size_must_be_4); PER_CPU_ATTR extern type var
 
 /* Define an initialization function for a per-CPU variable */
 #define INIT_PER_CPU(var)                               \
@@ -69,9 +71,9 @@ extern u32 *_per_cpu_spaces[];
 #define cpu_index() GETBITS(arm_multiprocessor_affinity(),0,2)
 
 /* read/write macros */
-#define cpu_read(x) (_per_cpu_spaces[cpu_index()][((u32) &x)>>2])
-#define cpu_write(x,v) _per_cpu_spaces[cpu_index()][((u32) &x)>>2] = v
-#define cpu_pointer(n,x) (&_per_cpu_spaces[n][((u32) &x)>>2])
+#define cpu_pointer(type,n,x) ((type *) (&_per_cpu_spaces[n][((u32) &x)>>2]))
+#define cpu_read(type,x) (*(cpu_pointer(type,cpu_index(),x)))
+#define cpu_write(type,x,v) (*(cpu_pointer(type,cpu_index(),x))) = v
 
 status per_cpu_init(void);
 

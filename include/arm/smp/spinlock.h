@@ -44,6 +44,7 @@
 #include "arm/smp/per-cpu.h"
 #include "arm/asm.h"
 #include "arm/memory.h"
+#include "omap/early_uart3.h"
 
 typedef PACKED_STRUCT(spinlock) { PACKED_FIELD(u32, flag); PACKED_FIELD(u32, _pad[7]); } PACKED_END spinlock_t;
 #define SPINLOCK_INIT { 0 }

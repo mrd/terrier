@@ -90,9 +90,9 @@ void NO_RETURN c_entry()
 #endif
 
 #ifdef OMAP4460
-#ifndef NO_SMP
   smp_init();
-#else
+
+#ifdef NO_SMP
   arm_cache_invl_data();
   arm_ctrl(CTRL_DCACHE, CTRL_DCACHE); /* Enable Data Cache */
 

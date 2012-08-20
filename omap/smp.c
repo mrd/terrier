@@ -55,7 +55,9 @@
 #ifdef OMAP4460
 
 /* 4.4.9 TRM OMAP4460: Wake-up generator registers */
+#ifndef NO_SMP
 static u32 *AUX_CORE_BOOT = (void *) 0x48281800;
+#endif
 
 /* 2.2 Cortex-A9 MPCore: SCU Registers */
 PACKED_STRUCT(scu) {
@@ -81,6 +83,7 @@ u32 num_cpus;
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
 
+#ifndef NO_SMP
 static void *alloc_stack(void)
 {
   physaddr pstart;
@@ -101,6 +104,7 @@ static void *alloc_stack(void)
   return (void *) pstart;
 #endif
 }
+#endif
 
 static inline void smp_dump_coherency_state(void)
 {
@@ -239,10 +243,12 @@ static void NAKED NO_RETURN smp_aux_vmm_entry_point(void)
 #endif
 
 /* See also 5.3.4 Cortex-A9 MPCore: Multiprocessor bring-up */
-
 status smp_init(void)
 {
-  u32 mpidr = arm_multiprocessor_affinity(), actlr, i, j;
+#ifndef NO_SMP
+  u32 mpidr = arm_multiprocessor_affinity(), i, j;
+#endif
+  u32 actlr;
   DLOG(1,"init\n");
   ASM("MRC p15, #0, %0, c1, c0, #1":"=r"(actlr));
 
@@ -260,6 +266,7 @@ status smp_init(void)
   if(smp_init_per_cpu_spaces() != OK) return ENOSPACE;
   smp_init_invoke_percpu_constructors();
 
+#ifndef NO_SMP
   SCU->invalidate_all_registers_in_secure_state = ~0; /* invalidate tag RAM */
 
   DLOG(1, "MPIDR=%#x %s cpuid=%d\n", mpidr,
@@ -336,7 +343,7 @@ status smp_init(void)
   smp_dump_coherency_state();
   /* tell waiting processors that caches are all enabled */
   stage = 6; arm_cache_clean_data_mva_poc((void *) &stage);
-
+#endif
   return OK;
 }
 
@@ -373,8 +380,8 @@ status smp_init_per_cpu_spaces(void)
       return ENOSPACE;
     }
 
-#ifdef VMM
-    region_t rtmp = { pstart, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
+#ifdef USE_VMM
+    region_t rtmp = { pstart, NULL, &kernel_l2pt, num_pages, PAGE_SIZE_LOG2, R_C | R_B, 0, R_PM };
     if(vmm_map_region_find_vstart(&rtmp) != OK) {
       DLOG(1, "smp_init_per_cpu_spaces: vmm_map_region_find_vstart failed.\n");
       /* FIXME: clean-up previous resources */
@@ -384,9 +391,9 @@ status smp_init_per_cpu_spaces(void)
 #else
     _per_cpu_spaces[i] = (u32 *) pstart;
 #endif
-    DLOG(1, "smp_init_per_cpu_spaces: cpu=%d space=%#x\n", i, _per_cpu_spaces[i]);
+    DLOG(1, "smp_init_per_cpu_spaces: cpu=%d space=%#x num_pages=%d\n", i, _per_cpu_spaces[i], num_pages);
 
-    for(j=0;j<(num_pages << PAGE_SIZE_LOG2);j++)
+    for(j=0;j<(num_pages << (PAGE_SIZE_LOG2 - 2));j++)
       _per_cpu_spaces[i][j] = 0;
   }
 

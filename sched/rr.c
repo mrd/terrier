@@ -42,6 +42,8 @@
 #include "mem/physical.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
+#include "arm/smp/spinlock.h"
+#include "arm/smp/per-cpu.h"
 #include "omap/timer.h"
 #include "sched/process.h"
 #include "intr/interrupts.h"
@@ -51,8 +53,15 @@
 #define QUANTUM (1<<12)
 
 static pid_t runq_head;
-process_t *current;
-context_t *_next_context, *_prev_context;
+
+DEF_PER_CPU(process_t *, current);
+INIT_PER_CPU(current) { cpu_write(process_t *, current, NULL); }
+DEF_PER_CPU(context_t *, _next_context);
+INIT_PER_CPU(_next_context) { cpu_write(process_t *, _next_context, NULL); }
+DEF_PER_CPU(context_t *, _prev_context);
+INIT_PER_CPU(_prev_context) { cpu_write(process_t *, _prev_context, NULL); }
+
+static DEFSPINLOCK(rrlock);
 
 static status waitqueue_append(pid_t *q, process_t *p)
 {
@@ -88,10 +97,10 @@ void schedule(void)
   if(p == NULL) {
     /* go idle */
   } else {
-    _prev_context = &current->ctxt;
-    current = p;
+    cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
+    cpu_write(process_t *, current, p);
     process_switch_to(p);
-    _next_context = &p->ctxt;
+    cpu_write(context_t *, _next_context, &p->ctxt);
     DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
   }
 }
@@ -111,8 +120,10 @@ static void sched_timer_handler(u32 activeirq)
   timer_gp_set(1, -QUANTUM);
   intc_unmask_irq(activeirq);
 
-  waitqueue_append(&runq_head, current);
+  spinlock_lock(&rrlock);
+  waitqueue_append(&runq_head, cpu_read(process_t *, current));
   schedule();
+  spinlock_unlock(&rrlock);
 }
 
 void sched_init(void)
@@ -123,8 +134,6 @@ void sched_init(void)
   timer_gp_enable_overflow_interrupt(1);
   timer_gp_start(1);
   runq_head = NOPID;
-  current = NULL;
-  _next_context = _prev_context = NULL;
 }
 
 /*

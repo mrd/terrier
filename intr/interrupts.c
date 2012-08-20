@@ -43,6 +43,7 @@
 #include "arm/memory.h"
 #include "arm/status.h"
 #include "arm/asm.h"
+#include "arm/smp/per-cpu.h"
 #include "mem/virtual.h"
 #include "sched/process.h"
 #define MODULE "intr"
@@ -521,8 +522,9 @@ struct {
   { "", 0, 0, 0 }
 };
 
-extern context_t *_prev_context, *_next_context;
-extern process_t *current;
+DEF_PER_CPU_EXTERN(process_t *, current);
+DEF_PER_CPU_EXTERN(context_t *, _next_context);
+DEF_PER_CPU_EXTERN(context_t *, _prev_context);
 
 static int find_fault_status(u32 sr)
 {
@@ -549,10 +551,10 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
 
 void _handle_swi2(u32 lr, u32 *r4_r11)
 {
-  extern process_t *current;
   extern u32 svc_stack_top;
   u32 *stack = (&svc_stack_top) - 7;
-  _prev_context = _next_context = &current->ctxt;
+  cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
+  cpu_write(context_t *, _next_context, &cpu_read(process_t *, current)->ctxt);
   lr -= 4;                      /* the SWI is the previous instruction */
   DLOG(1, "_handle_swi lr=%#x (%#x), stack=%#x\n",
        lr, *((u32 *) lr), stack);
@@ -563,7 +565,7 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
 
   switch(stack[0]) {
   case 0:                       /* set entry */
-    current->entry = (void *) stack[1];
+    cpu_read(process_t *, current)->entry = (void *) stack[1];
     return;
   }
 }
@@ -611,7 +613,8 @@ void HANDLES("ABORT") _handle_data_abort(void)
 
 void _handle_irq(void)
 {
-  _prev_context = _next_context = &current->ctxt;
+  cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
+  cpu_write(context_t *, _next_context, &cpu_read(process_t *, current)->ctxt);
 #ifdef OMAP3530
   u32 activeirq = intc->sir_irq.activeirq;
 #endif

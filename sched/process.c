@@ -43,6 +43,7 @@
 #include "arm/memory.h"
 #include "arm/asm.h"
 #include "arm/status.h"
+#include "arm/smp/per-cpu.h"
 #include "sched/process.h"
 #include "sched/elf.h"
 #include "sched/sched.h"
@@ -566,10 +567,11 @@ status program_load(void *pstart, process_t **return_p)
   return OK;
 }
 
+DEF_PER_CPU_EXTERN(process_t *, current);
+
 status programs_init(void)
 {
   extern u32 _program_map_start, _program_map_count;
-  extern process_t *current;
   u32 *progs = (u32 *) &_program_map_start, cnt = (u32) &_program_map_count;
   process_t *p;
   int i;
@@ -579,21 +581,21 @@ status programs_init(void)
     return EINVALID;
   }
 
-  current = NULL;
+  cpu_write(process_t *, current, NULL);
   for(i=0;i<cnt;i++) {
     DLOG(1, "programs_init: loading program found at %#x\n", progs[i]);
     if(program_load((void *) progs[i], &p) != OK) {
       DLOG(1, "program_load failed\n");
       return EINVALID;
     }
-    if(current == NULL) current = p;
+    if(cpu_read(process_t *, current) == NULL) cpu_write(process_t *, current, p);
     else sched_wakeup(p);
   }
 
-  process_switch_to(current);
+  process_switch_to(cpu_read(process_t *, current));
 
-  DLOG(1, "Switching to first process. entry=%#x\n", current->entry);
-  sched_launch_first_process(current);
+  DLOG(1, "Switching to first process. entry=%#x\n", cpu_read(process_t *, current)->entry);
+  sched_launch_first_process(cpu_read(process_t *, current));
 
   /* control flow should not return to here */
   early_panic("unreachable");

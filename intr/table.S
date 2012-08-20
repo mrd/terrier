@@ -39,8 +39,19 @@
 
 #include<arm/status.h>
 
-/* Be careful: actual virtual starting address will be 0xFFFF0000
- * during operation. */
+/* Macro to access a per-cpu variable */
+#define asm_cpu_pointer(x)                                                    \
+        MOVW    r12, #:lower16:_per_cpu_spaces; /* r12 = _per_cpu_spaces */   \
+        MOVT    r12, #:upper16:_per_cpu_spaces;                               \
+        MRC     p15,0,r0,c0,c0,5;  /* r0 = cpu index */                       \
+        AND     r0, r0, #7;        /* mask first 3 bits */                    \
+        LDR     r12, [r12, r0, LSL #2]; /* r12 = _per_cpu_spaces[r0] */       \
+        MOVW    r1, #:lower16:x;                                              \
+        MOVT    r1, #:upper16:x;                                              \
+        ADD     r12, r12, r1 /* r12 = &_per_cpu_spaces[r0][r1] */
+
+/* Beginning of vector table: ARM processor sets PC to entry in vector
+ * table when encountering an exception.  */
 
         .globl _vector_table
         .align 8
@@ -85,11 +96,11 @@ _irq_stub:
 _far_call_return:
         LDR     lr, [r13, #0x14]  /* lr = interrupt return address */
 
-        /* _prev_context == current or actual previous context */
-        MOVW    r12, #:lower16:_prev_context
-        MOVT    r12, #:upper16:_prev_context
+        /* _prev_context == current or actual previous context */ \
+        asm_cpu_pointer(_prev_context)
+
         /* r12 = &_prev_context */
-        LDR     r12, [r12]                 /* r12 = *r12 */
+        LDR     r12, [r12]        /* r12 = *r12 */
 
         LDR     r1, [r12, #0x4c]  /* r1 = process_t.end_entry */
         CMP     r1, lr
@@ -110,8 +121,8 @@ _far_call_return:
         ADD     r13, r13, #0x1c   /* unwind stack */
 
         /* now setup the context for the next process to use */
-        MOVW    r12, #:lower16:_next_context
-        MOVT    r12, #:upper16:_next_context
+        asm_cpu_pointer(_next_context)
+
         /* r12 = &_next_context */
         LDMIA   r12, {r13}^                /* r13_usr = *r12 */
         LDMIA   r12, {r12}                 /* r12 = *r12 */

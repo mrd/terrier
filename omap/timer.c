@@ -40,6 +40,7 @@
 #include "types.h"
 #include "intr/interrupts.h"
 #include "omap/early_uart3.h"
+#include "omap/timer.h"
 #include "arm/memory.h"
 #include "arm/status.h"
 #include "arm/asm.h"
@@ -58,6 +59,7 @@ region_t l4core_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, 
 region_t l4perip_region = { 0x48000000, (void *) 0x48000000, &l1pt, 1, 20, 0, 0, R_PM };
 region_t l4abe_region = { 0x49000000, (void *) 0x49000000, &l1pt, 1, 20, 0, 0, R_PM };
 static region_t l4wakeup_region = { 0x4A300000, (void *) 0x4A300000, &l1pt, 1, 20, 0, 0, R_PM };
+region_t timer_region = { 0, 0, &l1pt, 1, 20, 0, 0, R_PM }; /* fill in later */
 #endif
 #endif
 
@@ -148,6 +150,10 @@ static volatile u32 *CM_CLKSEL_WKUP = (u32 *) 0x48004c40;
 #ifdef OMAP4460
 /* Table 3-785. bit 24: 0 => SYS_CLK; 1 => 32kHz */
 static volatile u32 *CM_WKUP_GPTIMER1_CLKCTRL = (u32 *) 0x4A307840;
+
+volatile struct pvttimer *PVTTIMER;
+volatile struct watchdog *WATCHDOG;
+volatile struct gbltimer *GBLTIMER;
 #endif
 
 
@@ -205,6 +211,18 @@ status timer_gp_enable_overflow_interrupt(int i)
   return OK;
 }
 
+static inline void disable_timer_overflow_interrupt(int i)
+{
+  gptimer[i]->TIER &= ~GPTIMER_TIER_OVF_IT_ENA;
+}
+
+status timer_gp_disable_overflow_interrupt(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  disable_timer_overflow_interrupt(i);
+  return OK;
+}
+
 static inline void ack_timer_overflow_interrupt(int i)
 {
   gptimer[i]->TISR = 2;
@@ -216,6 +234,17 @@ status timer_gp_ack_overflow_interrupt(int i)
   if(i == 0 || i > NUM_TIMERS) return EINVALID;
   ack_timer_overflow_interrupt(i);
   return OK;
+}
+
+static inline u32 is_timer_overflow_interrupt(int i)
+{
+  return GETBITS(gptimer[i]->TISR, 1, 1);
+}
+
+u32 timer_gp_is_overflow_interrupt(int i)
+{
+  if(i == 0 || i > NUM_TIMERS) return EINVALID;
+  return is_timer_overflow_interrupt(i);
 }
 
 static inline void stop_timer(int i)
@@ -243,16 +272,27 @@ status timer_gp_set_handler(int i, void (*handler)(u32))
   return OK;
 }
 
+/* ************************************************** */
+
+/* Measure timers against 32kHz clock */
+u32 pvttimer_fastest_count_per_sec, pvttimer_32khz_prescaler;
 static void timing_loop(void)
 {
   u32 start;
   u32 cur;
   u32 cyc_start;
   u32 cyc_cur;
+  u32 pvttimer_cur;
 
+  PVTTIMER->counter = 0xFFFFFFFF; PVTTIMER->control = 1; /* prescaler = 0 */
   for(cyc_start = arm_read_cycle_counter(), start = timer_32khz_value(); (cur=timer_32khz_value()) - start < 32768;);
+  PVTTIMER->control &= ~1; pvttimer_cur = PVTTIMER->counter;
   cyc_cur = arm_read_cycle_counter();
   DLOG(1, "%d cycles after %d timer ticks\n", cyc_cur - cyc_start, cur - start);
+  pvttimer_fastest_count_per_sec = 0xFFFFFFFF - pvttimer_cur;
+  DLOG(1, "PVTTIMER: count decremented %d times after %d timer ticks\n", pvttimer_fastest_count_per_sec, cur - start);
+  pvttimer_32khz_prescaler = pvttimer_fastest_count_per_sec >> 15;
+  DLOG(1, "PVTTIMER: counts %d times per tick.\n", pvttimer_32khz_prescaler);
 }
 
 void timer_init(void)
@@ -290,9 +330,27 @@ void timer_init(void)
   DLOG(1, "CM_WKUP_GPTIMER1_CLKCTRL=%#x (%s)\n", *CM_WKUP_GPTIMER1_CLKCTRL, GETBITS(*CM_WKUP_GPTIMER1_CLKCTRL, 24, 1) ? "32kHz" : "SYS_CLK");
 #endif
 
+#ifdef OMAP4460
+  GBLTIMER = (void *) (arm_config_base_address() + 0x200);
+  PVTTIMER = (void *) (arm_config_base_address() + 0x600);
+  WATCHDOG = (void *) (arm_config_base_address() + 0x620);
+#ifdef USE_VMM
+  timer_region.pstart = ((u32) PVTTIMER) & 0xFFF00000;
+  timer_region.vstart = (void *) (((u32) PVTTIMER) & 0xFFF00000);
+  /* ensure mapping of private/global timers */
+  if(vmm_map_region(&timer_region) != OK) {
+    early_panic("Unable to map private/global timers.");
+    return;
+  }
+#endif
+  PVTTIMER->control = 0;
+  WATCHDOG->control = 0;
+  GBLTIMER->control = 0;
+#endif
+
   for(i=0;i<NUM_TIMERS;i++) {
-    intc_set_irq_handler(0x25 + i, timer_irq_handler);
-    intc_unmask_irq(0x25 + i);
+    intc_set_irq_handler(GPTIMER_BASE_IRQ + i, timer_irq_handler);
+    intc_unmask_irq(GPTIMER_BASE_IRQ + i);
     DLOG(1, "gptimer[%d] revision=%#x TCLR=%#x\n", i+1, gptimer[i+1]->TIDR, gptimer[i+1]->TCLR);
   }
   timing_loop();

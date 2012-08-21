@@ -110,29 +110,28 @@ status sched_wakeup(process_t *p)
   return waitqueue_append(&runq_head, p);
 }
 
-static void sched_timer_handler(u32 activeirq)
+static void sched_timer_handler(u32 intid)
 {
-  extern u32 irq_stack_top;
-  u32 *sp = &irq_stack_top;
-  sp -= 2;
-  DLOG(1, "sched_timer_handler activeirq=%#x sp=%#x stack=%#x %#x\n", activeirq, sp, sp[0], sp[1]);
-  timer_gp_ack_overflow_interrupt(1);
-  timer_gp_set(1, -QUANTUM);
-  intc_unmask_irq(activeirq);
+  if(pvttimer_is_triggered()) {
+    DLOG(1, "sched_timer_handler intid=%#x\n", intid);
+    DLOG(1, "control=%#x\n", PVTTIMER->control);
+    pvttimer_set(QUANTUM);
+    pvttimer_ack_interrupt();   /* acknowledge and unmask */
 
-  spinlock_lock(&rrlock);
-  waitqueue_append(&runq_head, cpu_read(process_t *, current));
-  schedule();
-  spinlock_unlock(&rrlock);
+    spinlock_lock(&rrlock);
+    waitqueue_append(&runq_head, cpu_read(process_t *, current));
+    schedule();
+    spinlock_unlock(&rrlock);
+  }
 }
 
 void sched_init(void)
 {
   DLOG(1, "init: QUANTUM=%#x\n", QUANTUM);
-  timer_gp_set_handler(1, sched_timer_handler);
-  timer_gp_set(1, -QUANTUM);
-  timer_gp_enable_overflow_interrupt(1);
-  timer_gp_start(1);
+  pvttimer_set_handler(sched_timer_handler);
+  pvttimer_set(QUANTUM);
+  pvttimer_enable_interrupt();
+  pvttimer_start();
   runq_head = NOPID;
 }
 

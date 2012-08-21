@@ -56,7 +56,12 @@
 
 /* 4.4.9 TRM OMAP4460: Wake-up generator registers */
 #ifndef NO_SMP
-static u32 *AUX_CORE_BOOT = (void *) 0x48281800;
+#define AUX_CORE_BOOT_ADDR 0x48281800
+static u32 *AUX_CORE_BOOT = (void *) AUX_CORE_BOOT_ADDR;
+#ifdef USE_VMM
+region_t aux_core_boot_region = { (AUX_CORE_BOOT_ADDR & 0xFFF00000), (void *) (AUX_CORE_BOOT_ADDR & 0xFFF00000),
+                                  &l1pt, 1, 20, 0, 0, R_PM };
+#endif
 #endif
 
 /* 2.2 Cortex-A9 MPCore: SCU Registers */
@@ -290,6 +295,11 @@ status smp_init(void)
 
     /* 27.4.4.1 TRM OMAP4460: Startup */
 #ifdef USE_VMM
+    /* ensure mapping of AUX_CORE_BOOT */
+    if(vmm_map_region(&aux_core_boot_region) != OK) {
+      DLOG(1, "Unable to map AUX_CORE_BOOT registers.");
+      return EINVALID;
+    }
     /* physical address of starting point */
     if(vmm_get_phys_addr(&smp_aux_vmm_entry_point, &AUX_CORE_BOOT[1]) != OK) {
       DLOG(1, "Unable to get physical address of smp_aux_vmm_entry_point.\n");

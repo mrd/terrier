@@ -87,6 +87,8 @@ status process_switch_to(process_t *p)
 
   arm_mmu_ttbcr(0, MMU_TTBCR_PD0);
 #endif
+  clrex();
+
   return OK;
 }
 

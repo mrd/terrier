@@ -73,6 +73,13 @@ static inline void prefetch_flush(void)
   ASM("ISB");
 }
 
+/* Clear exclusive monitor: reset synchronization monitors -- good
+ * idea during context switches and after data aborts. */
+static inline void clrex(void)
+{
+  ASM("CLREX");
+}
+
 static inline u32 count_leading_zeroes(u32 x)
 {
   u32 n;

@@ -610,6 +610,7 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
 void HANDLES("ABORT") _handle_data_abort(void)
 {
   u32 *regs;
+  clrex();
   ASM("STMFD sp!,{r0-r12}");
   ASM("MOV %0, sp":"=r"(regs));
   ASM("ADD sp, sp, #52");

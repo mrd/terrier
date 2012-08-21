@@ -81,6 +81,12 @@
 #error "NAKED unsupported"
 #endif
 
+#ifdef __GNUC__
+#define UNUSED __attribute__((unused))
+#else
+#define UNUSED                  /* might produce warnings, whatever */
+#endif
+
 #define NULL ((void *) 0)
 
 typedef unsigned char u8;

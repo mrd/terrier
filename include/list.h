@@ -51,10 +51,12 @@
 #ifndef _LIST_H_
 #define _LIST_H_
 
+#ifndef UNUSED
 #ifdef __GNUC__
 #define UNUSED __attribute__ ((unused))
 #else
 #define UNUSED
+#endif
 #endif
 
 /* Doubly-linked list "template" */

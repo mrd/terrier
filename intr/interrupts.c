@@ -188,6 +188,10 @@ static u32 num_supported, num_permanent, num_prio_levels, min_binary_point;
 static u32 supported[32], permanent[32];
 #endif
 
+#ifdef GIC
+static irq_handler_t sgi_table[16];
+static irq_handler_t ppi_table[16];
+#endif
 static irq_handler_t irq_table[96];
 status intc_set_int_type_intid(u32 id, u32 is_edge);
 status intc_set_targets_intid(u32 id, u32 targets);
@@ -290,6 +294,10 @@ void intc_init(void)
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;
+#ifdef GIC
+  for(i=0;i<16;i++) ppi_table[i] = NULL;
+  for(i=0;i<16;i++) sgi_table[i] = NULL;
+#endif
 }
 
 void intr_init(void)
@@ -299,6 +307,14 @@ void intr_init(void)
   /* set up vector table base address */
   arm_set_vector_base_address((u32) &_vector_table);
   intc_init();
+}
+
+status intc_set_intid_handler(u32 intid, void (*handler)(u32))
+{
+  if(intid >= 32) irq_table[intid - 32] = handler;
+  else if(intid >= 16) ppi_table[intid - 16] = handler;
+  else sgi_table[intid] = handler;
+  return OK;
 }
 
 status intc_set_irq_handler(u32 irq_num, void (*handler)(u32))
@@ -630,14 +646,24 @@ void _handle_irq(void)
   u32 activeirq = IAR - 32;      /* shared peripheral IRQs start at 32 */
   if(IAR >= 32) {
 #endif
-    DLOG(1, "_handle_irq sir_irq=%#x\n", activeirq);
+    DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
     intc_mask_irq(activeirq);
-    if (irq_table[activeirq])
+    if(irq_table[activeirq])
       irq_table[activeirq](activeirq);
 #ifdef OMAP3530
     intc->control = INTCPS_CONTROL_NEWIRQAGR;
 #endif
 #ifdef GIC
+  } else if(IAR >= 16) {
+    DLOG(1, "_handle_irq: PRIVATE PERIPHERAL INTERRUPT IAR=%#x\n", IAR);
+    intc_mask_intid(IAR);
+    if(ppi_table[IAR - 16])
+      ppi_table[IAR - 16](IAR);
+  } else {
+    DLOG(1, "_handle_irq: SOFTWARE GENERATED INTERRUPT IAR=%#x\n", IAR);
+    intc_mask_intid(IAR);
+    if(sgi_table[IAR])
+      sgi_table[IAR](IAR);
   }
   CPUBASE->EOIR = IAR;
   /* EOIR write causes priority drop and interrupt deactivation */

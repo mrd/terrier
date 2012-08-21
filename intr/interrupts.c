@@ -607,7 +607,10 @@ void HANDLES("ABORT") _handle_data_abort(void)
   sr = arm_mmu_data_fault_status();
   DLOG(1, "_handle_data_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 8, sp, sr,
        arm_mmu_data_fault_addr());
-  DLOG(1, "  source=%s\n", fault_status_register_encodings[find_fault_status(sr)].source);
+  DLOG(1, "  source=%s (%s; SD=%d)\n",
+       fault_status_register_encodings[find_fault_status(sr)].source,
+       GETBITS(sr, 11, 1) ? "W" : "R",
+       GETBITS(sr, 12, 1));
   early_panic("data abort");
 }
 

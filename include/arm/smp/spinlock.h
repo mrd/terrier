@@ -60,6 +60,7 @@ static inline status spinlock_lock(spinlock_t *lock)
       printf_uart3("cpu%d: lock=%#x held_by=%d\n", cpu_index(), lock, j - 1);
       early_panic("recursive spin lock");
     }
+    ASM("WFE");
   }
   return OK;
 #else
@@ -72,6 +73,7 @@ static inline void spinlock_unlock(spinlock_t *lock)
 {
 #ifdef __GNUC__
   __sync_lock_release(&lock->flag);
+  ASM("DSB; SEV");
 #else
 #error "spinlocks unimplemented for this compiler"
 #endif

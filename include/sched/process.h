@@ -42,6 +42,7 @@
 
 #include "types.h"
 #include "mem/virtual.h"
+#include "arm/smp/per-cpu.h"
 
 typedef u32 pid_t;
 #define MAX_PROCESSES 16
@@ -72,16 +73,27 @@ status process_new(process_t **return_p);
 void process_init(void);
 status program_load(void *pstart, process_t **return_p);
 
-static inline void sched_launch_first_process(process_t *p)
-{
-  ASM(/* load context */
-      "LDMIA   %0!, {r0,lr}\n"          /* load status register, return address */
-      "MSR     spsr_cxsf, r0\n"         /* prep saved process status register */
-      "LDMIA   %0, {r0-r14}^\n"         /* load user registers (incl. r13_usr, r14_usr) */
-      /* and return to userspace */
-      "LDR     r13, =svc_stack_top\n"   /* r13 = &svc_stack_top */
-      "MOVS    pc, lr"::"r"(&p->ctxt):"r0");   /* jump to userspace */
-}
+DEF_PER_CPU_EXTERN(process_t *, current);
+
+/* must-inline */
+#define sched_launch_first_process(p) do {                              \
+    ASM(/* load context */                                              \
+        "LDMIA   %0!, {r0,lr}\n"          /* load status register, return address */ \
+        "MSR     spsr_cxsf, r0\n"         /* prep saved process status register */ \
+        "LDMIA   %0, {r0-r14}^\n"         /* load user registers (incl. r13_usr, r14_usr) */ \
+        /* and return to userspace */                                   \
+        "LDR     r13, =svc_stack_top\n"   /* r13 = &svc_stack_top */    \
+        "MOVS    pc, lr"::"r"(&p->ctxt):"r0");   /* jump to userspace */ \
+  } while(0)
+
+#define sched_launch_first_process_no_stack_patchup(p) do {             \
+    ASM(/* load context */                                              \
+        "LDMIA   %0!, {r0,lr}\n"          /* load status register, return address */ \
+        "MSR     spsr_cxsf, r0\n"         /* prep saved process status register */ \
+        "LDMIA   %0, {r0-r14}^\n"         /* load user registers (incl. r13_usr, r14_usr) */ \
+        /* and return to userspace */                                   \
+        "MOVS    pc, lr"::"r"(&p->ctxt):"r0");   /* jump to userspace */ \
+  } while(0)
 
 #endif
 

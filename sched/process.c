@@ -596,8 +596,6 @@ status program_load(void *pstart, process_t **return_p)
   return OK;
 }
 
-DEF_PER_CPU_EXTERN(process_t *, current);
-
 status programs_init(void)
 {
   extern u32 _program_map_start, _program_map_count;

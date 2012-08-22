@@ -164,6 +164,15 @@ void sched_init(void)
   runq_head = NOPID;
 }
 
+void sched_aux_cpu_init(void)
+{
+  pvttimer_set_handler(sched_timer_handler);
+  pvttimer_set(QUANTUM);
+  pvttimer_enable_interrupt();
+  pvttimer_start();
+}
+
+
 /*
  * Local Variables:
  * indent-tabs-mode: nil

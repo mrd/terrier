@@ -39,6 +39,7 @@
 
 #include "types.h"
 #include "intr/interrupts.h"
+#include "sched/process.h"
 #include "omap/early_uart3.h"
 #include "omap/smp.h"
 #include "arm/memory.h"
@@ -126,6 +127,7 @@ static inline void smp_dump_coherency_state(void)
 }
 
 DEFSEMAPHORE(scheduling_enabled_sem);
+DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
 
 /* First real function for auxiliary CPUs. */
 static void NO_INLINE smp_aux_cpu_init()
@@ -182,13 +184,13 @@ static void NO_INLINE smp_aux_cpu_init()
   /* wait for scheduling to be enabled */
   semaphore_down(&scheduling_enabled_sem);
 
-  /* ... */
-  for(;;) {
-    /* stupid little loop to show the aux cpu is alive and kicking occasionally */
-    ASM("MOVW r0, 0xFFFF\nMOVT r0,0x8F\n1: SUB r0, r0, #1\nCMP r0, #0\nBNE 1b":::"r0");
-    DLOG(1,"***beep beep beep beep beep beep beep beep beep beep beep beep beep beep***\n");
-    smp_dump_coherency_state();
-  }
+  void sched_aux_cpu_init(void);
+  sched_aux_cpu_init();         /* kick off scheduling */
+
+  /* start with idle process */
+  cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
+
+  DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
 }
 
 extern void *_l1table_phys;
@@ -231,9 +233,13 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
   /* call into a real function frame */
   smp_aux_cpu_init();
 
-  ASM("CPS %0"::"i"(MODE_SYS));
+  /* avoid stack usage and jump into idle process */
+  register process_t *p = cpu_read(process_t *, cpu_idle_process);
 
-  for(;;);
+  sched_launch_first_process_no_stack_patchup(p);
+
+  /* control flow should not return to here */
+  early_panic("unreachable");
 }
 
 #ifdef USE_VMM

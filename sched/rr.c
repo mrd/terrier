@@ -52,7 +52,10 @@
 
 #define QUANTUM (1<<12)
 
-static pid_t runq_head;
+static pid_t runq_head;         /* global runqueue: can only hold cleanly saved processes */
+
+DEF_PER_CPU(pid_t, cpu_runq_head); /* cpu runqueue: may hold unsaved processes */
+INIT_PER_CPU(pid_t) { cpu_write(pid_t, cpu_runq_head, NOPID); }
 
 DEF_PER_CPU(process_t *, current);
 INIT_PER_CPU(current) { cpu_write(process_t *, current, NULL); }
@@ -91,23 +94,44 @@ static process_t *waitqueue_dequeue(pid_t *q)
   return p;
 }
 
-void schedule(void)
+/* precondition: must hold rrlock */
+static void move_cpu_runqueue_to_global(void)
 {
-  process_t *p = waitqueue_dequeue(&runq_head);
-  if(p == NULL) {
-    /* go idle */
-  } else {
-    cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
-    cpu_write(process_t *, current, p);
-    process_switch_to(p);
-    cpu_write(context_t *, _next_context, &p->ctxt);
-    DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
+  process_t *p;
+  for(;;) {
+    p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head));
+    if(p == NULL) return;
+    waitqueue_append(&runq_head, p);
   }
 }
 
+/* precondition: must hold rrlock */
+void schedule(void)
+{
+  for(;;) {
+    process_t *p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head)); /* try cpu runqueue */
+    if(p == NULL) p = waitqueue_dequeue(&runq_head); /* try global runqueue */
+    if(p == NULL) {
+      /* go idle */
+    } else {
+      /* invariant: process p runnable by only one CPU at a time */
+      cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
+      cpu_write(process_t *, current, p);
+      process_switch_to(p);
+      cpu_write(context_t *, _next_context, &p->ctxt);
+      DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
+      /* invariant: every process remaining on cpu_runqueue is cleanly saved */
+      move_cpu_runqueue_to_global();
+      return;
+    }
+  }
+}
+
+/* precondition: must hold rrlock */
 status sched_wakeup(process_t *p)
 {
-  return waitqueue_append(&runq_head, p);
+  /* p may not be saved yet, so it must go on cpu runqueue */
+  return waitqueue_append(&cpu_read(pid_t, cpu_runq_head), p);
 }
 
 static void sched_timer_handler(u32 intid)

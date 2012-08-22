@@ -85,7 +85,9 @@ static volatile struct scu *SCU;
 ALIGNED(CACHE_LINE, static volatile u32, stage);
 ALIGNED(CACHE_LINE, static volatile u32, curboot);
 ALIGNED(CACHE_LINE, static u32, *newstack[5]);        /* hold stack addresses for secondary processor */
+
 u32 num_cpus;
+
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
 

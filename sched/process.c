@@ -42,6 +42,7 @@
 #include "mem/physical.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
+#include "omap/smp.h"
 #include "arm/status.h"
 #include "arm/smp/per-cpu.h"
 #include "arm/smp/semaphore.h"
@@ -53,6 +54,21 @@
 #include "debug/log.h"
 
 process_t process[MAX_PROCESSES];
+static process_t idle_process[MAX_CPUS];
+DEF_PER_CPU(process_t *, cpu_idle_process);
+INIT_PER_CPU(cpu_idle_process) {
+  cpu_write(process_t *, cpu_idle_process, &idle_process[cpu_index()]);
+}
+
+void idle_loop(void)
+{
+  enable_interrupts();
+  for(;;) ASM("WFE");
+}
+
+static context_t idle_context = {
+  .psr = MODE_SVC, .lr = (u32) idle_loop
+};
 
 process_t *process_find(pid_t pid)
 {
@@ -64,7 +80,7 @@ process_t *process_find(pid_t pid)
   }
 }
 
-/* Switch processes. Requires valid p. */
+/* Switch processes. Requires valid p (meaning, in process[] table). */
 status process_switch_to(process_t *p)
 {
 #ifdef USE_VMM
@@ -181,11 +197,20 @@ status process_new(process_t **return_p)
   return ENOSPACE;
 }
 
+/* precondition: SMP already initialized */
 void process_init(void)
 {
   int i;
+  extern u32 num_cpus;
   for(i=0; i<MAX_PROCESSES; i++)
     process[i].pid = NOPID;
+  for(i=0; i<num_cpus; i++) {
+    idle_process[i].pid = NOPID;
+    idle_process[i].ctxt.psr = idle_context.psr;
+    idle_process[i].ctxt.lr = idle_context.lr;
+    idle_process[i].entry = idle_loop;
+    idle_process[i].end_entry = idle_loop;
+  }
 }
 
 void program_dump_sections(void *pstart)
@@ -585,26 +610,26 @@ status programs_init(void)
     return EINVALID;
   }
 
-  cpu_write(process_t *, current, NULL);
   for(i=0;i<cnt;i++) {
     DLOG(1, "programs_init: loading program found at %#x\n", progs[i]);
     if(program_load((void *) progs[i], &p) != OK) {
       DLOG(1, "program_load failed\n");
       return EINVALID;
     }
-    if(cpu_read(process_t *, current) == NULL) cpu_write(process_t *, current, p);
-    else sched_wakeup(p);
+    sched_wakeup(p);
   }
-
-  process_switch_to(cpu_read(process_t *, current));
 
   extern semaphore_t scheduling_enabled_sem;
   extern u32 num_cpus;
   /* tell waiting aux CPUs that it's time to wake up */
   for(i=0;i<num_cpus - 1;i++) semaphore_up(&scheduling_enabled_sem);
 
-  DLOG(1, "Switching to first process. entry=%#x\n", cpu_read(process_t *, current)->entry);
-  sched_launch_first_process(cpu_read(process_t *, current));
+  /* start with idle process */
+  cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
+
+  DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
+
+  sched_launch_first_process(cpu_read(process_t *, cpu_idle_process));
 
   /* control flow should not return to here */
   early_panic("unreachable");

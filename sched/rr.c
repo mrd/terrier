@@ -64,6 +64,8 @@ INIT_PER_CPU(_next_context) { cpu_write(process_t *, _next_context, NULL); }
 DEF_PER_CPU(context_t *, _prev_context);
 INIT_PER_CPU(_prev_context) { cpu_write(process_t *, _prev_context, NULL); }
 
+DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
+
 static DEFSPINLOCK(rrlock);
 
 static status waitqueue_append(pid_t *q, process_t *p)
@@ -113,6 +115,9 @@ void schedule(void)
     if(p == NULL) p = waitqueue_dequeue(&runq_head); /* try global runqueue */
     if(p == NULL) {
       /* go idle */
+      cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
+      cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
+      cpu_write(context_t *, _next_context, &cpu_read(process_t *, cpu_idle_process)->ctxt);
     } else {
       /* invariant: process p runnable by only one CPU at a time */
       cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);

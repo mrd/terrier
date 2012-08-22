@@ -47,6 +47,7 @@
 #include "mem/physical.h"
 #include "mem/virtual.h"
 #include "arm/smp/spinlock.h"
+#include "arm/smp/semaphore.h"
 #include "arm/smp/per-cpu.h"
 #define MODULE "smp"
 #include "debug/log.h"
@@ -122,6 +123,8 @@ static inline void smp_dump_coherency_state(void)
        !!(ctrl & CTRL_DCACHE), !!(ctrl & CTRL_ICACHE));
 }
 
+DEFSEMAPHORE(scheduling_enabled_sem);
+
 /* First real function for auxiliary CPUs. */
 static void NO_INLINE smp_aux_cpu_init()
 {
@@ -173,6 +176,9 @@ static void NO_INLINE smp_aux_cpu_init()
 
   smp_dump_coherency_state();
   DLOG(1,"continuing initialization...\n");
+
+  /* wait for scheduling to be enabled */
+  semaphore_down(&scheduling_enabled_sem);
 
   /* ... */
   for(;;) {

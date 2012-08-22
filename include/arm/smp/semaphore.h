@@ -1,5 +1,5 @@
 /*
- * Spinlocks
+ * Semaphores
  *
  * -------------------------------------------------------------------
  *
@@ -37,8 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SMP_SPINLOCK_H_
-#define _SMP_SPINLOCK_H_
+#ifndef _SMP_SEMAPHORE_H_
+#define _SMP_SEMAPHORE_H_
 #include "types.h"
 #include "status.h"
 #include "arm/smp/per-cpu.h"
@@ -46,38 +46,45 @@
 #include "arm/memory.h"
 #include "omap/early_uart3.h"
 
-typedef PACKED_STRUCT(spinlock) { PACKED_FIELD(u32, flag); PACKED_FIELD(u32, _pad[7]); } PACKED_END spinlock_t;
-#define SPINLOCK_INIT { 0 }
-#define DEFSPINLOCK(x) ALIGNED(CACHE_LINE, spinlock_t, x) = SPINLOCK_INIT
+typedef PACKED_STRUCT(semaphore) { PACKED_FIELD(u32, count); PACKED_FIELD(u32, _pad[7]); } PACKED_END semaphore_t;
+#define SEMAPHORE_INIT { 0 }
+#define DEFSEMAPHORE(x) ALIGNED(CACHE_LINE, semaphore_t, x) = SEMAPHORE_INIT
 
-static inline status spinlock_lock(spinlock_t *lock)
+/* ARM Synchronization Primitives Development Article 1.3.3 */
+static inline status semaphore_down(semaphore_t *sem)
 {
-#ifdef __GNUC__
-  u32 i = cpu_index() + 1, j;
-  while ((j = __sync_val_compare_and_swap(&lock->flag, 0, i))) {
-    if(j == i) {
-      DO_WITH_REGS(regs) { printf_uart3_regs(regs); } END_WITH_REGS;
-      printf_uart3("cpu%d: lock=%#x held_by=%d\n", cpu_index(), lock, j - 1);
-      early_panic("recursive spin lock");
-    }
-    ASM("WFE");
-  }
+  register u32 r, t;
+  ASM("1:\n\t"
+      "LDREX   %[r], [%[s]]\n\t" /* get count */
+      "CMP     %[r], #0\n\t"     /* if count is zero */
+      "WFEEQ\n\t"                /* then wait for signal */
+      "BEQ     1b\n\t"           /*      and retry */
+      "SUB     %[r], %[r], #1\n\t" /* else decrement temp copy of count */
+      "STREX   %[t], %[r], [%[s]]\n\t" /* attempt to store temp copy atomically */
+      "CMP     %[t], #0\n\t"           /* if attempt fails */
+      "BNE     1b\n\t"                 /* then retry */
+      "DMB\n\t"                        /* memory barrier required before resource usage */
+      :[r] "=&r" (r), [t] "=&r" (t):[s] "r" (&sem->count):"cc");
   return OK;
-#else
-#error "spinlocks unimplemented for this compiler"
-  return EUNDEFINED;
-#endif
 }
 
-static inline void spinlock_unlock(spinlock_t *lock)
+static inline status semaphore_up(semaphore_t *sem)
 {
-#ifdef __GNUC__
-  __sync_lock_release(&lock->flag);
-  ASM("DSB; SEV");
-#else
-#error "spinlocks unimplemented for this compiler"
-#endif
+  register u32 r, t;
+  ASM("1:\n\t"
+      "LDREX   %[r], [%[s]]\n\t" /* get count */
+      "ADD     %[r], %[r], #1\n\t" /* increment temp copy of count */
+      "STREX   %[t], %[r], [%[s]]\n\t" /* attempt to store temp copy atomically */
+      "CMP     %[t], #0\n\t"           /* if attempt fails */
+      "BNE     1b\n\t"                 /* then retry */
+      "CMP     %[r], #1\n\t"           /* else if count was zero and now is one */
+      "DSB\n\t"                        /* sync/memory barrier required before SEV */
+      "SEVGE"                          /* use SEV to signal waiting processors, if any */
+      :[r] "=&r" (r), [t] "=&r" (t):[s] "r" (&sem->count):"cc");
+
+  return OK;
 }
+
 
 #endif
 

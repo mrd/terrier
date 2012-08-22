@@ -44,6 +44,7 @@
 #include "arm/asm.h"
 #include "arm/status.h"
 #include "arm/smp/per-cpu.h"
+#include "arm/smp/semaphore.h"
 #include "sched/process.h"
 #include "sched/elf.h"
 #include "sched/sched.h"
@@ -564,6 +565,7 @@ status program_load(void *pstart, process_t **return_p)
   *return_p = p;
 
   /* ensure programs are written to main memory */
+  data_mem_barrier();
   arm_cache_clean_invl_data();
 
   return OK;
@@ -595,6 +597,11 @@ status programs_init(void)
   }
 
   process_switch_to(cpu_read(process_t *, current));
+
+  extern semaphore_t scheduling_enabled_sem;
+  extern u32 num_cpus;
+  /* tell waiting aux CPUs that it's time to wake up */
+  for(i=0;i<num_cpus - 1;i++) semaphore_up(&scheduling_enabled_sem);
 
   DLOG(1, "Switching to first process. entry=%#x\n", cpu_read(process_t *, current)->entry);
   sched_launch_first_process(cpu_read(process_t *, current));

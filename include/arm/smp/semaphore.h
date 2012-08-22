@@ -56,12 +56,12 @@ static inline status semaphore_down(semaphore_t *sem)
   register u32 r, t;
   ASM("1:\n\t"
       "LDREX   %[r], [%[s]]\n\t" /* get count */
-      "CMP     %[r], #0\n\t"     /* if count is zero */
+      "TEQ     %[r], #0\n\t"     /* if count is zero */
       "WFEEQ\n\t"                /* then wait for signal */
       "BEQ     1b\n\t"           /*      and retry */
       "SUB     %[r], %[r], #1\n\t" /* else decrement temp copy of count */
       "STREX   %[t], %[r], [%[s]]\n\t" /* attempt to store temp copy atomically */
-      "CMP     %[t], #0\n\t"           /* if attempt fails */
+      "TEQ     %[t], #0\n\t"           /* if attempt fails */
       "BNE     1b\n\t"                 /* then retry */
       "DMB\n\t"                        /* memory barrier required before resource usage */
       :[r] "=&r" (r), [t] "=&r" (t):[s] "r" (&sem->count):"cc");
@@ -75,11 +75,11 @@ static inline status semaphore_up(semaphore_t *sem)
       "LDREX   %[r], [%[s]]\n\t" /* get count */
       "ADD     %[r], %[r], #1\n\t" /* increment temp copy of count */
       "STREX   %[t], %[r], [%[s]]\n\t" /* attempt to store temp copy atomically */
-      "CMP     %[t], #0\n\t"           /* if attempt fails */
+      "TEQ     %[t], #0\n\t"           /* if attempt fails */
       "BNE     1b\n\t"                 /* then retry */
-      "CMP     %[r], #1\n\t"           /* else if count was zero and now is one */
-      "DSB\n\t"                        /* sync/memory barrier required before SEV */
-      "SEVGE"                          /* use SEV to signal waiting processors, if any */
+      "TEQ     %[r], #1\n\t"           /* else if count was zero and now is one, then: */
+      "DSB\n\t"                        /* (sync/memory barrier required before SEV) */
+      "SEVEQ"                          /* use SEV to signal waiting processors, if any */
       :[r] "=&r" (r), [t] "=&r" (t):[s] "r" (&sem->count):"cc");
 
   return OK;

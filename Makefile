@@ -84,8 +84,9 @@ LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
 DATS_OBJS = $(patsubst %.dats,%_dats.o,$(DATS_FILES))
+ATSCTEMPS = $(patsubst %.dats,%_dats.c,$(DATS_FILES))
 OBJS = $(C_OBJS) $(S_OBJS) $(DATS_OBJS)
-DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
+DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES)) $(patsubst %.dats,%_dats.d,$(DATS_FILES))
 POBJS = $(patsubst %,%/program,$(PROGS))
 UBOOT = u-boot/$(CORE)/u-boot.bin
 
@@ -131,7 +132,7 @@ userlib:
 
 clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin $(IMGNAME).map $(IMGNAME).bin.gz ucmd ukermit program-map.ld
-	rm -f $(OBJS) $(DFILES)
+	rm -f $(OBJS) $(DFILES) $(ATSCTEMPS)
 	for p in $(PROGS); do make -C $$p clean; done
 	make -C userlib clean
 

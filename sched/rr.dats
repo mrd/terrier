@@ -37,6 +37,15 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define ATS_DYNLOADFLAG 0
+#define ATS_STALOADFLAG 0
+
+%{^
+#include "ats_types.h"
+%}
+
+%{
+
 #include "types.h"
 #include "mem/virtual.h"
 #include "mem/physical.h"
@@ -189,6 +198,7 @@ void sched_aux_cpu_init(void)
   pvttimer_start();
 }
 
+%}
 
 /*
  * Local Variables:
@@ -200,3 +210,4 @@ void sched_aux_cpu_init(void)
  */
 
 /* vi: set et sw=2 sts=2: */
+

@@ -39,10 +39,11 @@
 
 C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	mem/physical.c mem/virtual.c intr/interrupts.c omap/timer.c omap/smp.c \
-	sched/process.c sched/rr.c \
+	sched/process.c \
 	debug/log.c tests/cswitch.c tests/test_process.c
 S_FILES = init/startup.S intr/table.S
-PROGS = progs/idle progs/uart
+DATS_FILES = sched/rr.dats
+PROGS = progs/idle progs/uart progs/net
 
 IMGNAME = terrier
 ADDRESS = 0x80008000
@@ -56,11 +57,15 @@ include config.mk
 
 CFLAGS += -Iinclude -D$(CORE)
 SFLAGS += -Iinclude -D$(CORE)
+ATSFLAGS += -IATS include
+ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0
+ATSCFLAGS += -g -O0
 else
 CFLAGS += -O$(OPT)
+ATSCFLAGS += -O$(OPT)
 endif
 CFLAGS += $(patsubst %,-DTEST_%,$(TESTS))
 
@@ -78,7 +83,8 @@ LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
-OBJS = $(C_OBJS) $(S_OBJS)
+DATS_OBJS = $(patsubst %.dats,%_dats.o,$(DATS_FILES))
+OBJS = $(C_OBJS) $(S_OBJS) $(DATS_OBJS)
 DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
 POBJS = $(patsubst %,%/program,$(PROGS))
 UBOOT = u-boot/$(CORE)/u-boot.bin
@@ -86,6 +92,8 @@ UBOOT = u-boot/$(CORE)/u-boot.bin
 ##################################################
 
 .PHONY: all
+.SECONDARY:
+
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
 
 $(IMGNAME).uimg: $(IMGNAME).bin.gz
@@ -114,6 +122,10 @@ userlib:
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@
+
+%_dats.o: %.dats
+	$(ATSOPT) $(ATSFLAGS) --output $(patsubst %.dats,%_dats.c,$<) --dynamic $<
+	$(CC) $(ATSCFLAGS) $(CFLAGS) -o $@ -c $(patsubst %.dats,%_dats.c,$<)
 
 .PHONY: clean test tags cscope
 

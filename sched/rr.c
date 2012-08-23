@@ -68,6 +68,8 @@ DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
 
 static DEFSPINLOCK(rrlock);
 
+/* precondition: either q is protected by a lock that is held, or q is
+ * only usable by this CPU. */
 static status waitqueue_append(pid_t *q, process_t *p)
 {
   p->next = NOPID;
@@ -84,6 +86,8 @@ static status waitqueue_append(pid_t *q, process_t *p)
   }
 }
 
+/* precondition: either q is protected by a lock that is held, or q is
+ * only usable by this CPU. */
 static process_t *waitqueue_dequeue(pid_t *q)
 {
   process_t *p;
@@ -96,23 +100,33 @@ static process_t *waitqueue_dequeue(pid_t *q)
   return p;
 }
 
-/* precondition: must hold rrlock */
 static void move_cpu_runqueue_to_global(void)
 {
   process_t *p;
   for(;;) {
     p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head));
     if(p == NULL) return;
+    spinlock_lock(&rrlock);
+    /* runq_head is shared -- must hold rrlock */
     waitqueue_append(&runq_head, p);
+    spinlock_unlock(&rrlock);
   }
 }
 
-/* precondition: must hold rrlock */
 void schedule(void)
 {
   for(;;) {
-    process_t *p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head)); /* try cpu runqueue */
-    if(p == NULL) p = waitqueue_dequeue(&runq_head); /* try global runqueue */
+    process_t *p;
+    /* Processes on global runqueue have been waiting the longest. */
+
+    spinlock_lock(&rrlock);
+    /* runq_head is shared -- must hold rrlock */
+    p = waitqueue_dequeue(&runq_head); /* try global runqueue first */
+    spinlock_unlock(&rrlock);
+
+    if(p == NULL)
+      p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head)); /* try cpu runqueue */
+
     if(p == NULL) {
       /* go idle */
       cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
@@ -132,11 +146,14 @@ void schedule(void)
   }
 }
 
-/* precondition: must hold rrlock */
 status sched_wakeup(process_t *p)
 {
   /* p may not be saved yet, so it must go on cpu runqueue */
   return waitqueue_append(&cpu_read(pid_t, cpu_runq_head), p);
+
+  /* Lock is not needed because cpu_runq_head is dedicated to this CPU
+   * only. Also, waitqueue_append only touches "next" fields in
+   * processes that are already claimed by this CPU. */
 }
 
 static void sched_timer_handler(u32 intid)
@@ -147,10 +164,10 @@ static void sched_timer_handler(u32 intid)
     pvttimer_set(QUANTUM);
     pvttimer_ack_interrupt();   /* acknowledge and unmask */
 
-    spinlock_lock(&rrlock);
-    waitqueue_append(&runq_head, cpu_read(process_t *, current));
+    /* Put current process on local CPU runqueue, since its context
+     * has not been saved yet. */
+    waitqueue_append(&cpu_read(pid_t, cpu_runq_head), cpu_read(process_t *, current));
     schedule();
-    spinlock_unlock(&rrlock);
   }
 }
 

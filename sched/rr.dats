@@ -42,6 +42,7 @@
 
 %{^
 #include "ats_types.h"
+#include "ats_basics.h"
 %}
 
 %{
@@ -94,6 +95,21 @@ static status waitqueue_append(pid_t *q, process_t *p)
     }
   }
 }
+
+status inline _ats_waitqueue_append(void *q, void *p)
+{
+  return waitqueue_append(q, p);
+}
+
+%}
+
+abst@ype status = $extype "status";
+abst@ype pid_t = $extype "pid_t";
+abst@ype process_t = $extype "process_t";
+extern fun waitqueue_append {ql, pl: addr} (_: pid_t @ ql, _: process_t @ pl | q: ptr ql, p: ptr pl): status = "_ats_waitqueue_append";
+/* FIXME: how to declare static? */
+
+%{
 
 /* precondition: either q is protected by a lock that is held, or q is
  * only usable by this CPU. */

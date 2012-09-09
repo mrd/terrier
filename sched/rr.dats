@@ -43,10 +43,6 @@
 %{^
 #include "ats_types.h"
 #include "ats_basics.h"
-%}
-
-%{
-
 #include "types.h"
 #include "mem/virtual.h"
 #include "mem/physical.h"
@@ -60,9 +56,26 @@
 #define MODULE "sched_rr"
 #include "debug/log.h"
 
-#define QUANTUM (1<<12)
+void *atspre_null_ptr = 0;      //FIXME
+ats_bool_type atspre_peq(ats_ptr_type a, ats_ptr_type b) { return a == b; }
 
 static pid_t runq_head;         /* global runqueue: can only hold cleanly saved processes */
+static DEFSPINLOCK(rrlock);
+
+#define get_runq_head() ((void *) &runq_head)
+#define rel_runq_head(p)
+#define get_cpuq_head() ((void *) (&cpu_read(pid_t, cpu_runq_head)))
+#define rel_cpuq_head(p)
+#define rrlock_lock() spinlock_lock(&rrlock)
+#define rrlock_unlock() spinlock_unlock(&rrlock)
+static status waitqueue_append(pid_t *q, process_t *p);
+
+%}
+
+%{^
+
+
+#define QUANTUM (1<<12)
 
 DEF_PER_CPU(pid_t, cpu_runq_head); /* cpu runqueue: may hold unsaved processes */
 INIT_PER_CPU(pid_t) { cpu_write(pid_t, cpu_runq_head, NOPID); }
@@ -75,8 +88,6 @@ DEF_PER_CPU(context_t *, _prev_context);
 INIT_PER_CPU(_prev_context) { cpu_write(process_t *, _prev_context, NULL); }
 
 DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
-
-static DEFSPINLOCK(rrlock);
 
 /* precondition: either q is protected by a lock that is held, or q is
  * only usable by this CPU. */
@@ -96,21 +107,6 @@ static status waitqueue_append(pid_t *q, process_t *p)
   }
 }
 
-status inline _ats_waitqueue_append(void *q, void *p)
-{
-  return waitqueue_append(q, p);
-}
-
-%}
-
-abst@ype status = $extype "status";
-abst@ype pid_t = $extype "pid_t";
-abst@ype process_t = $extype "process_t";
-extern fun waitqueue_append {ql, pl: addr} (_: pid_t @ ql, _: process_t @ pl | q: ptr ql, p: ptr pl): status = "_ats_waitqueue_append";
-/* FIXME: how to declare static? */
-
-%{
-
 /* precondition: either q is protected by a lock that is held, or q is
  * only usable by this CPU. */
 static process_t *waitqueue_dequeue(pid_t *q)
@@ -125,18 +121,43 @@ static process_t *waitqueue_dequeue(pid_t *q)
   return p;
 }
 
-static void move_cpu_runqueue_to_global(void)
-{
-  process_t *p;
-  for(;;) {
-    p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head));
-    if(p == NULL) return;
-    spinlock_lock(&rrlock);
-    /* runq_head is shared -- must hold rrlock */
-    waitqueue_append(&runq_head, p);
-    spinlock_unlock(&rrlock);
-  }
-}
+%}
+
+abst@ype status = $extype "status";
+abst@ype pid_t = $extype "pid_t";
+abst@ype process_t = $extype "process_t";
+absview rrlock_v
+extern fun waitqueue_append {ql, pl: addr} (_: !pid_t @ ql, _: !process_t @ pl | q: ptr ql, p: ptr pl): status = "mac#waitqueue_append";
+extern fun waitqueue_dequeue {ql: addr} (_: !pid_t @ ql | q: ptr ql): [pl: addr] (process_t @ pl | ptr pl) = "mac#waitqueue_dequeue"
+extern prfun rel_process {pl: addr} (_: process_t @ pl): void
+
+extern fun rrlock_lock(): (rrlock_v | void) = "mac#rrlock_lock";
+extern fun rrlock_unlock(_: rrlock_v | ): void = "mac#rrlock_unlock";
+extern fun get_runq_head (_: !rrlock_v | ): [l:addr] (pid_t @ l | ptr l) = "mac#get_runq_head"
+extern fun rel_runq_head {l:addr} (pf: pid_t @ l, _: !rrlock_v | p: ptr l): void = "mac#rel_runq_head"
+extern fun get_cpuq_head (): [l: addr] (pid_t @ l | ptr l) = "mac#get_cpuq_head"
+extern fun rel_cpuq_head {l: addr} (_: pid_t @ l | _: ptr l): void = "mac#rel_cpuq_head"
+
+extern fun move_cpu_runqueue_to_global (): void = "sta#move_cpu_runqueue_to_global"
+implement move_cpu_runqueue_to_global () = let
+  val (cpuq_pf | cpuq) = get_cpuq_head ()
+  val (p_pf | p) = waitqueue_dequeue (cpuq_pf | cpuq)
+  val _ = rel_cpuq_head (cpuq_pf | cpuq)
+in
+  if p = null then let prval _ = rel_process (p_pf) in () end
+  else let
+    val (lock_v | _) = rrlock_lock ()
+    val (runq_pf | runq) = get_runq_head (lock_v | )
+    val _ = waitqueue_append (runq_pf, p_pf | runq, p)
+    prval _ = rel_process (p_pf)
+  in
+    rel_runq_head (runq_pf, lock_v | runq);
+    rrlock_unlock (lock_v | );
+    move_cpu_runqueue_to_global ()
+  end
+end
+
+%{
 
 void schedule(void)
 {

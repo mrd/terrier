@@ -58,7 +58,7 @@ include config.mk
 CFLAGS += -Iinclude -D$(CORE)
 SFLAGS += -Iinclude -D$(CORE)
 ATSFLAGS += -IATS include
-ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME
+ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME -Wno-unused-function -Wno-unused-label
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0

@@ -65,10 +65,10 @@ region_t timer_region = { 0, 0, &l1pt, 1, 20, 0, 0, R_PM }; /* fill in later */
 
 /* 32-kHz sync timer counter */
 #ifdef OMAP3530
-static volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x48320010;
+volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x48320010;
 #endif
 #ifdef OMAP4460
-static volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x4A304010;
+volatile u32 *reg_32ksyncnt_cr = (u32 *) 0x4A304010;
 #endif
 
 PACKED_STRUCT(gptimer) {

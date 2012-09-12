@@ -5,6 +5,6 @@
 
 typedef u32 ats_int_type, ats_bool_type;
 typedef void ats_void_type;
-typedef void *ats_ptr_type;
+typedef void *ats_ptr_type, *ats_ref_type;
 
 #endif

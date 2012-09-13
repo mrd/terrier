@@ -38,39 +38,8 @@
  */
 
 #define ATS_DYNLOADFLAG 0
-#define ATS_STALOADFLAG 0
 
-%{^
-#include "ats_types.h"
-#include "ats_basics.h"
-#include "types.h"
-#include "mem/virtual.h"
-#include "mem/physical.h"
-#include "arm/memory.h"
-#include "arm/asm.h"
-#include "arm/smp/spinlock.h"
-#include "arm/smp/per-cpu.h"
-#include "omap/timer.h"
-#include "sched/process.h"
-#include "intr/interrupts.h"
-#define MODULE "sched_rr"
-#include "debug/log.h"
-
-void *atspre_null_ptr = 0;      //FIXME
-ats_bool_type atspre_peq(ats_ptr_type a, ats_ptr_type b) { return a == b; }
-
-static pid_t runq_head;         /* global runqueue: can only hold cleanly saved processes */
-static DEFSPINLOCK(rrlock);
-
-#define get_runq_head() ((void *) &runq_head)
-#define rel_runq_head(p)
-#define get_cpuq_head() ((void *) (&cpu_read(pid_t, cpu_runq_head)))
-#define rel_cpuq_head(p)
-#define rrlock_lock() spinlock_lock(&rrlock)
-#define rrlock_unlock() spinlock_unlock(&rrlock)
-static status waitqueue_append(pid_t *q, process_t *p);
-
-%}
+staload "sched/rr.sats"
 
 %{^
 
@@ -123,35 +92,39 @@ static process_t *waitqueue_dequeue(pid_t *q)
 
 %}
 
-abst@ype status = $extype "status";
-abst@ype pid_t = $extype "pid_t";
-abst@ype process_t = $extype "process_t";
 absview rrlock_v
-extern fun waitqueue_append {ql, pl: addr} (_: !pid_t @ ql, _: !process_t @ pl | q: ptr ql, p: ptr pl): status = "mac#waitqueue_append";
-extern fun waitqueue_dequeue {ql: addr} (_: !pid_t @ ql | q: ptr ql): [pl: addr] (process_t @ pl | ptr pl) = "mac#waitqueue_dequeue"
-extern prfun rel_process {pl: addr} (_: process_t @ pl): void
-
 extern fun rrlock_lock(): (rrlock_v | void) = "mac#rrlock_lock";
 extern fun rrlock_unlock(_: rrlock_v | ): void = "mac#rrlock_unlock";
-extern fun get_runq_head (_: !rrlock_v | ): [l:addr] (pid_t @ l | ptr l) = "mac#get_runq_head"
-extern fun rel_runq_head {l:addr} (pf: pid_t @ l, _: !rrlock_v | p: ptr l): void = "mac#rel_runq_head"
-extern fun get_cpuq_head (): [l: addr] (pid_t @ l | ptr l) = "mac#get_cpuq_head"
-extern fun rel_cpuq_head {l: addr} (_: pid_t @ l | _: ptr l): void = "mac#rel_cpuq_head"
+
+absviewtype pqueue (n:int) = ptr
+extern praxi lemma_pqueue_param_always_nat {n: int} (_: !pqueue n): [n >= 0] void
+extern fun pqueue_is_empty {n: nat} (_: !pqueue n): bool (n == 0) = "mac#pqueue_is_empty"
+
+absviewtype process (l:addr)
+extern fun process_is_null {l:addr} (_: !process l): [l >= null] bool (l == null) = "mac#atspre_ptr_is_null"
+extern prfun rel_process_null (_: process null): void
+
+
+extern fun waitqueue_dequeue {n:nat | n > 0} (q: !pqueue n >> pqueue (n-1)): [l: agz] process(l) = "mac#waitqueue_dequeue"
+extern fun waitqueue_append {n:nat} {l:agz} (q: !pqueue n >> pqueue (n+1), p: process l): void = "mac#waitqueue_append"
+
+extern fun get_runq_head (_: !rrlock_v | ): [n: nat] pqueue n = "mac#get_runq_head"
+extern fun rel_runq_head {n:nat} (_: !rrlock_v | p: pqueue n): void = "mac#rel_runq_head"
+extern fun get_cpuq_head (): [n:nat] pqueue n = "mac#get_cpuq_head"
+extern fun rel_cpuq_head {n:nat} (_: pqueue n): void = "mac#rel_cpuq_head"
 
 extern fun move_cpu_runqueue_to_global (): void = "sta#move_cpu_runqueue_to_global"
 implement move_cpu_runqueue_to_global () = let
-  val (cpuq_pf | cpuq) = get_cpuq_head ()
-  val (p_pf | p) = waitqueue_dequeue (cpuq_pf | cpuq)
-  val _ = rel_cpuq_head (cpuq_pf | cpuq)
+  val cpuq = get_cpuq_head ()
 in
-  if p = null then let prval _ = rel_process (p_pf) in () end
+  if pqueue_is_empty(cpuq) then rel_cpuq_head(cpuq)
   else let
+    val p = waitqueue_dequeue (cpuq); val _ = rel_cpuq_head(cpuq)
     val (lock_v | _) = rrlock_lock ()
-    val (runq_pf | runq) = get_runq_head (lock_v | )
-    val _ = waitqueue_append (runq_pf, p_pf | runq, p)
-    prval _ = rel_process (p_pf)
+    val runq = get_runq_head (lock_v | )
+    val _ = waitqueue_append (runq, p)
   in
-    rel_runq_head (runq_pf, lock_v | runq);
+    rel_runq_head (lock_v | runq);
     rrlock_unlock (lock_v | );
     move_cpu_runqueue_to_global ()
   end

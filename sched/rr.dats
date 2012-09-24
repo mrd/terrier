@@ -131,11 +131,11 @@ void do_process_switch(void *pptr)
 
 %}
 
-/*
+(*
  * Local Variables:
  * indent-tabs-mode: nil
  * mode: ATS
  * End:
- */
+ *)
 
-/* vi: set et sw=2 sts=2: */
+(* vi: set et sw=2 sts=2: *)

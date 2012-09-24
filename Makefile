@@ -77,6 +77,11 @@ else
 LDSCRIPT = ldscripts/$(IMGNAME).ld
 endif
 
+ifeq ($(NO_SMP),1)
+CFLAGS += -DNO_SMP
+SFLAGS += -DNO_SMP
+endif
+
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
 ##################################################

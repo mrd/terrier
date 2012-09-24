@@ -37,12 +37,14 @@
 
 ##################################################
 
+SCHED=rms
+
 C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	mem/physical.c mem/virtual.c intr/interrupts.c omap/timer.c omap/smp.c \
 	sched/process.c \
 	debug/log.c tests/cswitch.c tests/test_process.c
 S_FILES = init/startup.S intr/table.S
-DATS_FILES = sched/rr.dats
+DATS_FILES = sched/$(SCHED).dats
 PROGS = progs/idle progs/uart progs/net
 
 IMGNAME = terrier
@@ -81,6 +83,8 @@ ifeq ($(NO_SMP),1)
 CFLAGS += -DNO_SMP
 SFLAGS += -DNO_SMP
 endif
+
+CFLAGS += -DSCHED=$(SCHED)
 
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 

@@ -64,6 +64,9 @@ typedef struct {
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;
+#if SCHED == rms
+  u32 r, b, c, t;
+#endif
   pid_t next;
 } process_t;
 

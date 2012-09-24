@@ -43,6 +43,7 @@
 #include "arm/memory.h"
 #include "arm/asm.h"
 #include "omap/smp.h"
+#include "omap/timer.h"
 #include "arm/status.h"
 #include "arm/smp/per-cpu.h"
 #include "arm/smp/semaphore.h"
@@ -191,6 +192,13 @@ status process_new(process_t **return_p)
       /* set pid */
       p->pid = (pid_t) (i + 1);
       *return_p = p;
+
+#if SCHED==rms
+      p->r = p->b = 0;
+      /* some test values */
+      p->c = 1 << 12;
+      p->t = 1 << 14;
+#endif
       return OK;
     }
   }
@@ -596,6 +604,14 @@ status program_load(void *pstart, process_t **return_p)
   return OK;
 }
 
+#if SCHED==rms
+#ifdef OMAP4460
+DEF_PER_CPU_EXTERN(u32, prev_sched);
+#else
+#error "prev_sched not implemented"
+#endif
+#endif
+
 status programs_init(void)
 {
   extern u32 _program_map_start, _program_map_count;
@@ -624,6 +640,14 @@ status programs_init(void)
 
   /* start with idle process */
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
+
+#if SCHED==rms
+#ifdef OMAP4460
+  cpu_write(u32, prev_sched, timer_32k_value());
+#else
+#error "prev_sched not implemented"
+#endif
+#endif
 
   DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
 

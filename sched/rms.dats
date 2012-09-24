@@ -204,7 +204,6 @@ implement schedule (must_set_timer_v | ) = let
     in
       process_iter_done iter;
       pvttimer_set (mstv | ticks);
-      //pvttimer_set (mstv | now - tick_of_int 0);
       do_process_switch pnext
     end
   (* end [fun loop] *)

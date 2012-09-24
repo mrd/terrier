@@ -196,8 +196,8 @@ status process_new(process_t **return_p)
 #if SCHED==rms
       p->r = p->b = 0;
       /* some test values */
-      p->c = 1 << 12;
-      p->t = 1 << 14;
+      p->c = 1 << 16;
+      p->t = 1 << 18;
 #endif
       return OK;
     }

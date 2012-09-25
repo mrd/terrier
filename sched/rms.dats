@@ -167,9 +167,9 @@ implement schedule (must_set_timer_v | ) = let
             next_i: int)
            :<cloref1> void =
     if process_iter_has_next iter then let
-      var iter2 : process_iter i = iter
-      val p = process_iter iter2
-      val iter3 = iter2
+      var iter_ref : process_iter i = iter
+      val p = process_iter iter_ref
+
       val b = get_budget p
       val t = get_period p
       val r = get_replenish_time p
@@ -189,7 +189,7 @@ implement schedule (must_set_timer_v | ) = let
     in
       set_replenish_time (p, r');
       set_budget (p, new_b);
-      loop (mstv | iter3, if is_earlier_than (r', next_r) then r' else next_r, t', i')
+      loop (mstv | iter_ref, if is_earlier_than (r', next_r) then r' else next_r, t', i')
     end (* end [let var i2] *)
     else if next_i = 0 then begin
       (* no next process, go idle *)

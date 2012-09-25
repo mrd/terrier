@@ -79,6 +79,7 @@ else
 LDSCRIPT = ldscripts/$(IMGNAME).ld
 endif
 
+NO_SMP=1 # FIXME: until I fix the scheduler
 ifeq ($(NO_SMP),1)
 CFLAGS += -DNO_SMP
 SFLAGS += -DNO_SMP

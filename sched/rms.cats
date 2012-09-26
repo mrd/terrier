@@ -108,7 +108,7 @@ extern process_t process[];
 #define set_replenish_time(p, v) ((process_t *) (p))->r = (v)
 
 /* signed arithmetic to handle wraparound */
-#define is_earlier_than(n,m) ((u32) !!(((s32) n) - ((s32) m) <= (s32) 0))
+#define is_earlier_than(n,m) ((u32) !!(((s32) n) - ((s32) m) < (s32) 0))
 
 #define pqueue_is_empty(q) (*((pid_t *) q) == NOPID)
 #define pqueue_is_not_empty(q) (*((pid_t *) q) != NOPID)

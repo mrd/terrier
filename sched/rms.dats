@@ -40,6 +40,8 @@
 #define ATS_DYNLOADFLAG 0
 #define MAX_PROCESSES 16
 #define MAX_T (span_of_int 2147483647)
+#define BUDGET_THRESHOLD (span_of_int 32)
+#define ZERO_SPAN (span_of_int 0)
 
 staload "rms.sats"
 
@@ -71,7 +73,8 @@ abst@ype tick (n:int) = uint
 typedef tick = [n: nat] tick n
 extern castfn int_of_tick {n: nat} (_: tick n):<> int n
 extern castfn tick_of_int {n: nat} (_: int n):<> tick n
-extern fun timer_32k_value (): [n: nat] tick n = "mac#timer_32k_value"
+extern fun timer_32k_value (): tick = "mac#timer_32k_value"
+extern fun timer_32k_delay (_: span): void = "mac#timer_32k_delay"
 extern fun tick_sub_tick {n, m: nat} (_: tick n, _: tick m): span (n - m)
 overload - with tick_sub_tick
 extern fun tick_add_span {n, m: nat} (_: tick n, _: span m): tick (n + m)
@@ -123,8 +126,11 @@ extern fun process_iter {n:pos} (_: &process_iter n >> process_iter (n-1)): [l:a
 extern fun process_iter_has_next {n:nat} (_: !process_iter n): bool (n > 0) = "mac#process_iter_has_next"
 extern fun process_iter_done {n: nat} (_: process_iter n): void = "mac#process_iter_done"
 
-extern fun logspan(x: int, y: int): void = "mac#logspan"
+extern fun logspan(x: span, y: span): void = "mac#logspan"
 extern fun logovhd(x: int): void = "mac#logovhd"
+extern fun logticks(x: span): void = "mac#logticks"
+
+//extern fun DLOG {ts:types} (printf_c ts, ts): void
 
 %{^
 
@@ -132,24 +138,49 @@ extern fun logovhd(x: int): void = "mac#logovhd"
 #define process_iter(x) get_process((*((u32 *) (x)))++)
 #define process_iter_has_next(x) (x <= MAX_PROCESSES && process[x-1].pid != NOPID)
 #define process_iter_done(x)
-#define logspan(x,y) { DLOG(1,"prev_span=%#x now=%#x\n", x, y); }
+#define logspan(x,y) { DLOG(1,"prev_span=%#.08x prev_timer_val=%#.08x\n", x, y); }
 #define logovhd(x) { DLOG(1,"schedule took %#x ticks\n", x); }
+#define logticks(x) { DLOG(1,"setting timer to %#x ticks\n", x); }
+
+typedef struct {
+  u32 count;
+  u32 total_discrepancy;
+  u32 total_overhead;
+  u32 total_cyc_overhead;
+} stats_t;
+stats_t stats = { 0, 0, 0, 0 };
+#define record_stats(d,o,c) do { stats.count++; stats.total_discrepancy += (d >= 0 ? d : -d); stats.total_overhead += o; stats.total_cyc_overhead += c; } while (0)
+
+#define dump_stats() DLOG(1, "count=%d discrepancy=%d overhead=%d cyc_overhead=%d\n", stats.count, stats.total_discrepancy / stats.count, stats.total_overhead / stats.count, stats.total_cyc_overhead / stats.count)
 
 %}
 
+extern fun arm_read_cycle_counter (): int = "mac#arm_read_cycle_counter"
+extern fun record_stats (_: int, _: int, _: int): void = "mac#record_stats"
+extern fun dump_stats (): void = "mac#dump_stats"
+extern fun get_prev_timer_val (): span = "mac#get_prev_timer_val"
+extern fun set_prev_timer_val (_: span): void = "mac#set_prev_timer_val"
+
 implement schedule (must_set_timer_v | ) = let
   val prev_span = update_prev_sched ()
+  val prev_timer_val = get_prev_timer_val ()
   val [now: int] now = timer_32k_value ()
-  val _ = logspan(int_of_span prev_span, int_of_tick now)
+  val now_cyc = arm_read_cycle_counter ()
   val current = get_current ()
   
   (* subtract time passed from current process *)
   val bcurrent = get_budget current
   val bcurrent' = (if bcurrent < prev_span
-                   then span_of_int 0
+                   then ZERO_SPAN
                    else bcurrent - prev_span): span
 
-  val _ = set_budget (current, bcurrent')
+  (* If remaining budget falls below threshold, then it is too small to
+   * sensibly schedule. Round off to zero. *)
+  val bcurrent'' = (if bcurrent' < BUDGET_THRESHOLD
+                    then ZERO_SPAN
+                    else bcurrent'): span
+
+  val _ = set_budget (current, bcurrent'')
 
   (* Refill budgets if any process has reached its replenish time. Also
    * find soonest replenishment time in the future. *)
@@ -191,11 +222,27 @@ implement schedule (must_set_timer_v | ) = let
       set_budget (p, new_b);
       loop (mstv | iter_ref, if is_earlier_than (r', next_r) then r' else next_r, t', i')
     end (* end [let var i2] *)
-    else if next_i = 0 then begin
+    else if next_i = 0 then let
+      val ticks = next_r - now
+    in
       (* no next process, go idle *)
       process_iter_done iter;
-      pvttimer_set (mstv | next_r - now);
-      do_idle ()
+      if ticks < BUDGET_THRESHOLD then begin
+        // Just spin-wait out short idle periods
+        set_prev_timer_val (ticks);
+        timer_32k_delay ticks;
+        schedule (mstv | )
+      end else begin
+        // For longer idle periods, use idle process
+        set_prev_timer_val (ticks);
+        pvttimer_set (mstv | ticks);
+        do_idle ();
+        record_stats (int_of_span (prev_span - prev_timer_val),
+                      int_of_span (timer_32k_value () - now),
+                      arm_read_cycle_counter () - now_cyc);
+        logticks ticks;
+        dump_stats ()
+      end
     end else let
       (* prepare next process *)
       val pnext = get_process next_i
@@ -203,15 +250,20 @@ implement schedule (must_set_timer_v | ) = let
       val ticks = (if is_earlier_than (now + bnext, next_r) then bnext else next_r - now): span
     in
       process_iter_done iter;
+      set_prev_timer_val (ticks);
       pvttimer_set (mstv | ticks);
-      do_process_switch pnext
+      do_process_switch pnext;
+      record_stats (int_of_span prev_span - int_of_span prev_timer_val,
+                    int_of_span (timer_32k_value () - now),
+                    arm_read_cycle_counter () - now_cyc)
+      ;logticks ticks
     end
   (* end [fun loop] *)
 
   var pi: process_iter = make_process_iter ()
 in
-  loop (must_set_timer_v | pi, now + MAX_T, MAX_T, 0);
-  logovhd (int_of_span (timer_32k_value () - now))
+  loop (must_set_timer_v | pi, now + MAX_T, MAX_T, 0)
+  ;logspan (prev_span, prev_timer_val)
 end (* end [let fun loop] *)
 
 (*

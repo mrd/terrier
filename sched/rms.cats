@@ -116,8 +116,11 @@ extern process_t process[];
 DEF_PER_CPU(pid_t, cpu_runq_head); /* cpu runqueue: may hold unsaved processes */
 INIT_PER_CPU(cpu_runq_head) { cpu_write(pid_t, cpu_runq_head, NOPID); }
 
-DEF_PER_CPU(u32, prev_sched);   /* 32khz clock time when sched previously ran */
+DEF_PER_CPU(u32, prev_sched);      /* 32khz clock time when sched previously ran */
 INIT_PER_CPU(prev_sched) { cpu_write(u32, prev_sched, 0); }
+
+DEF_PER_CPU(u32, prev_timer_val);  /* what the timer was set to previously */
+INIT_PER_CPU(prev_timer_val) { cpu_write(u32, prev_timer_val, 0); }
 
 DEF_PER_CPU(process_t *, current);
 INIT_PER_CPU(current) { cpu_write(process_t *, current, NULL); }
@@ -171,6 +174,9 @@ static u32 update_prev_sched(void)
   diff = now - prev;            /* unsigned arithmetic handles wraparound correctly */
   return diff;
 }
+
+#define get_prev_timer_val() cpu_read(u32, prev_timer_val)
+#define set_prev_timer_val(x) cpu_write(u32, prev_timer_val, x)
 
 void schedule(void);
 

@@ -641,15 +641,15 @@ status programs_init(void)
   /* start with idle process */
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
 
+  DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
+
 #if SCHED==rms
 #ifdef OMAP4460
-  cpu_write(u32, prev_sched, timer_32k_value());
+  cpu_write(u32, prev_sched, timer_32k_value() - 1);
 #else
 #error "prev_sched not implemented"
 #endif
 #endif
-
-  DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
 
   sched_launch_first_process(cpu_read(process_t *, cpu_idle_process));
 

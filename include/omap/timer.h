@@ -75,6 +75,7 @@ static inline u32 timer_32k_value(void)
 
 /* Abstract private timer interface for schedulers: */
 static UNUSED void pvttimer_set(u32 count);
+static UNUSED u32 pvttimer_get(void);
 static UNUSED void pvttimer_enable_interrupt(void);
 static UNUSED void pvttimer_disable_interrupt(void);
 static UNUSED void pvttimer_ack_interrupt(void);
@@ -130,6 +131,13 @@ static void pvttimer_set(u32 count)
   /* FIXME: look into more efficient way of doing this;
    * and/or support higher clocks-per-sec in interface. */
   PVTTIMER->counter = count * pvttimer_32khz_prescaler;
+}
+
+static u32 pvttimer_get(void)
+{
+  /* FIXME: look into more efficient way of doing this;
+   * and/or support higher clocks-per-sec in interface. */
+  return PVTTIMER->counter / pvttimer_32khz_prescaler;
 }
 
 static void pvttimer_enable_interrupt(void)

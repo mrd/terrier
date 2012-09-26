@@ -188,7 +188,7 @@ void sched_init(void)
 {
   DLOG(1, "init: QUANTUM=%#x\n", QUANTUM);
   pvttimer_set_handler(sched_timer_handler);
-  pvttimer_set(QUANTUM);
+  pvttimer_set(1);
   pvttimer_enable_interrupt();
   pvttimer_start();
   //runq_head = NOPID;

@@ -71,6 +71,10 @@ ats_int_type atspre_isub(ats_int_type a, ats_int_type b)
 {
   return a - b;
 }
+ats_int_type atspre_sub_int_int(ats_int_type a, ats_int_type b)
+{
+  return a - b;
+}
 ats_bool_type atspre_lt_int_int(ats_int_type a, ats_int_type b)
 {
   return a < b;

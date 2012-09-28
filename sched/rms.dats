@@ -130,7 +130,7 @@ extern fun logspan(x: span, y: span): void = "mac#logspan"
 extern fun logovhd(x: int): void = "mac#logovhd"
 extern fun logticks(x: span): void = "mac#logticks"
 
-//extern fun DLOG {ts:types} (printf_c ts, ts): void
+extern fun DLOG {ts:types} (_:int, _: printf_c ts, _: ts): void = "mac#DLOG"
 
 %{^
 
@@ -167,7 +167,7 @@ implement schedule (must_set_timer_v | ) = let
   val [now: int] now = timer_32k_value ()
   val now_cyc = arm_read_cycle_counter ()
   val current = get_current ()
-  
+
   (* subtract time passed from current process *)
   val bcurrent = get_budget current
   val bcurrent' = (if bcurrent < prev_span

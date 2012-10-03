@@ -1,3 +1,6 @@
+unsigned int _scheduler_capacity = 1 << 16;
+unsigned int _scheduler_period = 1 << 18;
+unsigned int _scheduler_affinity = 1;
 int main(void)
 {
   /* code that uses a lot of registers -- and gets messed up if registers are corrupted */

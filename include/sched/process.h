@@ -67,6 +67,7 @@ typedef struct {
 #if SCHED == rms
   u32 r, b, c, t;
 #endif
+  u32 affinity;
   pid_t next;
 } process_t;
 

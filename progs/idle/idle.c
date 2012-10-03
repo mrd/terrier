@@ -1,3 +1,6 @@
+unsigned int _scheduler_capacity = 1 << 16;
+unsigned int _scheduler_period = 1 << 18;
+unsigned int _scheduler_affinity = 1;
 unsigned int a = 1;
 
 void entry(void);

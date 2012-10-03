@@ -530,6 +530,7 @@ status program_load(void *pstart, process_t **return_p)
        program_find_symbol(pstart, "_start")->st_value,
        program_find_symbol(pstart, "_end_entry")->st_value);
 
+  /* Find end of entry stub */
   sym = program_find_symbol(pstart, "_end_entry");
   if(sym == NULL) {
     DLOG(1, "unable to find _end_entry\n");
@@ -538,6 +539,33 @@ status program_load(void *pstart, process_t **return_p)
 
   p->entry = (void *) entry;
   p->end_entry = (void *) sym->st_value;
+
+#if SCHED==RMS
+  /* Obtain scheduler parameters */
+  /* Capacity */
+  sym = program_find_symbol(pstart, "_scheduler_capacity");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _scheduler_capacity\n");
+    return EINVALID;
+  }
+  p->c = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
+  /* Period */
+  sym = program_find_symbol(pstart, "_scheduler_period");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _scheduler_period\n");
+    return EINVALID;
+  }
+  p->t = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
+  DLOG(1, "capacity=%#x period=%#x\n", p->c, p->t);
+#endif
+  /* CPU affinity */
+  sym = program_find_symbol(pstart, "_scheduler_affinity");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _scheduler_affinity -- assuming CPU0\n");
+    p->affinity = 1;
+  } else
+    p->affinity = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
+  DLOG(1, "affinity=%#x\n", p->affinity);
 
   /* setup context */
   for(i=0;i<sizeof(context_t)>>2;i++)

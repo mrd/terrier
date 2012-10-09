@@ -190,10 +190,11 @@ implement schedule (must_set_timer_v | ) = let
    * run. *)
 
   (* <cloref1> = this function makes use of variables from the outside *)
-  fun loop {i, t: nat}
+  fun loop {i, t, rT: nat}
            (mstv: must_set_timer_v |
             iter: process_iter i,
-            next_r: tickGT now,
+            next_r : tickGT now,
+            next_rT: span rT,
             next_t: span t,
             next_i: int)
            :<cloref1> void =
@@ -206,21 +207,32 @@ implement schedule (must_set_timer_v | ) = let
       val r = get_replenish_time p
       (* ensure new replenishment time is in the future *)
 
+      // Update replenishment time if it has passed
       val r' =
         (if is_earlier_than (now, r) then r
          else (if is_earlier_than (now, r + t) then r + t
                else now + t)): tickGT now
+
+      // Also, update budget if replenishment time has passed
       val new_b =
         (if is_earlier_than (now, r) then b else get_capacity p): span
 
+      // Is this process ready to run, and is it higher priority
+      // than next_i?
       val (t', i') = (if span_of_int 0 < new_b then
                         if t < next_t then (t, process_id p)
                                       else (next_t, next_i)
                       else (next_t, next_i)): (span, int)
+
+      // if this process's replenishment occurs sooner than next_r,
+      // then override next_r. Also, track period associated with next_r.
+      val (next_r', next_rT') = (if is_earlier_than (r', next_r)
+                                 then (r', t)
+                                 else (next_r, next_t)): (tickGT now, span)
     in
       set_replenish_time (p, r');
       set_budget (p, new_b);
-      loop (mstv | iter_ref, if is_earlier_than (r', next_r) then r' else next_r, t', i')
+      loop (mstv | iter_ref, next_r', next_rT', t', i')
     end (* end [let var i2] *)
     else if next_i = 0 then let
       val ticks = next_r - now
@@ -247,7 +259,13 @@ implement schedule (must_set_timer_v | ) = let
       (* prepare next process *)
       val pnext = get_process next_i
       val bnext = get_budget pnext
-      val ticks = (if is_earlier_than (now + bnext, next_r) then bnext else next_r - now): span
+      val tnext = get_period pnext
+      // Calculate interval until next timer interrupt
+      val ticks = (if is_earlier_than (now + bnext, next_r) // does budget expire soonest?
+                   then bnext
+                   else if tnext < next_rT                  // is pnext higher priority?
+                   then bnext
+                   else next_r - now): span
     in
       process_iter_done iter;
       set_prev_timer_val (ticks);
@@ -262,7 +280,7 @@ implement schedule (must_set_timer_v | ) = let
 
   var pi: process_iter = make_process_iter ()
 in
-  loop (must_set_timer_v | pi, now + MAX_T, MAX_T, 0)
+  loop (must_set_timer_v | pi, now + MAX_T, MAX_T, MAX_T, 0)
   ;logspan (prev_span, prev_timer_val)
 end (* end [let fun loop] *)
 

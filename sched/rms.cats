@@ -107,6 +107,8 @@ extern process_t process[];
 #define get_replenish_time(p) ((process_t *) (p))->r
 #define set_replenish_time(p, v) ((process_t *) (p))->r = (v)
 
+#define match_cpu_affinity(p) ((u32) (!!(((process_t *) (p))->affinity & (1 << cpu_index()))))
+
 /* signed arithmetic to handle wraparound */
 #define is_earlier_than(n,m) ((u32) !!(((s32) n) - ((s32) m) < (s32) 0))
 

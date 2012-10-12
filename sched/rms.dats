@@ -51,6 +51,7 @@ extern fun pqueue_is_empty {n: nat} (_: !pqueue n): bool (n == 0) = "mac#pqueue_
 extern fun pqueue_is_not_empty {n: nat} (_: !pqueue n): bool (n <> 0) = "mac#pqueue_is_not_empty"
 
 absviewtype process(l:addr)
+viewtypedef process = [l:addr] process (l)
 extern fun get_process (_: int): [l:agz] process l = "mac#get_process"
 
 extern fun sched_wakeup {l:agz} (p: process l): void = "ext#sched_wakeup"
@@ -65,6 +66,10 @@ overload - with span_sub_span
 extern fun update_prev_sched (): span = "sta#update_prev_sched"
 extern fun span_lt_span {n, m: nat} (_: span n, _: span m): bool (n < m)
 overload < with span_lt_span
+
+//abst@ype affinity (c:int) = uint
+//typedef affinity = [c:nat] affinity c
+extern fun match_cpu_affinity {l:agz} (_: !process l >> opt(process l, b)): #[b:bool] bool b = "mac#match_cpu_affinity"
 
 extern castfn int1_of_int (x: int):<> [n:int] int n
 extern castfn int_of_int1 {n: int} (x: int n):<> int
@@ -84,6 +89,7 @@ extern fun is_earlier_than {n, m: nat} (_: tick n, _: tick m): bool (n < m) = "m
 extern fun process_id {l:agz} (_: !process l): int = "mac#process_id"
 extern fun get_capacity {l:agz} (_: !process l): [n:nat] span n = "mac#get_capacity"
 extern fun get_period {l:agz} (_: !process l): [n:pos] span n = "mac#get_period"
+//extern fun get_affinity {l:agz} (_: !process l): [c:nat] affinity c = "mac#get_affinity"
 
 (* set_budget consumes process *)
 extern fun set_budget {l:agz; n:nat} (_: process l, _: span n): void = "mac#set_budget"
@@ -199,41 +205,46 @@ implement schedule (must_set_timer_v | ) = let
             next_i: int)
            :<cloref1> void =
     if process_iter_has_next iter then let
-      var iter_ref : process_iter i = iter
-      val p = process_iter iter_ref
+      var iter_ref : process_iter = iter
+      val [l:addr] p = process_iter iter_ref
+    in if :(iter_ref:process_iter?) => match_cpu_affinity p then let
+        prval _ = opt_unsome {process l} (p)
+        val b = get_budget p
+        val t = get_period p
+        val r = get_replenish_time p
+        (* ensure new replenishment time is in the future *)
 
-      val b = get_budget p
-      val t = get_period p
-      val r = get_replenish_time p
-      (* ensure new replenishment time is in the future *)
+        // Update replenishment time if it has passed
+        val r' =
+          (if is_earlier_than (now, r) then r
+           else (if is_earlier_than (now, r + t) then r + t
+                 else now + t)): tickGT now
 
-      // Update replenishment time if it has passed
-      val r' =
-        (if is_earlier_than (now, r) then r
-         else (if is_earlier_than (now, r + t) then r + t
-               else now + t)): tickGT now
+        // Also, update budget if replenishment time has passed
+        val new_b =
+          (if is_earlier_than (now, r) then b else get_capacity p): span
 
-      // Also, update budget if replenishment time has passed
-      val new_b =
-        (if is_earlier_than (now, r) then b else get_capacity p): span
+        // Is this process ready to run, and is it higher priority
+        // than next_i?
+        val (t', i') = (if span_of_int 0 < new_b then
+                          if t < next_t then (t, process_id p)
+                                        else (next_t, next_i)
+                        else (next_t, next_i)): (span, int)
 
-      // Is this process ready to run, and is it higher priority
-      // than next_i?
-      val (t', i') = (if span_of_int 0 < new_b then
-                        if t < next_t then (t, process_id p)
-                                      else (next_t, next_i)
-                      else (next_t, next_i)): (span, int)
-
-      // if this process's replenishment occurs sooner than next_r,
-      // then override next_r. Also, track period associated with next_r.
-      val (next_r', next_rT') = (if is_earlier_than (r', next_r)
-                                 then (r', t)
-                                 else (next_r, next_t)): (tickGT now, span)
-    in
-      set_replenish_time (p, r');
-      set_budget (p, new_b);
-      loop (mstv | iter_ref, next_r', next_rT', t', i')
-    end (* end [let var i2] *)
+        // if this process's replenishment occurs sooner than next_r,
+        // then override next_r. Also, track period associated with next_r.
+        val (next_r', next_rT') = (if is_earlier_than (r', next_r)
+                                   then (r', t)
+                                   else (next_r, next_t)): (tickGT now, span)
+      in
+        set_replenish_time (p, r');
+        set_budget (p, new_b);
+        loop (mstv | iter_ref, next_r', next_rT', t', i')
+      end (* end [let prval _] *)
+      else let prval _ = opt_unnone {process l} p
+               prval _ = cleanup_top {process l} p
+           in loop (mstv | iter_ref, next_r, next_rT, next_t, next_i) end
+    end (* end [let var iter_ref] *)
     else if next_i = 0 then let
       val ticks = next_r - now
     in

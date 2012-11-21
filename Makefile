@@ -37,7 +37,7 @@
 
 ##################################################
 
-SCHED=rms
+SCHED=rms_sched
 
 C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	mem/physical.c mem/virtual.c intr/interrupts.c omap/timer.c omap/smp.c \

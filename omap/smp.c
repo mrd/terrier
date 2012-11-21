@@ -129,7 +129,7 @@ static inline void smp_dump_coherency_state(void)
 
 DEFSEMAPHORE(scheduling_enabled_sem);
 DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
-#if SCHED==rms
+#if SCHED==rms || SCHED==rms_sched
 #ifdef OMAP4460
 DEF_PER_CPU_EXTERN(u32, prev_sched);
 #else
@@ -198,7 +198,7 @@ static void NO_INLINE smp_aux_cpu_init()
   /* start with idle process */
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
 
-#if SCHED==rms
+#if SCHED==rms || SCHED==rms_sched
 #ifdef OMAP4460
   cpu_write(u32, prev_sched, timer_32k_value());
 #else

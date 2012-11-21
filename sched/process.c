@@ -193,7 +193,7 @@ status process_new(process_t **return_p)
       p->pid = (pid_t) (i + 1);
       *return_p = p;
 
-#if SCHED==rms
+#if SCHED==rms || SCHED==rms_sched
       p->r = p->b = 0;
       /* some test values */
       p->c = 1 << 16;
@@ -540,7 +540,7 @@ status program_load(void *pstart, process_t **return_p)
   p->entry = (void *) entry;
   p->end_entry = (void *) sym->st_value;
 
-#if SCHED==RMS
+#if SCHED==rms || SCHED==rms_sched
   /* Obtain scheduler parameters */
   /* Capacity */
   sym = program_find_symbol(pstart, "_scheduler_capacity");
@@ -632,7 +632,7 @@ status program_load(void *pstart, process_t **return_p)
   return OK;
 }
 
-#if SCHED==rms
+#if SCHED==rms || SCHED==rms_sched
 #ifdef OMAP4460
 DEF_PER_CPU_EXTERN(u32, prev_sched);
 #else
@@ -671,7 +671,7 @@ status programs_init(void)
 
   DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
 
-#if SCHED==rms
+#if SCHED==rms || SCHED==rms_sched
 #ifdef OMAP4460
   cpu_write(u32, prev_sched, timer_32k_value() - 1);
 #else

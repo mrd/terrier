@@ -64,7 +64,7 @@ typedef struct {
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;
-#if SCHED == rms
+#if SCHED==rms || SCHED==rms_sched
   u32 r, b, c, t;
 #endif
   u32 affinity;

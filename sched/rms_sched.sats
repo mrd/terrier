@@ -136,6 +136,8 @@ fun set_prev_timer_val (_: span): void = "mac#set_prev_timer_val"
 fun arm_read_cycle_counter (): int = "mac#arm_read_cycle_counter"
 fun record_stats (_: span, _: span, _: int): void = "mac#record_stats"
 fun dump_stats (): void = "mac#dump_stats"
+fun dump_process_stats (): void = "mac#dump_process_stats"
+fun update_process_stats (prev_span: span): void = "mac#update_process_stats"
 
 (* ****** ****** *)
 

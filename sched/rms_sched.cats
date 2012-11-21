@@ -259,6 +259,34 @@ void do_process_switch(void *pptr)
   //DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
 }
 
+void update_process_stats(u32 prev_span)
+{
+  process_t *cur = cpu_read(process_t *, current);
+  int i;
+  for(i=0;i<MAX_PROCESSES;i++) {
+    process_t *p = &process[i];
+    if(p->pid != NOPID) {
+      if(p->pid == cur->pid)
+        p->runticks += prev_span;
+
+      p->totalticks += prev_span;
+    }
+  }
+}
+
+void dump_process_stats(void)
+{
+  int i;
+  DLOG(1, "dump_process_stats:\n");
+  for(i=0;i<MAX_PROCESSES;i++) {
+    process_t *p = &process[i];
+    if(p->pid != NOPID) {
+      u32 u = 100 * p->runticks / p->totalticks;
+      DLOG(1, "  pid=%d runticks=%d totalticks=%d U=%d%%\n", p->pid, p->runticks, p->totalticks, u);
+    }
+  }
+}
+
 typedef struct {
   u32 count;
   u32 total_discrepancy;
@@ -266,7 +294,7 @@ typedef struct {
   u32 total_cyc_overhead;
 } stats_t;
 stats_t stats = { 0, 0, 0, 0 };
-#define record_stats(d,o,c) do { stats.count++; stats.total_discrepancy += (d >= 0 ? d : -d); stats.total_overhead += o; stats.total_cyc_overhead += c; } while (0)
+#define record_stats(d,o,c) do { if(d > 100000) { DLOG(1,"large d=%d at count=%d\n",d,stats.count); } stats.count++; stats.total_discrepancy += (d >= 0 ? d : -d); stats.total_overhead += o; stats.total_cyc_overhead += c; } while (0)
 
 #define dump_stats() DLOG(1, "count=%d discrepancy=%d overhead=%d cyc_overhead=%d\n", stats.count, stats.total_discrepancy / stats.count, stats.total_overhead / stats.count, stats.total_cyc_overhead / stats.count)
 

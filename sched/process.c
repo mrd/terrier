@@ -194,7 +194,7 @@ status process_new(process_t **return_p)
       *return_p = p;
 
 #if SCHED==rms || SCHED==rms_sched
-      p->r = p->b = 0;
+      p->totalticks = p->runticks = p->r = p->b = 0;
       /* some test values */
       p->c = 1 << 16;
       p->t = 1 << 18;
@@ -640,6 +640,27 @@ DEF_PER_CPU_EXTERN(u32, prev_sched);
 #endif
 #endif
 
+#if SCHED==rms || SCHED==rms_sched
+#ifdef OMAP4460
+void show_program_params(void)
+{
+  int i;
+  DLOG(1, "Program scheduling parameters:\n");
+  for(i=0;i<MAX_PROCESSES;i++) {
+    process_t *p = &process[i];
+    if(p->pid != NOPID) {
+      u32 u = 100 * p->c / p->t;
+      DLOG(1, "  pid=%d C=%d T=%d U=%d%%\n", p->pid, p->c, p->t, u);
+    }
+  }
+}
+
+
+#else
+#error "show_program_params not implemented"
+#endif
+#endif
+
 status programs_init(void)
 {
   extern u32 _program_map_start, _program_map_count;
@@ -668,6 +689,10 @@ status programs_init(void)
 
   /* start with idle process */
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
+
+#if SCHED==rms || SCHED==rms_sched
+  show_program_params();
+#endif
 
   DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
 

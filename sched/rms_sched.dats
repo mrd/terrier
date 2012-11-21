@@ -25,6 +25,8 @@ extern fun{} BUDGET_THRESHOLD(): span // 32
 implement{} BUDGET_THRESHOLD() = span_of_int 32
 extern fun{} MAX_T (): span // 2147483647
 implement{} MAX_T() = span_of_int 2147483647
+extern fun{} STATS_DUMP_THRESHOLD(): span // considered enough idle time to print stats
+implement{} STATS_DUMP_THRESHOLD() = span_of_int 8192 // somewhat arbitrary choice
 
 extern fun idle_process(): process = "mac#get_idle_process"
 
@@ -167,6 +169,8 @@ schedule () = let
   val t_now = timer_32k_value ()
   val cyc_now = arm_read_cycle_counter ()
 //
+  val () = update_process_stats (prev_span)
+//
   val ps = the_processlst_get ()
   val () = processlst_adjust_replenish (ps, t_now)
 //
@@ -186,20 +190,25 @@ in if process_is_idle (p_next) then
        timer_32k_delay (ticks);
        schedule ()
      end else begin
-        // For longer idle periods, use idle process
+       // For longer idle periods, use idle process
        pvttimer_set (ticks);
        do_idle ();
-       record_stats (prev_span - prev_timer_val,
+       record_stats (if prev_span < prev_timer_val then prev_timer_val - prev_span else prev_span - prev_timer_val,
                      timer_32k_value () - t_now,
                      arm_read_cycle_counter () - cyc_now);
-       dump_stats ()
-     end
+       // eat some of idle time, if enough, to dump out useful statistics
+       if STATS_DUMP_THRESHOLD() < ticks then begin
+         DLOG(1, "idling for ticks=%d\n", @(int_of_span ticks));
+         dump_stats ();
+         dump_process_stats ()
+      end
+     end // end of [else] branch for longer idle periods
   else begin
     pvttimer_set (ticks);
     do_process_switch (p_next);
-    record_stats (prev_span - prev_timer_val,
+    record_stats (if prev_span < prev_timer_val then prev_timer_val - prev_span else prev_span - prev_timer_val,
                   timer_32k_value () - t_now,
-                  arm_read_cycle_counter () - cyc_now)
+                  arm_read_cycle_counter () - cyc_now);
   end
 end // end of [schedule]
 

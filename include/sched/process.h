@@ -66,6 +66,7 @@ typedef struct {
   region_list_t *regions;
 #if SCHED==rms || SCHED==rms_sched
   u32 r, b, c, t;
+  u32 runticks, totalticks;
 #endif
   u32 affinity;
   pid_t next;

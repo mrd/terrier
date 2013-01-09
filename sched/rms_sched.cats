@@ -75,6 +75,10 @@ ats_int_type atspre_sub_int_int(ats_int_type a, ats_int_type b)
 {
   return a - b;
 }
+ats_int_type atspre_add_bool_bool(ats_bool_type a, ats_bool_type b)
+{
+  return a + b;
+}
 ats_int_type atspre_mul_bool_bool(ats_bool_type a, ats_bool_type b)
 {
   return a * b;
@@ -106,6 +110,10 @@ ats_bool_type atspre_ieq(ats_int_type a, ats_int_type b)
 ats_bool_type atspre_eq_int_int(ats_int_type a, ats_int_type b)
 {
   return a == b;
+}
+ats_bool_type atspre_neq_int_int(ats_int_type a, ats_int_type b)
+{
+  return a != b;
 }
 #define ATS_MALLOC(x) ((void *) NULL)
 

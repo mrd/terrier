@@ -1,5 +1,5 @@
 /*
- * Physical memory manager
+ * Physical memory manager C code glue for ATS
  *
  * -------------------------------------------------------------------
  *
@@ -37,13 +37,33 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "ats_types.h"
+#include "ats_basics.h"
 #include "types.h"
-#include "omap/early_uart3.h"
+#include "status.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
 #include "mem/virtual.h"
+#include "mem/physical.h"
 #define MODULE "pmm"
 #include "debug/log.h"
+
+ats_int_type atspre_add_bool_bool(ats_bool_type a, ats_bool_type b);
+ats_int_type atspre_mul_bool_bool(ats_bool_type a, ats_bool_type b);
+ats_bool_type atspre_neq_int_int(ats_int_type a, ats_int_type b);
+
+#define bitmap_num_bytes(m) bitmap[m].map_bytes
+#define bitmap_tst(m, byt, bit) BITMAP_TST(bitmap[m].map, ((byt) << 3) + (bit))
+#define bitmap_set(m, byt, bit) BITMAP_SET(bitmap[m].map, ((byt) << 3) + (bit))
+#define bitmap_compute_start_physaddr(m, byt, bit) (bitmap[m].start + ((((byt) << 3) + (bit)) << PAGE_SIZE_LOG2))
+#define is_aligned(bit, align) (((bit) & ((align) - 1)) == 0)
+#define nullphysaddr 0
+
+status physical_alloc_pages(u32 n, u32 align, physaddr *start)
+{
+  ATSextern_fun(ats_int_type, _ats_physical_alloc_pages) (ats_int_type, ats_int_type, ats_ref_type) ;
+  return _ats_physical_alloc_pages(n, align, start);
+}
 
 #define DEFAULT_CS0_START 0x80000000
 #ifdef USE_VMM
@@ -68,7 +88,7 @@ typedef struct {
 } bitmap_t;
 
 static bitmap_t bitmap[2];
-static u32 num_bitmaps;
+static s32 num_bitmaps;
 
 /* Pick and mark a physical page as allocated. Zero on error. */
 physaddr physical_alloc_page(void)
@@ -84,81 +104,6 @@ physaddr physical_alloc_page(void)
             return bitmap[i].start + (((j<<3) + k) << PAGE_SIZE_LOG2);
           }
   return 0;
-}
-
-/* Pick and mark multiple aligned physical pages as allocated. */
-/* Permits alignments up to 8 pages. */
-status physical_alloc_pages(u32 n, u32 align, physaddr *start)
-{
-  int m = 0, byt = 0, bit = 0, count = n, mode = 0;
-  int saved_m = 0, saved_byt = 0, saved_bit = 0;
-
-  if(n == 0) return EINVALID;
-  if(align == 0) align = 1;
-
-  /* Modes: 0=search; 1=mark */
-
-  /* First search for matching space. Then mark it as allocated. */
-
-  while(m < num_bitmaps) {
-    if(mode == 0) {
-      /* search mode */
-      if(BITMAP_TST(bitmap[m].map, (byt << 3) + bit)) {
-        /* found allocated page. reset count. */
-        count = n;
-      } else {
-        /* found an unallocated page. */
-        if(count == n) {
-          /* start of span */
-          if((bit & (align - 1)) == 0) {
-            /* save state at aligned start of (potential) span. */
-            saved_m = m;
-            saved_byt = byt;
-            saved_bit = bit;
-            count--;
-          }
-        } else
-          /* mid-span */
-          count--;
-      }
-
-      if(count == 0) {
-        /* found n consecutive unallocated pages. */
-        /* switch to marking mode. */
-        mode = 1;
-        /* restore count. */
-        count = n;
-        /* restore state to start of span. */
-        m = saved_m;
-        byt = saved_byt;
-        bit = saved_bit;
-        continue;
-      }
-    } else if(mode == 1) {
-      /* mark mode */
-      BITMAP_SET(bitmap[m].map, (byt << 3) + bit);
-      if(--count == 0) {
-        *start = bitmap[saved_m].start + (((saved_byt << 3) + saved_bit) << PAGE_SIZE_LOG2);
-        DLOG(4, "physical_alloc_pages(%d, %d) returning %#x\n", n, align, *start);
-        return OK;
-      }
-    }
-
-    /* increment bit and carry over when necessary */
-    bit++;
-
-    if(bit >= 8) {
-      byt++;
-      bit = 0;
-    }
-
-    if(byt >= bitmap[m].map_bytes) {
-      m++;
-      byt = 0;
-    }
-  }
-
-  return ENOSPACE;
 }
 
 /* Unmark physical page given by address (assume aligned) */

@@ -68,6 +68,7 @@ void NO_RETURN c_entry()
   void process_init(void);
   void sched_init(void);
   status programs_init(void);
+  void hsusbhc_init(void);
 
 #ifdef USE_VMM
   extern pagetable_t l1pt;
@@ -92,12 +93,15 @@ void NO_RETURN c_entry()
 #ifdef OMAP4460
   smp_init();
 
+#define NO_CACHE
 #ifdef NO_SMP
+#ifndef NO_CACHE
   arm_cache_invl_data();
   arm_ctrl(CTRL_DCACHE, CTRL_DCACHE); /* Enable Data Cache */
 
   arm_cache_invl_instr();
   arm_ctrl(CTRL_ICACHE, CTRL_ICACHE); /* Enable Instr Cache */
+#endif
 #endif
 #endif
 
@@ -108,6 +112,8 @@ void NO_RETURN c_entry()
 #endif
 
   timer_init();
+
+  hsusbhc_init();
 
   process_init();
   sched_init();

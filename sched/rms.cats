@@ -185,7 +185,7 @@ void schedule(void);
 static void sched_timer_handler(u32 intid)
 {
   if(pvttimer_is_triggered()) {
-    DLOG(1, "sched_timer_handler intid=%#x\n", intid);
+    //DLOG(1, "sched_timer_handler intid=%#x\n", intid);
     pvttimer_ack_interrupt();   /* acknowledge and unmask */
 
     schedule();
@@ -212,7 +212,7 @@ void sched_aux_cpu_init(void)
 
 void do_idle(void)
 {
-  DLOG(1, "do_idle\n");
+  //DLOG(1, "do_idle\n");
   cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
   cpu_write(context_t *, _next_context, &cpu_read(process_t *, cpu_idle_process)->ctxt);
@@ -226,7 +226,7 @@ void do_process_switch(void *pptr)
   cpu_write(process_t *, current, p);
   process_switch_to(p);
   cpu_write(context_t *, _next_context, &p->ctxt);
-  DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
+  //DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
 }
 
 #else

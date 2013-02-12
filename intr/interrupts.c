@@ -572,13 +572,14 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
   cpu_write(context_t *, _next_context, &cpu_read(process_t *, current)->ctxt);
   lr -= 4;                      /* the SWI is the previous instruction */
+#if 0
   DLOG(1, "_handle_swi lr=%#x (%#x), stack=%#x\n",
        lr, *((u32 *) lr), stack);
   DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", stack[0], stack[1], stack[2], stack[3]);
   DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", r4_r11[0], r4_r11[1], r4_r11[2], r4_r11[3]);
   DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", r4_r11[4], r4_r11[5], r4_r11[6], r4_r11[7]);
   DLOG(1, "r12: %#.08x r14_irq: %#.08x spsr_irq: %#.08x\n", stack[4], stack[5], stack[6]);
-
+#endif
   switch(stack[0]) {
   case 0:                       /* set entry */
     cpu_read(process_t *, current)->entry = (void *) stack[1];
@@ -616,7 +617,7 @@ void HANDLES("ABORT") _handle_data_abort(void)
   ASM("ADD sp, sp, #52");
   u32 lr, sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
-  ASM("MOV %0, sp":"=r"(sp));
+  ASM("MOV %0, sp":"=r"(sp));   /* FIXME: get SP from point of fault  */
   DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
   DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
   DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
@@ -647,7 +648,7 @@ void _handle_irq(void)
   u32 activeirq = IAR - 32;      /* shared peripheral IRQs start at 32 */
   if(IAR >= 32) {
 #endif
-    DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
+    //DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
     intc_mask_irq(activeirq);
     if(irq_table[activeirq])
       irq_table[activeirq](activeirq);
@@ -656,12 +657,12 @@ void _handle_irq(void)
 #endif
 #ifdef GIC
   } else if(IAR >= 16) {
-    DLOG(1, "_handle_irq: PRIVATE PERIPHERAL INTERRUPT IAR=%#x\n", IAR);
+    //DLOG(1, "_handle_irq: PRIVATE PERIPHERAL INTERRUPT IAR=%#x\n", IAR);
     intc_mask_intid(IAR);
     if(ppi_table[IAR - 16])
       ppi_table[IAR - 16](IAR);
   } else {
-    DLOG(1, "_handle_irq: SOFTWARE GENERATED INTERRUPT IAR=%#x\n", IAR);
+    //DLOG(1, "_handle_irq: SOFTWARE GENERATED INTERRUPT IAR=%#x\n", IAR);
     intc_mask_intid(IAR);
     if(sgi_table[IAR])
       sgi_table[IAR](IAR);

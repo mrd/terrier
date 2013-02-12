@@ -353,6 +353,12 @@ void timer_init(void)
     intc_unmask_irq(GPTIMER_BASE_IRQ + i);
     DLOG(1, "gptimer[%d] revision=%#x TCLR=%#x\n", i+1, gptimer[i+1]->TIDR, gptimer[i+1]->TCLR);
   }
+
+  /* OMAP4460 TRM p892 */
+  DLOG(1, "*CM_CLKMODE_DPLL_PER=%#x\n", *((u32 *) 0x4A008140));
+  /* OMAP4460 TRM p895 */
+  DLOG(1, "*CM_CLKSEL_DPLL_PER=%#x\n", *((u32 *) 0x4A00814C));
+
   timing_loop();
 }
 

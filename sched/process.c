@@ -690,6 +690,34 @@ status programs_init(void)
   /* start with idle process */
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
 
+#if 0
+
+#define TEST2
+
+  /* play with values */
+#ifdef TEST1
+  process[0].c = 2 << 14;
+  process[0].t = 10 << 14;
+
+  process[1].c = 3 << 14;
+  process[1].t = 12 << 14;
+
+  process[2].c = 4 << 14;
+  process[2].t = 15 << 14;
+#endif
+#ifdef TEST2
+  process[0].c = 2 << 14;
+  process[0].t = 11 << 14;
+
+  process[1].c = 3 << 14;
+  process[1].t = 13 << 14;
+
+  process[2].c = 4 << 14;
+  process[2].t = 16 << 14;
+#endif
+
+#endif
+
 #if SCHED==rms || SCHED==rms_sched
   show_program_params();
 #endif

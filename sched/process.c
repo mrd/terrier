@@ -257,6 +257,22 @@ Elf32_Shdr *program_find_section(void *pstart, const char *name, u32 type)
   return NULL;
 }
 
+Elf32_Shdr *program_find_section_index(void *pstart, int ndx)
+{
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Shdr *sh = (void *) pe + pe->e_shoff;
+  int shnum = pe->e_shnum, i;
+
+  for(i=0; i<shnum; i++) {
+    if(i == ndx)
+      return sh;
+
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
+  }
+  return NULL;
+}
+
 Elf32_Sym *program_find_symbol(void *pstart, const char *name)
 {
   Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
@@ -291,13 +307,18 @@ Elf32_Sym *program_find_symbol_index(void *pstart, int ndx)
   return &sym[ndx];
 }
 
+char *program_find_string_in(void *pstart, Elf32_Shdr *strtabsh, int strndx)
+{
+  return (char *) pstart + strtabsh->sh_offset + strndx;
+}
+
 char *program_find_string(void *pstart, int strndx)
 {
   Elf32_Shdr *strtabsh = program_find_section(pstart, ".strtab", SHT_STRTAB);
   if(strtabsh == NULL)
     return NULL;
 
-  return (char *) pstart + strtabsh->sh_offset + strndx;
+  return program_find_string_in(pstart, strtabsh, strndx);
 }
 
 void program_dump_symbols(void *pstart)
@@ -325,78 +346,70 @@ void program_dump_symbols(void *pstart)
   }
 }
 
+/* Add up section sizes */
 u32 program_memory_size(void *pstart)
 {
-  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
-  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
-  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
-
-  return text->sh_size + data->sh_size + bss->sh_size;
-}
-
-status program_relocate(void *pstart, u32 base, u32 *entry)
-{
-  int i;
-  Elf32_Sym *sym;
+  /* Loop through sections and add up "in memory" sections */
+  u32 size = 0;
   Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
-  /* Extract sections and create layout */
+  Elf32_Shdr *sh = (void *) pe + pe->e_shoff;
+  int shnum = pe->e_shnum, i;
 
-  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
-  Elf32_Shdr *reltext = program_find_section(pstart, ".rel.text", SHT_REL);
-  /* Elf32_Shdr *relatext = program_find_section(pstart, ".rela.text", SHT_RELA); */
-  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
-  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
-
-#define CHK_SEC(var) if(var == NULL) { DLOG(1, "Unable to find section %s.\n", #var); return EINVALID; }
-  CHK_SEC(text);
-  CHK_SEC(reltext);
-  CHK_SEC(data);
-  CHK_SEC(bss);
-
-#define SECTION_INDEX(s) (((u32) (s) - (u32) pe - pe->e_shoff) / pe->e_shentsize)
-  u32 textshnum = SECTION_INDEX(text);
-  u32 datashnum = SECTION_INDEX(data);
-  u32 bssshnum  = SECTION_INDEX(bss);
-  DLOG(1, "section indices: text=%d data=%d bss=%d\n", textshnum, datashnum, bssshnum);
-
-  /* Calculate addresses for .text, .data, .bss */
-
-  u32 textbase = base;
-  u32 database = textbase + text->sh_size;
-  u32 bssbase  = database + data->sh_size;
-  DLOG(1, "base addresses: text=%#x data=%#x bss=%#x\n", textbase, database, bssbase);
-  text->sh_addr = textbase;
-  data->sh_addr = database;
-  bss->sh_addr  = bssbase;
-
-  /* Rewrite symtab based on shndx, and put symbols into proper spaces */
-
-  Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
-  CHK_SEC(symtabsh);
-
-  sym = (void *) pstart + symtabsh->sh_offset;
-  for(i=0; i< symtabsh->sh_size / sizeof(Elf32_Sym); i++) {
-    if(sym[i].st_shndx == textshnum)
-      sym[i].st_value += textbase;
-    if(sym[i].st_shndx == datashnum)
-      sym[i].st_value += database;
-    if(sym[i].st_shndx == bssshnum)
-      sym[i].st_value += bssbase;
+  for(i=0; i<shnum; i++) {
+    if(sh->sh_flags & SHF_ALLOC) /* ALLOC means "in memory" */
+      size += sh->sh_size;
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
   }
 
-  //program_dump_symbols(pstart);
+  return size;
+}
 
-  /* Iterate through relocation sections and rewrite binary */
+/* place ALLOC sections into memory and rewrite headers; return final size */
+static u32 lay_out_sections(void *pstart, u32 base)
+{
+  u32 curaddr = base;
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Shdr *sh = (void *) pe + pe->e_shoff;
+  int shnum = pe->e_shnum, i;
 
-  Elf32_Rel *rel = (void *) pstart + reltext->sh_offset;
-  for(i=0; i<reltext->sh_size/sizeof(Elf32_Rel); i++) {
+  /* loop through sections */
+  for(i=0; i<shnum; i++) {
+    if(sh->sh_flags & SHF_ALLOC) {
+      if(sh->sh_addralign > 0) {
+        u32 al = sh->sh_addralign;
+        /* align new address */
+        if((curaddr & (al-1)) != 0)
+          curaddr += al - (curaddr & (al-1));
+      }
+
+      /* relocate section to new address */
+      sh->sh_addr = curaddr;
+
+      /* next section goes after this one */
+      curaddr += sh->sh_size;
+    }
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
+  }
+
+  return curaddr - base;        /* return memory size */
+}
+
+/* Rewrite the ELF at 'pstart' following instructions in relocation
+ * section 'rel' with 'num_rel_entries' entries and apply those
+ * instructions to the binary data managed by section header 'sh'. */
+static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_entries, Elf32_Shdr *sh)
+{
+  u32 i;
+  for(i=0; i<num_rel_entries; i++) {
     u32 A, S, P;
     u32 ndx = ELF32_R_SYM(rel[i].r_info);
     u32 typ = ELF32_R_TYPE(rel[i].r_info);
     u32 off = rel[i].r_offset;
-    u32 *ptr = (void *) pstart + text->sh_offset + off;
+    u32 *ptr = (void *) pstart + sh->sh_offset + off;
     char *symstr;
-    sym = program_find_symbol_index(pstart, ndx);
+    Elf32_Sym *sym = program_find_symbol_index(pstart, ndx);
     if(sym == NULL) {
       DLOG(1, "Unable to find sym=%d\n", ndx);
       break;
@@ -419,7 +432,7 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
       DLOG_NO_PREFIX(1, "ABS32: A=%#x S=%#x result=%#x\n", A, S, *ptr);
       break;
     case R_ARM_CALL:            /* branch with link instruction */
-      P = textbase + off;
+      P = sh->sh_addr + off;
       A = (*ptr << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
       *ptr &= 0xFF000000;
       *ptr |= ((S + A - P) & 0x00FFFFFF) >> 2; /* re-encode */
@@ -443,10 +456,76 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
     }
   }
 
-  *entry = textbase + pe->e_entry;
+}
+
+/* Rewrite symbol table and binary based on actual memory lay-out */
+status program_relocate(void *pstart, u32 base, u32 *entry)
+{
+  int i;
+  Elf32_Sym *sym;
+  Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
+  Elf32_Shdr *sh;
+  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
+
+#define CHK_SEC(var) if(var == NULL) { DLOG(1, "Unable to find section %s.\n", #var); return EINVALID; }
+  CHK_SEC(text);
+
+  /* Rewrite symtab based on shndx, and put symbols into proper spaces */
+
+  Elf32_Shdr *symtabsh = program_find_section(pstart, ".symtab", SHT_SYMTAB);
+  CHK_SEC(symtabsh);
+
+  /* Rewrite values in symbol table that have been relocated by lay-out */
+  sym = (void *) pstart + symtabsh->sh_offset;
+  for(i=0; i< symtabsh->sh_size / sizeof(Elf32_Sym); i++) {
+    sh = program_find_section_index(pstart, sym[i].st_shndx);
+    if(sh == NULL) continue;    /* skip nonsense section */
+
+    /* if symbol section is in memory (meaning it was relocated) then
+     * adjust the symbol's value */
+    if(sh->sh_flags & SHF_ALLOC)
+      sym[i].st_value += sh->sh_addr;
+
+    DLOG(4, "Elf32_Sym name=\"%s\" shndx=%d value=%#x\n",
+         program_find_string(pstart, sym[i].st_name),
+         sym[i].st_shndx,
+         sym[i].st_value);
+  }
+
+
+  /* FIXME: handle SHT_RELA too */
+  if(program_find_section(pstart, NULL, SHT_RELA))
+    early_panic("Unable to handle SHT_RELA.");
+
+  /* Iterate through relocation sections and rewrite binary */
+
+  sh = (void *) pe + pe->e_shoff; /* start at first section */
+  /* loop through sections */
+  for(i=0; i<pe->e_shnum; i++) {
+    if(sh->sh_type == SHT_REL) { /* if it is a relocation section */
+      Elf32_Rel *rel = (void *) pstart + sh->sh_offset;
+      u32 num_rel_entries = sh->sh_size/sizeof(Elf32_Rel);
+      Elf32_Shdr *target_sh;    /* the target section to be rewritten */
+      /* sh_info contains the target section index; check its validity */
+      if(0 < sh->sh_info && sh->sh_info < pe->e_shnum) {
+        target_sh = program_find_section_index(pstart, sh->sh_info);
+        rewrite_binary_section(pstart, rel, num_rel_entries, target_sh);
+        /* postcondition: data in section is now rewritten */
+      } else
+        DLOG(1, "SHT_REL entry %d had invalid sh_info=%d\n", i, sh->sh_info);
+    }
+
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
+  }
+
+  *entry = text->sh_addr + pe->e_entry;
   return OK;
 }
 
+/* Load a (relocatable) ELF program the image of which begins at
+ * 'pstart' and, if successful, will place the pointer to the
+ * process_t data structure into the 'return_p' location. */
 status program_load(void *pstart, process_t **return_p)
 {
   process_t *p;
@@ -483,33 +562,65 @@ status program_load(void *pstart, process_t **return_p)
 
   program_dump_sections(pstart);
 
-  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
-  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
-  Elf32_Shdr *bss  = program_find_section(pstart, ".bss", SHT_NOBITS);
+  /* *** */
 
-  u32 memsz = program_memory_size(pstart);
+  Elf32_Shdr *text = program_find_section(pstart, ".text", SHT_PROGBITS);
+  u32 align = (text->sh_addralign <= PAGE_SIZE ? 1 : text->sh_addralign >> 12);
+  /* choose page-level alignment based on ELF section ".text" desired alignment;
+   * any alignment less than a page is rounded up to a page */
+
+  /* obtain estimate of program memory size */
+  u32 memsz = program_memory_size(pstart), memsz2;
+  u32 pages, pages2, base;
+  physaddr region_phys;
+  DLOG(2, "program_memory_size=%d\n", memsz);
+
   if(memsz == 0) {
     DLOG(1, "program_memory_size == 0\n");
     return EINVALID;
   }
 
-  u32 pages = (memsz + 0xFFF) >> PAGE_SIZE_LOG2, region_phys;
-  u32 align = (text->sh_addralign <= 0x1000 ? 1 : text->sh_addralign >> 12);
+  /*** Allocate physical memory and rewrite section headers */
 
-  /* Create region in physical memory for program */
+  /* Complication: alignment constraints on sections may cause the
+   * program to require more space in memory than the initial estimate
+   * suggested. */
 
-  if(physical_alloc_pages(pages, align, &region_phys) != OK) {
-    DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
-    /* FIXME: clean-up previous resources */
-    return ENOSPACE;
-  }
+  do {
+    pages = (memsz + 0xFFF) >> PAGE_SIZE_LOG2;
 
-  /* Select base address */
+    /* Create region in physical memory for program */
+    if(physical_alloc_pages(pages, align, &region_phys) != OK) {
+      DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
+      /* FIXME: clean-up previous resources */
+      return ENOSPACE;
+    }
+
+    /* Select base address */
 #ifdef USE_VMM
-  u32 base = VIRTUAL_BASE_ADDR;
+    base = VIRTUAL_BASE_ADDR;
 #else
-  u32 base = region_phys;
+    base = region_phys;
 #endif
+
+    /* rewrite sections using new base address */
+    memsz2 = lay_out_sections(pstart, base);
+    /* postcondition: the ELF sections have been relocated to new memory addresses */
+
+    pages2 = (memsz2 + 0xFFF) >> PAGE_SIZE_LOG2;
+    if(pages2 > pages) {
+      /* Problem: alignment constraints during lay-out caused memory
+       * requirements to overflow the simple estimate. Must redo with
+       * larger size. */
+      memsz = memsz2;
+
+      /* clean up previous allocation */
+      for(i=0; i<pages; i++)
+        physical_free_page(region_phys + (i << PAGE_SIZE_LOG2));
+    }
+  } while(pages2 != pages);
+
+  /*** Now memsz is determined and section headers have been rewritten. */
 
   if(program_relocate(pstart, base, &entry) != OK) {
     DLOG(1, "program_relocate(%#x, %#x) failed.\n", pstart, region_phys);
@@ -517,7 +628,7 @@ status program_load(void *pstart, process_t **return_p)
     return EINVALID;
   }
 
-  /* Create process */
+  /*** Create process */
 
   if(process_new(&p) != OK) {
     DLOG(1, "process_new failed\n");
@@ -530,7 +641,7 @@ status program_load(void *pstart, process_t **return_p)
        program_find_symbol(pstart, "_start")->st_value,
        program_find_symbol(pstart, "_end_entry")->st_value);
 
-  /* Find end of entry stub */
+  /*** Find end of entry stub */
   sym = program_find_symbol(pstart, "_end_entry");
   if(sym == NULL) {
     DLOG(1, "unable to find _end_entry\n");
@@ -540,8 +651,9 @@ status program_load(void *pstart, process_t **return_p)
   p->entry = (void *) entry;
   p->end_entry = (void *) sym->st_value;
 
+  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
 #if SCHED==rms || SCHED==rms_sched
-  /* Obtain scheduler parameters */
+  /*** Obtain scheduler parameters */
   /* Capacity */
   sym = program_find_symbol(pstart, "_scheduler_capacity");
   if(sym == NULL) {
@@ -567,7 +679,7 @@ status program_load(void *pstart, process_t **return_p)
     p->affinity = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
   DLOG(1, "affinity=%#x\n", p->affinity);
 
-  /* setup context */
+  /*** Setup context for scheduling */
   for(i=0;i<sizeof(context_t)>>2;i++)
     ((u32 *)&p->ctxt)[i] = 0;
 
@@ -575,8 +687,7 @@ status program_load(void *pstart, process_t **return_p)
   p->ctxt.usr.r[15] = (u32) entry; /* starting address */
   p->ctxt.psr = MODE_SYS;          /* starting status register */
 
-#ifdef USE_VMM
-  pagetable_t *l2 = &p->tables->next->elt;
+  /*** Describe program region for the benefit of memory management */
   region_list_t *rl = region_list_pool_alloc();
   if(rl == NULL) {
     DLOG(1, "process_new: region_list_pool_alloc failed.\n");
@@ -585,7 +696,12 @@ status program_load(void *pstart, process_t **return_p)
   }
   rl->elt.pstart = region_phys;
   rl->elt.vstart = (void *) base;
+#ifdef USE_VMM
+  pagetable_t *l2 = &p->tables->next->elt;
   rl->elt.pt = l2;
+#else
+  rl->elt.pt = NULL;
+#endif
   rl->elt.page_count = pages;
   rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
 
@@ -594,38 +710,60 @@ status program_load(void *pstart, process_t **return_p)
 
   rl->elt.access = R_RW;         /* read-write user mode */
   region_append(&p->regions, rl);
-  vmm_map_region(&rl->elt);
+
+#ifdef USE_VMM
+  vmm_map_region(&rl->elt);     /* Create region in process's pagetables */
+
+  //DLOG_DUMP(1, &l2->ptvaddr[0], &l2->ptvaddr[16]);
 
   process_switch_to(p);
+  u32 paddr;
+  if(vmm_get_phys_addr((void *) 0x8000, &paddr) != OK)
+    DLOG(1, "vmm_get_phys_addr failed\n");
+  else
+    DLOG(1, "vmm_get_phys_addr(0x8000) = %#x\n", paddr);
+  /* *** cheat ***, switch to process and use its mapping */
 
-  /* cheat, switch to process and use its mapping */
 #endif
 
+  vmm_dump_region(&rl->elt);
+
+  /*** Copy sections into their final memory locations */
+
   u8 *dest, *src;
+  Elf32_Shdr *sh = (void *) pe + pe->e_shoff; /* start at first section */
 
-  /* copy text */
-  dest = (u8 *) text->sh_addr;
-  src = pstart + text->sh_offset;
-  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", text->sh_size, src, dest);
-  for(i=0;i<text->sh_size;i++)
-    dest[i] = src[i];
+  /* loop through sections */
+  for(i=0; i<pe->e_shnum; i++) {
+    if((sh->sh_flags & SHF_ALLOC) && sh->sh_size > 0) { /* if it is "in memory" */
+      if(sh->sh_type == SHT_PROGBITS) {
+        /* PROGBITS means: data that the program needs to be copied verbatim */
+        dest = (u8 *) sh->sh_addr;
+        src = pstart + sh->sh_offset;
+        DLOG(1, "program_load: copying section=%d (%s) bytes=%d src=%#x dest=%#x\n",
+             i, program_find_string_in(pstart, program_find_section_index(pstart, pe->e_shstrndx), sh->sh_name),
+             sh->sh_size, src, dest);
+        memcpy(dest, src, sh->sh_size);
+      } else if(sh->sh_type == SHT_NOBITS) {
+        /* NOBITS means: just allocate empty space and zero it out */
+        dest = (u8 *) sh->sh_addr;
+        DLOG(1, "program_load: zeroing section=%d (%s) bytes=%d dest=%#x\n",
+             i, program_find_string_in(pstart, program_find_section_index(pstart, pe->e_shstrndx), sh->sh_name),
+             sh->sh_size, dest);
+        memset(dest, 0, sh->sh_size);
+      } else
+        DLOG(1, "program_load: not bothering with section=%d (%s) type=%#x\n",
+             i, program_find_string_in(pstart, program_find_section_index(pstart, pe->e_shstrndx), sh->sh_name),
+             sh->sh_type);
+    }
 
-  /* copy data */
-  dest = (u8 *) data->sh_addr;
-  src = pstart + data->sh_offset;
-  DLOG(1, "program_load: copying %d bytes src=%#x dest=%#x\n", data->sh_size, src, dest);
-  for(i=0;i<data->sh_size;i++)
-    dest[i] = src[i];
-
-  /* zero bss */
-  dest = (u8 *) bss->sh_addr;
-  DLOG(1, "program_load: zeroing %d bytes dest=%#x\n", bss->sh_size, dest);
-  for(i=0;i<bss->sh_size;i++)
-    dest[i] = 0;
+    /* go to next section header */
+    sh = (void *) sh + pe->e_shentsize;
+  }
 
   *return_p = p;
 
-  /* ensure programs are written to main memory */
+  /*** Ensure programs are written to main memory */
   data_mem_barrier();
   arm_cache_clean_invl_data();
 

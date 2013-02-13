@@ -37,10 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef USE_VMM
-
-#include "types.h"
 #include "mem/virtual.h"
+#include "types.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
 #define MODULE "vmm"
@@ -48,6 +46,7 @@
 #include "debug/log.h"
 #include "debug/cassert.h"
 
+#ifdef USE_VMM
 
 ALIGNED(0x4000, u32, l1table[4096]);
 extern void *_l1table_phys;
@@ -152,7 +151,7 @@ status vmm_map_region(region_t *r)
   u32 t = r->pt->type;
 
   if(t >= PT_NUM_TYPES || t == PT_FAULT) {
-    DLOG(1, "Unknown/invalid region pagetable type=%d\n", t);
+    DLOG(1, "Unknown/invalid region pagetable type=%d.\n", t);
     return EINVALID;
   }
   if(((u32) r->vstart & pt_entry_masks[t]) != 0) {
@@ -310,8 +309,23 @@ void vmm_dump_kernel_l2pt(u32 start, u32 end)
 }
 
 POOL_DEFN(pagetable_list,pagetable_list_t,16,4);
-POOL_DEFN(region_list,region_list_t,16,4);
+
 #endif
+
+/* Regions can be used with physical addresses */
+POOL_DEFN(region_list,region_list_t,16,4);
+
+void vmm_dump_region(region_t *r)
+{
+  char *access[] = {"NA", "PM", "RO", "RW"};
+  DLOG(1, "region pstart=%#x vstart=%#x count=%#x pagesize=%#x %s%s%s%s %s\n",
+       r->pstart, r->vstart, r->page_count, (1<<r->page_size_log2),
+       ((r->cache_buf & R_B) ? "B" : "b"),
+       ((r->cache_buf & R_C) ? "C" : "c"),
+       ((r->shared_ng & R_S) ? "S" : "s"),
+       ((r->shared_ng & R_NG) ? "NG" : "ng"),
+       access[r->access & 0x3]);
+}
 
 /*
  * Local Variables:

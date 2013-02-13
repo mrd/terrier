@@ -418,6 +418,9 @@ static u32 lay_out_sections(void *pstart, u32 base)
 static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_entries, Elf32_Shdr *sh)
 {
   u32 i;
+
+  DLOG(1, "rewrite_binary_section: applying %d relocation entries to section (%s).\n", num_rel_entries,
+       program_find_string_in(pstart, program_find_section_index(pstart, ((Elf32_Ehdr *) pstart)->e_shstrndx), sh->sh_name));
   for(i=0; i<num_rel_entries; i++) {
     u32 A, S, P;
     u32 ndx = ELF32_R_SYM(rel[i].r_info);
@@ -442,6 +445,9 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
 
     u32 ins;
     switch(typ) {
+    case R_ARM_NONE:
+      DLOG_NO_PREFIX(1, "NONE\n");
+      break;
     case R_ARM_ABS32:           /* Absolute 32-bit relocation */
       A = *ptr;
       *ptr = S + A;
@@ -466,8 +472,16 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       *ptr = (ins & 0xFFF00000) | ((t & 0xF000) << 4) | (ins & 0x0000F000) | (t & 0xFFF);
       DLOG_NO_PREFIX(1, "MOVT/MOVW: A=%#x S=%#x result=%#x\n", A, S, *ptr);
       break;
+    case R_ARM_PREL31:
+      // R_ARM_PREL31 formula is ((S + A) | T) – P
+      A = *ptr;                 /* Data-relocation: A is sign-extended to 32-bits */
+      P = sh->sh_addr + off;    /* the address of the place being relocated (derived from r_offset). */
+      /* T = 0; // because we don't support THUMB */
+      *ptr = ((S + A)) - P;
+      DLOG_NO_PREFIX(1, "PREL31: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
+      break;
     default:
-      DLOG_NO_PREFIX(1, "Unknown relocation type.\n");
+      early_panic("Unknown relocation type. See ELF-for-ARM manual to implement.\n");
       break;
     }
   }

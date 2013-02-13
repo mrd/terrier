@@ -1859,6 +1859,7 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_ARM_LDR_SBREL_11_0    35
 #define R_ARM_ALU_SBREL_19_12   36
 #define R_ARM_ALU_SBREL_27_20   37
+#define R_ARM_PREL31            42
 #define R_ARM_MOVW_ABS_NC       43
 #define R_ARM_MOVT_ABS          44
 #define R_ARM_GNU_VTENTRY       100

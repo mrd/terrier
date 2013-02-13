@@ -81,6 +81,22 @@ process_t *process_find(pid_t pid)
   }
 }
 
+/* Does the region [ptr, ptr+bytes] lie within the process? */
+status process_is_valid_pointer(process_t *p, void *ptr, u32 bytes)
+{
+  /* FIXME: doesn't handle straddled regions */
+  u32 ptrval = (u32) ptr;
+  region_list_t *rl = p->regions;
+  while(rl != NULL) {
+    u32 start = (u32) rl->elt.vstart;
+    u32 end = start + (rl->elt.page_count << rl->elt.page_size_log2);
+    if(start <= ptrval && (ptrval + bytes) <= end)
+      return OK;
+    rl = rl->next;
+  }
+  return EINVALID;
+}
+
 /* Switch processes. Requires valid p (meaning, in process[] table). */
 status process_switch_to(process_t *p)
 {

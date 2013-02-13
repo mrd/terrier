@@ -73,6 +73,7 @@ typedef struct {
 } process_t;
 
 process_t *process_find(u32 pid);
+status process_is_valid_pointer(process_t *p, void *ptr, u32 bytes);
 status process_switch_to(process_t *p);
 status process_new(process_t **return_p);
 void process_init(void);

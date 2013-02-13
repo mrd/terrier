@@ -455,9 +455,9 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       break;
     case R_ARM_CALL:            /* branch with link instruction */
       P = sh->sh_addr + off;
-      A = (*ptr << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
+      A = (((s32) *ptr) << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
       *ptr &= 0xFF000000;
-      *ptr |= ((S + A - P) & 0x00FFFFFF) >> 2; /* re-encode */
+      *ptr |= ((((S + A - P)) >> 2) & 0x00FFFFFF); /* re-encode */
       DLOG_NO_PREFIX(1, "CALL: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
       break;
     case R_ARM_MOVT_ABS:        /* mov TOP */

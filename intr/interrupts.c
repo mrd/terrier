@@ -598,9 +598,16 @@ void NAKED _handle_swi(u32 lr)
 
 void HANDLES("ABORT") _handle_prefetch_abort(void)
 {
+  u32 regs[16];
+  clrex();
+  ASM("STMIA %0,{r0-r15}^"::"r"(regs));
   u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
+  DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
+  DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
+  DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
+  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x pc : %#.08x\n", regs[12], regs[13], regs[14], regs[15]);
   sr = arm_mmu_instr_fault_status();
   DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 4, sp, sr,
        arm_mmu_instr_fault_addr());
@@ -610,18 +617,16 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
 
 void HANDLES("ABORT") _handle_data_abort(void)
 {
-  u32 *regs;
+  u32 regs[16];
   clrex();
-  ASM("STMFD sp!,{r0-r12}");
-  ASM("MOV %0, sp":"=r"(regs));
-  ASM("ADD sp, sp, #52");
-  u32 lr, sp, sr;
+  ASM("STMIA %0,{r0-r15}^"::"r"(regs));
+  u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
-  ASM("MOV %0, sp":"=r"(sp));   /* FIXME: get SP from point of fault  */
+  ASM("MOV %0, sp":"=r"(sp));
   DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
   DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
   DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
-  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x\n", regs[12], sp, lr);
+  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x pc : %#.08x\n", regs[12], regs[13], regs[14], regs[15]);
   sr = arm_mmu_data_fault_status();
   DLOG(1, "_handle_data_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 8, sp, sr,
        arm_mmu_data_fault_addr());

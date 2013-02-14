@@ -68,7 +68,6 @@ void NO_RETURN c_entry()
   void process_init(void);
   void sched_init(void);
   status programs_init(void);
-  void hsusbhc_init(void);
 
 #ifdef USE_VMM
   extern pagetable_t l1pt;
@@ -112,8 +111,6 @@ void NO_RETURN c_entry()
 #endif
 
   timer_init();
-
-  hsusbhc_init();
 
   process_init();
   sched_init();

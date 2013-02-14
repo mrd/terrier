@@ -290,7 +290,9 @@ void intc_init(void)
   CPUBASE->ICR |= 1; /* enable interrupt forwarding in CPU interface */
 
   DLOG(1, "Testing SGI\n");
-  DISTBASE->SGIR = SETBITS(2, 24, 2) | SETBITS(3, 0, 4); /* send ID3 to self */
+  //DISTBASE->SGIR = SETBITS(2, 24, 2) | SETBITS(3, 0, 4); /* send ID3 to self */
+  //DISTBASE->SGIR = SETBITS(1, 24, 2) | SETBITS(1, 0, 4); /* send ID1 to others */
+
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;

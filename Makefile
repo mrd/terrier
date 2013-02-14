@@ -46,7 +46,7 @@ C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	omap/hsusbhc.c
 S_FILES = init/startup.S intr/table.S
 DATS_FILES = sched/$(SCHED).dats mem/physical.dats
-PROGS = progs/idle progs/uart progs/net
+PROGS = progs/idle progs/uart progs/ehci
 
 IMGNAME = terrier
 ADDRESS = 0x80008000

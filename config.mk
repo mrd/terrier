@@ -15,3 +15,5 @@ QEMU = qemu-system-arm
 SFLAGS = -MMD -march=armv7-a
 CFLAGS = -Wall -MMD -march=armv7-a
 ATSFLAGS =
+USER_CFLAGS = -I../../userlib/include
+USER_LDFLAGS = -L../../userlib

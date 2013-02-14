@@ -6,13 +6,19 @@ else
 CFLAGS += -O$(OPT)
 endif
 
+CFLAGS +=
+
+C_OBJS = printf.o
+
 USERLIB = libuser.a
 
 STARTASM = start.S
 STARTOBJ = start.o
 
-$(USERLIB): $(STARTOBJ)
-	$(AR) r $@ $<
+USERLIBOBJS = $(STARTOBJ) $(C_OBJS)
+
+$(USERLIB): $(USERLIBOBJS)
+	$(AR) r $@ $(USERLIBOBJS)
 	ranlib $@
 
 $(STARTOBJ): $(STARTASM)
@@ -22,6 +28,6 @@ $(STARTOBJ): $(STARTASM)
 
 .PHONY: clean distclean
 clean:
-	rm -f $(STARTOBJ) $(USERLIB)
+	rm -f $(STARTOBJ) $(USERLIB) $(C_OBJS)
 distclean:
 	rm -f start.d

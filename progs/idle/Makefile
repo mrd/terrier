@@ -4,7 +4,7 @@ S_FILES =
 
 include ../../config.mk
 LDSCRIPT = ../../ldscripts/program.ld
-USERLIB  = ../../userlib/libuser.a
+LIBS = -luser
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0
@@ -12,9 +12,9 @@ else
 CFLAGS += -O$(OPT)
 endif
 
-CFLAGS +=
+CFLAGS += $(USER_CFLAGS)
 SFLAGS +=
-LDFLAGS += -r
+LDFLAGS += -r $(USER_LDFLAGS)
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
@@ -25,7 +25,7 @@ program: $(NAME).elf
 	$(LD) -r -b binary $< -o $@
 
 $(NAME).elf: $(OBJS)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) $(USERLIB) $(OBJS) -o $@
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) $(OBJS) -o $@ $(LIBS)
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@

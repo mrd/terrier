@@ -42,11 +42,7 @@
 
 #include "types.h"
 #include "arm/asm.h"
-
-#define PAGE_SIZE_LOG2 12
-#define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
-#define CACHE_LINE_LOG2 5
-#define CACHE_LINE (1<<CACHE_LINE_LOG2)
+#include "arm/memory-basics.h"
 
 #define CTRL_MMU    BIT(0)
 #define CTRL_DCACHE BIT(2)

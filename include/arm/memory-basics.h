@@ -1,9 +1,9 @@
 /*
- * "Userspace" library header file
+ * ARM memory management
  *
  * -------------------------------------------------------------------
  *
- * Copyright (C) 2013 Matthew Danish.
+ * Copyright (C) 2011 Matthew Danish.
  *
  * All rights reserved. Please see enclosed LICENSE file for details.
  *
@@ -37,16 +37,13 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __BUILTIN__USER_LIB_H__
-#define __BUILTIN__USER_LIB_H__
+#ifndef _ARM_MEMORY_BASICS_H_
+#define _ARM_MEMORY_BASICS_H_
 
-#include<stdarg.h>
-#include"../../include/types.h"
-#include"../../include/status.h"
-#include"../../include/arm/memory-basics.h"
-
-int snprintf(char *str, int size, const char *format, ...);
-int vsnprintf(char *str, int size, const char *format, va_list ap);
+#define PAGE_SIZE_LOG2 12
+#define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
+#define CACHE_LINE_LOG2 5
+#define CACHE_LINE (1<<CACHE_LINE_LOG2)
 
 #endif
 

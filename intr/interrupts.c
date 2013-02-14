@@ -578,6 +578,7 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
 
 void _handle_swi2(u32 lr, u32 *r4_r11)
 {
+  process_t *cur = cpu_read(process_t *, current);
   extern u32 svc_stack_top;
   u32 *stack = (&svc_stack_top) - 7;
   cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
@@ -591,10 +592,28 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", r4_r11[4], r4_r11[5], r4_r11[6], r4_r11[7]);
   DLOG(1, "r12: %#.08x r14_irq: %#.08x spsr_irq: %#.08x\n", stack[4], stack[5], stack[6]);
 #endif
-  switch(stack[0]) {
+  u32 instruction = *((u32 *) lr);
+  /* SWI number is encoded as first 24 bits of SWI instruction */
+  switch(instruction & 0xffffff) {
   case 0:                       /* set entry */
     cpu_read(process_t *, current)->entry = (void *) stack[1];
     return;
+  case 3: {                        /* DLOG */
+    /* r0: string pointer */
+    /* r2: string length */
+    /* r2: no prefix? */
+    void *fmt = (void *) stack[0]; /* r0 */
+    u32 fmtlen = stack[1];         /* r1 */
+    if(process_is_valid_pointer(cur, fmt, fmtlen) == OK && ((char *)fmt)[fmtlen] == 0) {
+      if(stack[2])
+        DLOG_NO_PREFIX(1, "%s", (char *) fmt);
+      else
+        DLOG(1, "%s", (char *) fmt);
+    } else
+      DLOG(1, "invalid pointer given to syscall3 (ptr=%#x len=%d)\n", fmt, fmtlen);
+
+    return;
+  }
   }
 }
 

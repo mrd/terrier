@@ -37,7 +37,9 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include<user.h>
+#include "ats_types.h"
+#include "ats_basics.h"
+#include <user.h>
 
 unsigned int _scheduler_capacity = 4 << 14;
 unsigned int _scheduler_period = 15 << 14;
@@ -728,13 +730,13 @@ void hsusbhc_init()
 
 
 
-int main(void)
-{
-  hsusbhc_init();
-
-  for(;;);
-  return 0;
-}
+/* int main(void)
+ * {
+ *   hsusbhc_init();
+ *
+ *   for(;;);
+ *   return 0;
+ * } */
 
 
 /*

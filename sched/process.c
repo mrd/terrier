@@ -439,19 +439,19 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       break;
     }
 
-    DLOG(1, "Rewriting offset=%#x type=%#x ndx=%d (%s) ", off, typ, ndx, symstr);
+    DLOG(4, "Rewriting offset=%#x type=%#x ndx=%d (%s) ", off, typ, ndx, symstr);
 
     S = sym->st_value;
 
     u32 ins;
     switch(typ) {
     case R_ARM_NONE:
-      DLOG_NO_PREFIX(1, "NONE\n");
+      DLOG_NO_PREFIX(4, "NONE\n");
       break;
     case R_ARM_ABS32:           /* Absolute 32-bit relocation */
       A = *ptr;
       *ptr = S + A;
-      DLOG_NO_PREFIX(1, "ABS32: A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      DLOG_NO_PREFIX(4, "ABS32: A=%#x S=%#x result=%#x\n", A, S, *ptr);
       break;
     case R_ARM_CALL:            /* branch with link instruction */
       /* ((S + A) | T) – P */
@@ -459,7 +459,7 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       A = (((s32) *ptr) << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
       *ptr &= 0xFF000000;
       *ptr |= ((((S + A - P)) >> 2) & 0x00FFFFFF); /* re-encode */
-      DLOG_NO_PREFIX(1, "CALL: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
+      DLOG_NO_PREFIX(4, "CALL: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
       break;
     case R_ARM_JUMP24:
       /* ((S + A) | T) – P */
@@ -467,7 +467,7 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       A = (((s32) *ptr) << 8) >> 6;     /* sign-extend 24-bit immediate and mul-by-4 */
       *ptr &= 0xFF000000;
       *ptr |= ((((S + A - P)) >> 2) & 0x00FFFFFF); /* re-encode */
-      DLOG_NO_PREFIX(1, "JUMP24: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
+      DLOG_NO_PREFIX(4, "JUMP24: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
       break;
     case R_ARM_MOVT_ABS:        /* mov TOP */
       S >>= 16;
@@ -479,7 +479,7 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       u32 t = S + A;
       /* re-encode instruction */
       *ptr = (ins & 0xFFF00000) | ((t & 0xF000) << 4) | (ins & 0x0000F000) | (t & 0xFFF);
-      DLOG_NO_PREFIX(1, "MOVT/MOVW: A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      DLOG_NO_PREFIX(4, "MOVT/MOVW: A=%#x S=%#x result=%#x\n", A, S, *ptr);
       break;
     case R_ARM_PREL31:
       // R_ARM_PREL31 formula is ((S + A) | T) – P
@@ -487,10 +487,10 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       P = sh->sh_addr + off;    /* the address of the place being relocated (derived from r_offset). */
       /* T = 0; // because we don't support THUMB */
       *ptr = ((S + A)) - P;
-      DLOG_NO_PREFIX(1, "PREL31: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
+      DLOG_NO_PREFIX(4, "PREL31: A=%#x S=%#x P=%#x result=%#x\n", A, S, P, *ptr);
       break;
     default:
-      DLOG_NO_PREFIX(1, "type=%d instruction=%#x\n", typ, *ptr);
+      DLOG_NO_PREFIX(4, "type=%d instruction=%#x\n", typ, *ptr);
       early_panic("Unknown relocation type. See ELF-for-ARM manual to implement.\n");
       break;
     }

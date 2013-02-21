@@ -181,25 +181,26 @@ void dump_usb_dev_desc(usb_dev_desc_t *d)
 
 /* Queue Head (section 3.6) */
 struct _ehci_qh {
-  u32 next;
-  u32 characteristics;
-  u32 capabilities;
-  u32 current_td;
-  u32 next_td;
-  u32 alt_td;
-  u32 overlay[10];              /* used by hardware */
+  volatile u32 next;
+  volatile u32 characteristics;
+  volatile u32 capabilities;
+  volatile u32 current_td;
+  volatile u32 next_td;
+  volatile u32 alt_td;
+  volatile u32 overlay[10];              /* used by hardware */
 } __attribute__((aligned (32)));
 typedef struct _ehci_qh ehci_qh_t;
 
 #define EHCI_TD_PTR_MASK (~BITMASK(5, 0))
 #define EHCI_TD_PTR_T BIT(0)
+#define EHCI_TD_TOKEN_A BIT(7)
 
 /* Transfer Descriptor (section 3.5) */
 struct _ehci_td {
-  u32 next;
-  u32 alt_next;
-  u32 token;
-  u32 buf[5];
+  volatile u32 next;
+  volatile u32 alt_next;
+  volatile u32 token;
+  volatile u32 buf[5];
 } __attribute__((aligned (32)));
 typedef struct _ehci_td ehci_td_t;
 
@@ -216,7 +217,7 @@ void dump_td(ehci_td_t *td, u32 indent)
   dump_indent(indent);
   DLOG_NO_PREFIX(1, "TD: %#x %#x %#x (%s) [%#x %#x %#x %#x %#x]\n",
                  td->next, td->alt_next, td->token,
-                 td->token & BIT(7) ? "A" : "a", /* active? */
+                 td->token & EHCI_TD_TOKEN_A ? "A" : "a", /* active? */
                  td->buf[0], td->buf[1], td->buf[2],
                  td->buf[3], td->buf[4]);
   if(!(td->next & EHCI_TD_PTR_T))
@@ -282,6 +283,50 @@ static inline void gpio_set_value(x, v) {
 }
 static inline u32 gpio_get_value(x) {
   return (R(GPIO_BASE(x) + GPIO_DATAIN) & (1 << GPIO_INDX(x))) != 0;
+}
+
+/* ************************************************** */
+
+typedef struct _usb_port_t {
+  void (*reset)(struct _usb_port_t *); /* resets port to find device */
+  u32 (*get_status)(struct _usb_port_t *); /* gets status bitmap */
+  void (*set_status)(struct _usb_port_t *, u32); /* sets status bitmap */
+} usb_port_t;
+
+void usb_port_reset(usb_port_t *p)
+{
+  p->reset(p);
+}
+
+u32 usb_port_get_status(usb_port_t *p)
+{
+  return p->get_status(p);
+}
+
+void usb_port_set_status(usb_port_t *p, u32 val)
+{
+  p->set_status(p, val);
+}
+
+typedef struct {
+  usb_port_t port;
+  u32 n;
+} usb_root_port_t;
+
+static void usb_root_port_reset(usb_port_t *p)
+{
+  void ehci_reset_root_port(u32 n);
+  ehci_reset_root_port(container_of(p,usb_root_port_t,port)->n);
+}
+
+static u32 usb_root_port_get_status(usb_port_t *p)
+{
+  return R(EHCI_PORTSC(container_of(p,usb_root_port_t,port)->n));
+}
+
+static void usb_root_port_set_status(usb_port_t *p, u32 v)
+{
+  R(EHCI_PORTSC(container_of(p,usb_root_port_t,port)->n)) = v;
 }
 
 /* ************************************************** */
@@ -469,10 +514,100 @@ void ehci_irq_handler(u32 v)
   DLOG(1, "IRQ\n");
 }
 
-void hsusbhc_init()
+u32 unused_address = 1;         /* store next unused address */
+
+void ehci_setup_new_device(ehci_qh_t *qh)
 {
   usb_dev_req_t devr;
+  usb_device_t usbd;
+  ehci_td_t td1, td2, td3;
 
+  /* setup USB device */
+  usb_clear_device(&usbd);
+
+  ehci_set_qh_max_packet_size(qh, 8); /* start with 8 byte max packet size */
+
+  /* create SET_ADDRESS control request */
+  u32 new_addr = unused_address++;
+  usb_device_request(&devr, USB_REQ_HOST_TO_DEVICE, USB_SET_ADDRESS, new_addr, 0, 0);
+
+  ehci_detach_td(qh);
+  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  ehci_fill_td(&td2, EHCI_PIDCODE_IN, NULL, 0, &td1); /* STATUS stage */
+  ehci_attach_td(qh, &td1);
+
+  /* wait for transaction */
+  while(td2.token & EHCI_TD_TOKEN_A);
+
+  dump_qh(qh, 0);
+
+  usbd.address = new_addr;
+  ehci_set_qh_address(qh, new_addr);
+
+  /* get_descriptor: device descriptor */
+  usb_device_request(&devr, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR, USB_TYPE_DEV_DESC << 8, 0, sizeof(usb_dev_desc_t));
+
+  /* setup qTDs */
+  ehci_detach_td(qh);
+  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  /* only get first 8 bytes */
+  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd.dev_desc, 8, &td1); /* DATA stage */
+  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+
+  /* queue it */
+  ehci_attach_td(qh, &td1);
+
+  /* wait for it */
+  while(td2.token & EHCI_TD_TOKEN_A); /* td3 may not complete */
+
+  dump_qh(qh, 0);
+
+  /* get it again, but with correct max packet size */
+  ehci_detach_td(qh);
+  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL);
+  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd.dev_desc, sizeof(usb_dev_desc_t), &td1);
+  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+  ehci_set_qh_max_packet_size(qh, usbd.dev_desc.bMaxPacketSize0);
+  ehci_attach_td(qh, &td1);
+
+  while(td3.token & EHCI_TD_TOKEN_A);
+  dump_qh(qh, 0);
+
+  dump_usb_dev_desc(&usbd.dev_desc);
+}
+
+/* use queue head to enumerate any USB devices available on root ports */
+void ehci_enumerate(usb_port_t *p, ehci_qh_t *qh)
+{
+  if(GETBITS(usb_port_get_status(p),0,1)) {
+    DLOG(1, "usb_port <%#x>: connected\n", p);
+    if(GETBITS(usb_port_get_status(p),1,1))
+      usb_port_set_status(p, usb_port_get_status(p) | BIT(1)); /* clear bit */
+    u32 linestatus = GETBITS(usb_port_get_status(p),10,2);
+    if(linestatus == 1) {
+      /* 1: K-state */
+      DLOG(1, "usb_port <%#x>: low speed device (skipping).\n", p);
+      return;
+    } else {
+      /* 0: SE0 */
+      /* 2: J-state */
+      /* 3: undefined */
+      DLOG(1, "usb_port <%#x>: not low speed device.\n", p);
+      usb_port_reset(p);
+
+      DLOG(1, "usb_port <%#x>: status=%#x\n", p, usb_port_get_status(p));
+      if(GETBITS(usb_port_get_status(p),2,1))
+        DLOG(1, "usb_port <%#x>: enabled\n", p);
+      else
+        return;                    /* not enabled = no attached high speed device */
+    }
+
+    ehci_setup_new_device(qh);
+  }
+}
+
+void hsusbhc_init()
+{
   DLOG(1, "hsusbhc_init\n");
 
   /* ************************************************** */
@@ -625,36 +760,23 @@ void hsusbhc_init()
   ehci_microframewait(500 << 3); /* 500 ms */
   DLOG(1, "EHCI PORTSC0=%#x PORTSC1=%#x PORTSC2=%#x\n",
        R(EHCI_PORTSC(0)), R(EHCI_PORTSC(1)), R(EHCI_PORTSC(2)));
-  if(GETBITS(R(EHCI_PORTSC(0)),0,1)) {
-    DLOG(1, "PORTSC0: connected\n");
-    if(GETBITS(R(EHCI_PORTSC(0)),1,1))
-      R(EHCI_PORTSC(0)) |= BIT(1); /* clear bit */
-    switch(GETBITS(R(EHCI_PORTSC(0)),10,2)) {
-    case 0:                       /* SE0 */
-    case 2:                       /* J-state */
-    case 3:                       /* undefined */
-      DLOG(1, "PORTSC0: not low speed device.\n");
-      break;
-    default:                      /* K-state */
-      DLOG(1, "PORTSC0: low speed device.\n");
-      break;
-    }
-    ehci_reset_root_port(0);
 
-    DLOG(1, "EHCI_PORTSC0=%#x\n", R(EHCI_PORTSC(0)));
-    if(GETBITS(R(EHCI_PORTSC(0)),2,1))
-      DLOG(1, "PORTSC0: enabled\n");
-  }
   DLOG(1, "EHCI_FRINDEX=%#x\n", R(EHCI_FRINDEX));
 
-  /* setup USB device */
+  /* setup root ports */
+#define ROOTPORT { .reset = usb_root_port_reset, .get_status = usb_root_port_get_status, .set_status = usb_root_port_set_status }
+  usb_root_port_t rootport[3] = {
+    { .port = ROOTPORT, .n = 0 },
+    { .port = ROOTPORT, .n = 1 },
+    { .port = ROOTPORT, .n = 2 }
+  };
+
+  ehci_qh_t qh1;
   usb_device_t usbd;
   usb_clear_device(&usbd);
-  ehci_td_t td1, td2, td3;
-  ehci_qh_t qh1;
 
   ehci_init_bulk_qh(&usbd, &qh1, 0);
-  ehci_insert_qh(&qh1, &qh1);
+  ehci_insert_qh(&qh1, &qh1);   /* circular list */
 
   /* don't insert QH until it is setup */
   R(EHCI_ASYNCLISTADDR) = (u32) &qh1;
@@ -664,61 +786,12 @@ void hsusbhc_init()
   /* enable asynchronous schedule */
   R(EHCI_CMD) |= BIT(5);
 
-  /* send SET_ADDRESS control request */
-  u32 new_addr = 1;
-  usb_device_request(&devr, USB_REQ_HOST_TO_DEVICE, USB_SET_ADDRESS, new_addr, 0, 0);
-
-  ehci_detach_td(&qh1);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, NULL, 0, &td1); /* STATUS stage */
-  ehci_attach_td(&qh1, &td1);
-
-  /* wait for transaction */
-
-  ehci_microframewait(500 << 3); /* 500 ms */
-  dump_qh(&qh1, 0);
-
-  usbd.address = new_addr;
-  ehci_set_qh_address(&qh1, new_addr);
-
-  /* get_descriptor: device descriptor */
-  usb_device_request(&devr, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR, USB_TYPE_DEV_DESC << 8, 0, sizeof(usb_dev_desc_t));
-
-  /* setup qTDs */
-  ehci_detach_td(&qh1);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd.dev_desc, sizeof(usb_dev_desc_t), &td1); /* DATA stage */
-  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
-
-  /* setup QH */
-  //ehci_init_bulk_qh(&usbd, &qh1, 0);
-  //ehci_insert_qh(&qh1, &qh1);
-  ehci_attach_td(&qh1, &td1);
-
-  /* queue it */
-  dump_qh(&qh1, 0);
-
-  DLOG(1, "EHCI_ASYNCLISTADDR=%#x\n", R(EHCI_ASYNCLISTADDR));
   DLOG(1, "EHCI_CMD=%#x EHCI_STS=%#x\n",
        R(EHCI_CMD), R(EHCI_STS));
 
-  ehci_microframewait(500 << 3); /* 500 ms */
-  dump_qh(&qh1, 0);
-
-  ehci_detach_td(&qh1);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL);
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd.dev_desc, sizeof(usb_dev_desc_t), &td1);
-  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
-  ehci_set_qh_max_packet_size(&qh1, usbd.dev_desc.bMaxPacketSize0);
-  ehci_attach_td(&qh1, &td1);
-
-  ehci_microframewait(500 << 3); /* 500 ms */
-  dump_qh(&qh1, 0);
-
-  dump_usb_dev_desc(&usbd.dev_desc);
-
-  DLOG(1, "EHCI_CMD=%#x EHCI_STS=%#x\n",
-       R(EHCI_CMD), R(EHCI_STS));
+  ehci_enumerate(&rootport[0].port, &qh1);
+  ehci_enumerate(&rootport[1].port, &qh1);
+  ehci_enumerate(&rootport[2].port, &qh1);
 
   DLOG(1, "initialization complete\n");
   ehci_microframewait(1000 << 3); /* 1000 ms */

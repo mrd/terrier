@@ -13,7 +13,7 @@ OBJCOPY = $(ARCH)-objcopy
 MKIMAGE = mkimage
 QEMU = qemu-system-arm
 SFLAGS = -MMD -march=armv7-a
-CFLAGS = -Wall -MMD -march=armv7-a
+CFLAGS = -Wall -MMD -march=armv7-a -mno-unaligned-access
 ATSFLAGS =
-USER_CFLAGS = -I../../userlib/include
+USER_CFLAGS = -I../../userlib/include -mno-unaligned-access
 USER_LDFLAGS = -L../../userlib

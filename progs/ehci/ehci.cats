@@ -39,6 +39,7 @@
 
 #include "ats_types.h"
 #include "ats_basics.h"
+#include <pool.h>
 #include <user.h>
 
 unsigned int _scheduler_capacity = 4 << 14;
@@ -525,9 +526,13 @@ static status usb_root_port_enabled(usb_port_t *p)
 /* ************************************************** */
 
 typedef struct {
+  ehci_qh_t qh;
   u32 address;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
+
+// create a pool for simple dynamic allocation
+POOL_DEFN(usb_device,usb_device_t,8,32);
 
 void usb_clear_device(usb_device_t *d)
 {
@@ -535,8 +540,9 @@ void usb_clear_device(usb_device_t *d)
   d->dev_desc.bMaxPacketSize0 = 8; /* default */
 }
 
-void ehci_init_bulk_qh(usb_device_t *d, ehci_qh_t *qh, u32 endpt)
+void ehci_init_bulk_qh(usb_device_t *d, u32 endpt)
 {
+  ehci_qh_t *qh = &d->qh;
   memset(qh, 0, 1<<6);
   qh->next = EHCI_QH_PTR_T;
   qh->characteristics =
@@ -624,6 +630,13 @@ status ehci_insert_qh(ehci_qh_t *cur, ehci_qh_t *new)
   cur->next = ((u32) new) | BIT(1); /* indicate type is QH */
   return OK;
 #endif
+}
+
+void usb_init_subdevice(usb_device_t *d, u32 endpt, usb_device_t *parent)
+{
+  usb_clear_device(d);
+  ehci_init_bulk_qh(d, endpt);
+  ehci_insert_qh(&parent->qh, &d->qh);
 }
 
 #define EHCI_PIDCODE_OUT   0
@@ -877,8 +890,10 @@ static status usb_hub_port_enabled(usb_port_t *p)
   return (usb_hub_port_get_status(p) & BIT(1)) ? OK : EINVALID;
 }
 
-static status setup_hub(usb_device_t *d, ehci_qh_t *qh, u32 cfgval, u32 ept)
+static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
 {
+  ehci_qh_t *qh = &d->qh;
+  usb_device_t *newd;
   usb_dev_req_t devr;
   ehci_td_t td1, td2, td3;
   usb_hub_desc_t hubd;
@@ -960,17 +975,20 @@ static status setup_hub(usb_device_t *d, ehci_qh_t *qh, u32 cfgval, u32 ept)
 
     if(portstatus & 1) {
       /* something connected */
-      void ehci_enumerate(usb_port_t *p, ehci_qh_t *qh);
+      void ehci_enumerate(usb_port_t *, usb_device_t *);
       usb_hub_port_t p = { .port = HUBPORT, .n = portn, .dev = d, .qh = qh, .pwr_wait = hubd.bPwrOn2PwrGood << 1 };
-      ehci_enumerate((usb_port_t *) &p, qh);
+      newd = usb_device_pool_alloc();
+      usb_init_subdevice(newd, 0, d);
+      ehci_enumerate((usb_port_t *) &p, newd);
     }
   }
 
   return OK;
 }
 
-static status probe_hub(usb_device_t *d, ehci_qh_t *qh)
+static status probe_hub(usb_device_t *d)
 {
+  ehci_qh_t *qh = &d->qh;
   ehci_td_t td1, td2, td3;
   usb_dev_req_t devr;
   usb_cfg_desc_t cfgd;
@@ -1026,11 +1044,11 @@ static status probe_hub(usb_device_t *d, ehci_qh_t *qh)
       ptr += sizeof(usb_if_desc_t);
       for(eptidx=0; eptidx<ifd->bNumEndpoints; eptidx++) {
         usb_ept_desc_t *eptd = (usb_ept_desc_t *) ptr;
-        dump_usb_ept_desc(eptd);
+        //dump_usb_ept_desc(eptd); //FIXME:wtf
 
         if(ifd->bInterfaceClass == 9 && GETBITS(eptd->bmAttributes, 0, 2) == 0) {
           DLOG(1, "Found hub cfgval=%d ept=%d.\n", cfgd.bConfigurationValue, GETBITS(eptd->bEndpointAddress, 0, 4));
-          return setup_hub(d, qh, cfgd.bConfigurationValue, GETBITS(eptd->bEndpointAddress, 0, 4));
+          return setup_hub(d, cfgd.bConfigurationValue, GETBITS(eptd->bEndpointAddress, 0, 4));
         }
 
         ptr += sizeof(usb_ept_desc_t);
@@ -1045,14 +1063,11 @@ static status probe_hub(usb_device_t *d, ehci_qh_t *qh)
 
 u32 unused_address = 1;         /* store next unused address */
 
-void ehci_setup_new_device(ehci_qh_t *qh)
+void ehci_setup_new_device(usb_device_t *usbd)
 {
   usb_dev_req_t devr;
-  usb_device_t usbd;
   ehci_td_t td1, td2, td3;
-
-  /* setup USB device */
-  usb_clear_device(&usbd);
+  ehci_qh_t *qh = &usbd->qh;
 
   ehci_set_qh_max_packet_size(qh, 8); /* start with 8 byte max packet size */
 
@@ -1068,7 +1083,7 @@ void ehci_setup_new_device(ehci_qh_t *qh)
   /* wait for transaction */
   while(td2.token & EHCI_TD_TOKEN_A);
 
-  usbd.address = new_addr;
+  usbd->address = new_addr;
   ehci_set_qh_address(qh, new_addr);
 
   /* get_descriptor: device descriptor */
@@ -1078,7 +1093,7 @@ void ehci_setup_new_device(ehci_qh_t *qh)
   ehci_detach_td(qh);
   ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
   /* only get first 8 bytes */
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd.dev_desc, 8, &td1); /* DATA stage */
+  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd->dev_desc, 8, &td1); /* DATA stage */
   ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
 
   /* queue it */
@@ -1090,21 +1105,22 @@ void ehci_setup_new_device(ehci_qh_t *qh)
   /* get it again, but with correct max packet size */
   ehci_detach_td(qh);
   ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL);
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd.dev_desc, sizeof(usb_dev_desc_t), &td1);
+  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd->dev_desc, sizeof(usb_dev_desc_t), &td1);
   ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
-  ehci_set_qh_max_packet_size(qh, usbd.dev_desc.bMaxPacketSize0);
+  ehci_set_qh_max_packet_size(qh, usbd->dev_desc.bMaxPacketSize0);
   ehci_attach_td(qh, &td1);
 
   while(td3.token & EHCI_TD_TOKEN_A);
 
-  dump_usb_dev_desc(&usbd.dev_desc);
+  DLOG(1, "usb_dev_desc=%#x\n", &usbd->dev_desc);
+  dump_usb_dev_desc(&usbd->dev_desc);
 
   /* FIXME: for now */
-  probe_hub(&usbd, qh);
+  probe_hub(usbd);
 }
 
 /* use queue head to enumerate a USB device available on port */
-void ehci_enumerate(usb_port_t *p, ehci_qh_t *qh)
+void ehci_enumerate(usb_port_t *p, usb_device_t *usbd)
 {
   if(usb_port_get_connect_status(p) == OK) {
     DLOG(1, "usb_port <%#x>: connected\n", p);
@@ -1127,16 +1143,7 @@ void ehci_enumerate(usb_port_t *p, ehci_qh_t *qh)
         return;                    /* not enabled = no attached high speed device */
     }
 
-    u32 qh_addr = ehci_get_qh_address(qh);
-    u32 qh_endp = ehci_get_qh_endpoint(qh);
-
-    ehci_set_qh_address(qh, 0);
-    ehci_set_qh_endpoint(qh, 0);
-
-    ehci_setup_new_device(qh);
- 
-    ehci_set_qh_address(qh, qh_addr);
-    ehci_set_qh_endpoint(qh, qh_endp);
+    ehci_setup_new_device(usbd);
   }
 }
 
@@ -1311,15 +1318,11 @@ void hsusbhc_init()
     //,{ .port = ROOTPORT, .n = 2 }
   };
 
-  ehci_qh_t qh1;
-  usb_device_t usbd;
-  usb_clear_device(&usbd);
-
-  ehci_init_bulk_qh(&usbd, &qh1, 0);
-  ehci_insert_qh(&qh1, &qh1);   /* circular list */
+  usb_device_t *usbd = usb_device_pool_alloc();
+  usb_init_subdevice(usbd, 0, usbd); /* self-parent */
 
   /* don't insert QH until it is setup */
-  R(EHCI_ASYNCLISTADDR) = (u32) &qh1;
+  R(EHCI_ASYNCLISTADDR) = (u32) &usbd->qh;
 
   /* can't seem to enable async schedule until something is on the list */
 
@@ -1329,7 +1332,7 @@ void hsusbhc_init()
   DLOG(1, "EHCI_CMD=%#x EHCI_STS=%#x\n",
        R(EHCI_CMD), R(EHCI_STS));
 
-  ehci_enumerate(&rootport[0].port, &qh1);
+  ehci_enumerate(&rootport[0].port, usbd);
   //ehci_enumerate(&rootport[1].port, &qh1);
   //ehci_enumerate(&rootport[2].port, &qh1);
 

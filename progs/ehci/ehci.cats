@@ -372,6 +372,9 @@ struct _ehci_td {
 } __attribute__((aligned (32)));
 typedef struct _ehci_td ehci_td_t;
 
+/* memory pool of TDs for dynamic alloc */
+POOL_DEFN (ehci_td, ehci_td_t, 16, 32);
+
 /* ************************************************** */
 
 void dump_indent(indent)
@@ -1076,11 +1079,18 @@ static status probe_hub(usb_device_t *d)
 
 u32 unused_address = 1;         /* store next unused address */
 
-void ehci_setup_new_device(usb_device_t *usbd)
+status ehci_setup_new_device(usb_device_t *usbd)
 {
   usb_dev_req_t devr;
-  ehci_td_t td1, td2, td3;
+  ehci_td_t *td[3] = { ehci_td_pool_alloc (), ehci_td_pool_alloc (), ehci_td_pool_alloc () };
   ehci_qh_t *qh = &usbd->qh;
+
+  if(td[0] == NULL || td[1] == NULL || td[2] == NULL) {
+    if(td[0]) ehci_td_pool_free(td[0]);
+    if(td[1]) ehci_td_pool_free(td[1]);
+    if(td[2]) ehci_td_pool_free(td[2]);
+    return ENOSPACE;
+  }
 
   ehci_set_qh_max_packet_size(qh, 8); /* start with 8 byte max packet size */
 
@@ -1089,12 +1099,12 @@ void ehci_setup_new_device(usb_device_t *usbd)
   usb_device_request(&devr, USB_REQ_HOST_TO_DEVICE, USB_SET_ADDRESS, new_addr, 0, 0);
 
   ehci_detach_td(qh);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, NULL, 0, &td1); /* STATUS stage */
-  ehci_attach_td(qh, &td1);
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  ehci_fill_td(td[1], EHCI_PIDCODE_IN, NULL, 0, td[0]); /* STATUS stage */
+  ehci_attach_td(qh, td[0]);
 
   /* wait for transaction */
-  while(ehci_td_chain_active(&td1) == OK);
+  while(ehci_td_chain_active(td[0]) == OK);
 
   usbd->address = new_addr;
   ehci_set_qh_address(qh, new_addr);
@@ -1104,32 +1114,40 @@ void ehci_setup_new_device(usb_device_t *usbd)
 
   /* setup qTDs */
   ehci_detach_td(qh);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
   /* only get first 8 bytes */
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd->dev_desc, 8, &td1); /* DATA stage */
-  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+  ehci_fill_td(td[1], EHCI_PIDCODE_IN, &usbd->dev_desc, 8, td[0]); /* DATA stage */
+  ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(qh, &td1);
+  ehci_attach_td(qh, td[0]);
 
-  /* wait for it (td3 may not complete) */
-  while(ehci_td_chain_active(&td1) == OK);
+  /* wait for it (td3 may not complete; babble) */
+  while(ehci_td_chain_active(td[0]) == OK);
 
   /* get it again, but with correct max packet size */
   ehci_detach_td(qh);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL);
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &usbd->dev_desc, sizeof(usb_dev_desc_t), &td1);
-  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL);
+  ehci_fill_td(td[1], EHCI_PIDCODE_IN, &usbd->dev_desc, sizeof(usb_dev_desc_t), td[0]);
+  ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
   ehci_set_qh_max_packet_size(qh, usbd->dev_desc.bMaxPacketSize0);
-  ehci_attach_td(qh, &td1);
+  ehci_attach_td(qh, td[0]);
 
-  while(ehci_td_chain_active(&td1) == OK);
+  while(ehci_td_chain_active(td[0]) == OK);
 
   DLOG(1, "usb_dev_desc=%#x\n", &usbd->dev_desc);
   dump_usb_dev_desc(&usbd->dev_desc);
 
+  ehci_detach_td(qh);           /* detach before freeing */
+
+  ehci_td_pool_free(td[0]);     /* free before reusing in probing process */
+  ehci_td_pool_free(td[1]);
+  ehci_td_pool_free(td[2]);
+
   /* FIXME: for now */
   probe_hub(usbd);
+
+  return OK;
 }
 
 /* use queue head to enumerate a USB device available on port */

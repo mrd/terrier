@@ -361,6 +361,7 @@ typedef struct _ehci_qh ehci_qh_t;
 #define EHCI_TD_PTR_MASK (~BITMASK(5, 0))
 #define EHCI_TD_PTR_T BIT(0)
 #define EHCI_TD_TOKEN_A BIT(7)
+#define EHCI_TD_TOKEN_H BIT(6)
 
 /* Transfer Descriptor (section 3.5) */
 struct _ehci_td {
@@ -684,6 +685,18 @@ u32 ehci_fill_td(ehci_td_t *td, u32 pidcode, void *data, u32 len, ehci_td_t *pre
     return 0;
   else
     return len;
+}
+
+status ehci_td_chain_active(ehci_td_t *td)
+{
+  while((((u32) td) & EHCI_TD_PTR_T) == 0) {
+    if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
+      return EINVALID;          /* not active */
+    if((td->token & EHCI_TD_TOKEN_H) != 0)
+      return EINVALID;          /* halted */
+    td = (ehci_td_t *) td->next;
+  }
+  return OK;
 }
 
 /* ************************************************** */
@@ -1081,7 +1094,7 @@ void ehci_setup_new_device(usb_device_t *usbd)
   ehci_attach_td(qh, &td1);
 
   /* wait for transaction */
-  while(td2.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(&td1) == OK);
 
   usbd->address = new_addr;
   ehci_set_qh_address(qh, new_addr);
@@ -1099,8 +1112,8 @@ void ehci_setup_new_device(usb_device_t *usbd)
   /* queue it */
   ehci_attach_td(qh, &td1);
 
-  /* wait for it */
-  while(td2.token & EHCI_TD_TOKEN_A); /* td3 may not complete */
+  /* wait for it (td3 may not complete) */
+  while(ehci_td_chain_active(&td1) == OK);
 
   /* get it again, but with correct max packet size */
   ehci_detach_td(qh);
@@ -1110,7 +1123,7 @@ void ehci_setup_new_device(usb_device_t *usbd)
   ehci_set_qh_max_packet_size(qh, usbd->dev_desc.bMaxPacketSize0);
   ehci_attach_td(qh, &td1);
 
-  while(td3.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(&td1) == OK);
 
   DLOG(1, "usb_dev_desc=%#x\n", &usbd->dev_desc);
   dump_usb_dev_desc(&usbd->dev_desc);

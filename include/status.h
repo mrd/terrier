@@ -44,6 +44,8 @@
 #define EINVALID 1
 #define EUNDEFINED 2
 #define ENOSPACE 3
+#define EINCOMPLETE 4
+#define EDATA 5
 
 #endif
 

@@ -294,7 +294,7 @@ void dump_usb_ept_desc(usb_ept_desc_t *d)
     tt = "(bulk) ";
   else
     tt = "(interrupt) ";
-  
+
   DLOG(1, "USB_EPT_DESC:\n");
   DLOG_NO_PREFIX(1, "  bLength=%d bDescriptorType=%d bEndpointAddress=%d (%s)\n",
                  d->bLength, d->bDescriptorType, d->bEndpointAddress,
@@ -304,7 +304,7 @@ void dump_usb_ept_desc(usb_ept_desc_t *d)
   DLOG_NO_PREFIX(1, "  %s%s%s\n", tt, st, ut);
 }
 
-/* 
+/*
  * USB_STR_DESC: Standard String Descriptor
  *
  * Reference :
@@ -515,7 +515,7 @@ static u32 usb_root_port_get_line_status(usb_port_t *p)
 static void usb_root_port_clr_connect_status(usb_port_t *p)
 {
   u32 status = R(EHCI_PORTSC(container_of(p,usb_root_port_t,port)->n));
-  
+
   if(GETBITS(status, 1, 1))
     R(EHCI_PORTSC(container_of(p,usb_root_port_t,port)->n)) = status | BIT(1);
 }
@@ -1084,7 +1084,14 @@ static status probe_hub(usb_device_t *d)
 
     dump_usb_cfg_desc(&cfgd);
 
-    if(cfgd.wTotalLength > 128) return EINVALID; /* FIXME */
+    if(cfgd.wTotalLength > 128) {
+      /* FIXME: figure out a better way to handle really long config descriptors */
+      ehci_detach_td(qh);   /* detach before freeing */
+      ehci_td_pool_free(td[0]);
+      ehci_td_pool_free(td[1]);
+      ehci_td_pool_free(td[2]);
+      return EINVALID;
+    }
 
     /* get_descriptor: config descriptor + interfaces + endpoints */
     usb_device_request(&devr, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR,
@@ -1206,9 +1213,7 @@ status ehci_setup_new_device(usb_device_t *usbd)
   ehci_td_pool_free(td[2]);
 
   /* FIXME: for now */
-  probe_hub(usbd);
-
-  return OK;
+  return probe_hub(usbd);
 }
 
 /* use queue head to enumerate a USB device available on port */
@@ -1435,16 +1440,6 @@ void hsusbhc_init()
 #else
 #error "High Speed USB Host Controller not implemented"
 #endif
-
-
-
-/* int main(void)
- * {
- *   hsusbhc_init();
- *
- *   for(;;);
- *   return 0;
- * } */
 
 
 /*

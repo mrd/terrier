@@ -757,7 +757,7 @@ status ehci_set_configuration(ehci_qh_t *qh, u32 cfgval)
   ehci_attach_td(qh, &td1);
 
   /* wait for it */
-  while(td2.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(&td1) == OK);
 
   return OK;
 }
@@ -827,7 +827,7 @@ static void usb_hub_port_reset(usb_port_t *p)
   ehci_attach_td(qh, &td1);
 
   /* wait for it */
-  while(td2.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(&td1) == OK);
 
   /* FIXME: check status of C_RESET instead */
   ehci_microframewait(10 << 3); /* wait 10 ms */
@@ -846,7 +846,7 @@ static void usb_hub_port_reset(usb_port_t *p)
   ehci_attach_td(qh, &td1);
 
   /* wait for it */
-  while(td2.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(&td1) == OK);
 
   ehci_microframewait(hubp->pwr_wait << 3);
 }
@@ -874,7 +874,7 @@ static u32 usb_hub_port_get_status(usb_port_t *p)
   ehci_attach_td(qh, &td1);
 
   /* wait for it */
-  while(td3.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(&td1) == OK);
 
   return portstatus;
 }
@@ -906,31 +906,54 @@ static status usb_hub_port_enabled(usb_port_t *p)
   return (usb_hub_port_get_status(p) & BIT(1)) ? OK : EINVALID;
 }
 
-static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
+static status usb_hub_get_descriptor(usb_device_t *d, usb_hub_desc_t *hubd)
 {
   ehci_qh_t *qh = &d->qh;
-  usb_device_t *newd;
   usb_dev_req_t devr;
-  ehci_td_t td1, td2, td3;
-  usb_hub_desc_t hubd;
+  ehci_td_t *td[3] = { ehci_td_pool_alloc (), ehci_td_pool_alloc (), ehci_td_pool_alloc () };
 
-  ehci_set_configuration(qh, cfgval);
-
+  if(td[0] == NULL || td[1] == NULL || td[2] == NULL) {
+    if(td[0]) ehci_td_pool_free(td[0]);
+    if(td[1]) ehci_td_pool_free(td[1]);
+    if(td[2]) ehci_td_pool_free(td[2]);
+    return ENOSPACE;
+  }
 #define USB_HUB_DESCRIPTOR_TYPE 0x29
   usb_device_request(&devr, USB_REQ_DEVICE_TO_HOST | USB_REQ_TYPE_CLASS, USB_GET_DESCRIPTOR,
                      USB_HUB_DESCRIPTOR_TYPE << 8, 0, sizeof(usb_hub_desc_t));
 
   /* setup qTDs */
   ehci_detach_td(qh);
-  ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  ehci_fill_td(&td2, EHCI_PIDCODE_IN, &hubd, sizeof(usb_hub_desc_t), &td1); /* DATA stage */
-  ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  ehci_fill_td(td[1], EHCI_PIDCODE_IN, hubd, sizeof(usb_hub_desc_t), td[0]); /* DATA stage */
+  ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(qh, &td1);
+  ehci_attach_td(qh, td[0]);
 
   /* wait for it */
-  while(td3.token & EHCI_TD_TOKEN_A);
+  while(ehci_td_chain_active(td[0]) == OK);
+
+  ehci_detach_td(qh);           /* must detach before freeing */
+  ehci_td_pool_free(td[0]);
+  ehci_td_pool_free(td[1]);
+  ehci_td_pool_free(td[2]);
+
+  return OK;
+}
+
+static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
+{
+  ehci_qh_t *qh = &d->qh;
+  usb_device_t *newd;
+  usb_dev_req_t devr;
+  usb_hub_desc_t hubd;
+  status retval;
+
+  ehci_set_configuration(qh, cfgval);
+
+  retval = usb_hub_get_descriptor(d, &hubd);
+  if(retval != OK) return retval;
 
   dump_usb_hub_desc(&hubd);
 
@@ -940,6 +963,15 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
   u32 portstatus = 0;
   u32 attempts;
   for(portn = 1; portn <= hubd.bNbrPorts; portn++) {
+    ehci_td_t *td[3] = { ehci_td_pool_alloc (), ehci_td_pool_alloc (), ehci_td_pool_alloc () };
+
+    if(td[0] == NULL || td[1] == NULL || td[2] == NULL) {
+      if(td[0]) ehci_td_pool_free(td[0]);
+      if(td[1]) ehci_td_pool_free(td[1]);
+      if(td[2]) ehci_td_pool_free(td[2]);
+      return ENOSPACE;
+    }
+
     attempts = 0;
     portstatus = 0;
     while((portstatus & USB_HUB_PORT_STAT_POWER) == 0 && attempts < 5) {
@@ -953,14 +985,14 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
 
       /* setup qTDs */
       ehci_detach_td(qh);
-      ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-      ehci_fill_td(&td2, EHCI_PIDCODE_IN, NULL, 0, &td1); /* STATUS stage */
+      ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+      ehci_fill_td(td[1], EHCI_PIDCODE_IN, NULL, 0, td[0]); /* STATUS stage */
 
       /* queue it */
-      ehci_attach_td(qh, &td1);
+      ehci_attach_td(qh, td[0]);
 
       /* wait for it */
-      while(td2.token & EHCI_TD_TOKEN_A);
+      while(ehci_td_chain_active(td[0]) == OK);
 
       ehci_microframewait((hubd.bPwrOn2PwrGood << 1) << 3);
 
@@ -972,18 +1004,23 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
                          0, portn, 4);
       /* setup qTDs */
       ehci_detach_td(qh);
-      ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-      ehci_fill_td(&td2, EHCI_PIDCODE_IN, &portstatus, 4, &td1); /* DATA stage */
-      ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+      ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+      ehci_fill_td(td[1], EHCI_PIDCODE_IN, &portstatus, 4, td[0]); /* DATA stage */
+      ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
       /* queue it */
-      ehci_attach_td(qh, &td1);
+      ehci_attach_td(qh, td[0]);
 
       /* wait for it */
-      while(td3.token & EHCI_TD_TOKEN_A);
+      while(ehci_td_chain_active(td[0]) == OK);
 
       attempts++;
       if(attempts >= 5) break;
     }
+
+    ehci_detach_td(qh);           /* must detach before freeing */
+    ehci_td_pool_free(td[0]);     /* free before continuing */
+    ehci_td_pool_free(td[1]);
+    ehci_td_pool_free(td[2]);
 
     if(attempts >= 5) continue;
 
@@ -995,7 +1032,9 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
       usb_hub_port_t p = { .port = HUBPORT, .n = portn, .dev = d, .qh = qh, .pwr_wait = hubd.bPwrOn2PwrGood << 1 };
       newd = usb_device_pool_alloc();
       usb_init_subdevice(newd, 0, d);
+
       ehci_enumerate((usb_port_t *) &p, newd);
+
     }
   }
 
@@ -1005,14 +1044,25 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
 static status probe_hub(usb_device_t *d)
 {
   ehci_qh_t *qh = &d->qh;
-  ehci_td_t td1, td2, td3;
+  ehci_td_t *td[3] = { ehci_td_pool_alloc (), ehci_td_pool_alloc (), ehci_td_pool_alloc () };
   usb_dev_req_t devr;
   usb_cfg_desc_t cfgd;
   u32 cfgidx, ifidx, eptidx;
   u8 buffer[128];               /* temporary buffer */
 
-  if(d->dev_desc.bDeviceClass != 9)
+  if(td[0] == NULL || td[1] == NULL || td[2] == NULL) {
+    if(td[0]) ehci_td_pool_free(td[0]);
+    if(td[1]) ehci_td_pool_free(td[1]);
+    if(td[2]) ehci_td_pool_free(td[2]);
+    return ENOSPACE;
+  }
+
+  if(d->dev_desc.bDeviceClass != 9) {
+    ehci_td_pool_free(td[0]);
+    ehci_td_pool_free(td[1]);
+    ehci_td_pool_free(td[2]);
     return EINVALID;
+  }
 
   for(cfgidx=0;cfgidx<d->dev_desc.bNumConfigurations;cfgidx++) {
     /* get_descriptor: config descriptor; mostly to find wTotalLength */
@@ -1022,15 +1072,15 @@ static status probe_hub(usb_device_t *d)
 
     /* setup qTDs */
     ehci_detach_td(qh);
-    ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-    ehci_fill_td(&td2, EHCI_PIDCODE_IN, &cfgd, sizeof(usb_cfg_desc_t), &td1); /* DATA stage */
-    ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+    ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+    ehci_fill_td(td[1], EHCI_PIDCODE_IN, &cfgd, sizeof(usb_cfg_desc_t), td[0]); /* DATA stage */
+    ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
 
     /* queue it */
-    ehci_attach_td(qh, &td1);
+    ehci_attach_td(qh, td[0]);
 
-    /* wait for it */
-    while(td2.token & EHCI_TD_TOKEN_A); /* td3 may not complete */
+    /* wait for it (td[2] may not complete) */
+    while(ehci_td_chain_active(td[0]) == OK);
 
     dump_usb_cfg_desc(&cfgd);
 
@@ -1043,15 +1093,15 @@ static status probe_hub(usb_device_t *d)
 
     /* setup qTDs */
     ehci_detach_td(qh);
-    ehci_fill_td(&td1, EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-    ehci_fill_td(&td2, EHCI_PIDCODE_IN, buffer, cfgd.wTotalLength, &td1); /* DATA stage */
-    ehci_fill_td(&td3, EHCI_PIDCODE_OUT, NULL, 0, &td2); /* STATUS stage */
+    ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+    ehci_fill_td(td[1], EHCI_PIDCODE_IN, buffer, cfgd.wTotalLength, td[0]); /* DATA stage */
+    ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
 
     /* queue it */
-    ehci_attach_td(qh, &td1);
+    ehci_attach_td(qh, td[0]);
 
     /* wait for it */
-    while(td3.token & EHCI_TD_TOKEN_A);
+    while(ehci_td_chain_active(td[0]) == OK);
 
     void *ptr = buffer + sizeof(usb_cfg_desc_t);
     for(ifidx=0; ifidx<cfgd.bNumInterfaces; ifidx++) {
@@ -1060,10 +1110,16 @@ static status probe_hub(usb_device_t *d)
       ptr += sizeof(usb_if_desc_t);
       for(eptidx=0; eptidx<ifd->bNumEndpoints; eptidx++) {
         usb_ept_desc_t *eptd = (usb_ept_desc_t *) ptr;
-        //dump_usb_ept_desc(eptd); //FIXME:wtf
+        dump_usb_ept_desc(eptd); //FIXME:wtf
 
         if(ifd->bInterfaceClass == 9 && GETBITS(eptd->bmAttributes, 0, 2) == 0) {
           DLOG(1, "Found hub cfgval=%d ept=%d.\n", cfgd.bConfigurationValue, GETBITS(eptd->bEndpointAddress, 0, 4));
+
+          ehci_detach_td(qh);   /* detach before freeing */
+          ehci_td_pool_free(td[0]);
+          ehci_td_pool_free(td[1]);
+          ehci_td_pool_free(td[2]);
+
           return setup_hub(d, cfgd.bConfigurationValue, GETBITS(eptd->bEndpointAddress, 0, 4));
         }
 
@@ -1071,6 +1127,11 @@ static status probe_hub(usb_device_t *d)
       }
     }
   }
+
+  ehci_detach_td(qh);   /* detach before freeing */
+  ehci_td_pool_free(td[0]);
+  ehci_td_pool_free(td[1]);
+  ehci_td_pool_free(td[2]);
 
   return EINVALID;
 }

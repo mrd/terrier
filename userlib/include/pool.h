@@ -40,8 +40,6 @@
 #ifndef _POOL_H_
 #define _POOL_H_
 
-#include "types.h"
-
 #define POOL_PROTO(name,ty)                     \
   extern ty *name##_pool_alloc(void);           \
   extern void name##_pool_free(ty *)

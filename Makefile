@@ -127,7 +127,7 @@ program-map.ld: buildprograms
 
 .PHONY: buildprograms userlib
 buildprograms: userlib
-	for p in $(PROGS); do make -C $$p; done
+	for p in $(PROGS); do make -C $$p USE_VMM=$(USE_VMM); done
 userlib:
 	make -C userlib
 

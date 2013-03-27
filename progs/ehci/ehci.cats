@@ -37,6 +37,12 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Memory mapped IO pages used: */
+/* 0x48000000 */
+/* 0x48200000 */
+/* 0x4A000000 */
+/* 0x4A300000 */
+
 #include "ats_types.h"
 #include "ats_basics.h"
 #include <pool.h>
@@ -85,6 +91,24 @@ static inline u32 memset(void *dest, u32 byte, u32 count)
     dest8[i] = (u8) byte;
   return i;
 }
+
+#ifdef USE_VMM
+
+#define arm_mmu_va_to_pa(vaddr, op2, res)                       \
+  ASM("MCR p15,0,%1,c7,c8,%2\n"                                 \
+      "MRC p15,0,%0,c7,c4,0":"=r"(res):"r"(vaddr),"I"(op2))
+
+status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
+{
+  u32 addr = (u32) vaddr;
+  u32 res;
+  arm_mmu_va_to_pa((void *) (addr & 0xFFFFF000), 0, res);
+  if (res & 1) return EINVALID;
+  *paddr = (res & 0xFFFFF000) + (addr & 0xFFF);
+  return OK;
+}
+#endif
+
 
 /* ************************************************** */
 
@@ -369,11 +393,13 @@ struct _ehci_td {
   volatile u32 alt_next;
   volatile u32 token;
   volatile u32 buf[5];
+  /* HW part ^ */
+  struct _ehci_td *nextv;
 } __attribute__((aligned (32)));
 typedef struct _ehci_td ehci_td_t;
 
 /* memory pool of TDs for dynamic alloc */
-POOL_DEFN (ehci_td, ehci_td_t, 16, 32);
+POOL_DEFN (ehci_td, ehci_td_t, 16, 64);
 
 /* ************************************************** */
 
@@ -385,6 +411,9 @@ void dump_indent(indent)
 
 void dump_td(ehci_td_t *td, u32 indent)
 {
+#ifdef USE_VMM
+  /* FIXME */
+#else
   dump_indent(indent);
   DLOG_NO_PREFIX(1, "TD: %#x %#x %#x (%s) [%#x %#x %#x %#x %#x]\n",
                  td->next, td->alt_next, td->token,
@@ -393,10 +422,14 @@ void dump_td(ehci_td_t *td, u32 indent)
                  td->buf[3], td->buf[4]);
   if(!(td->next & EHCI_TD_PTR_T))
     dump_td((ehci_td_t *) (td->next & EHCI_TD_PTR_MASK), indent);
+#endif
 }
 
 void dump_qh(ehci_qh_t *qh, u32 indent)
 {
+#ifdef USE_VMM
+  /* FIXME */
+#else
   dump_indent(indent);
   DLOG_NO_PREFIX(1, "QH: %#x %#x %#x %#x %#x %#x\n",
                  qh->next,
@@ -415,6 +448,7 @@ void dump_qh(ehci_qh_t *qh, u32 indent)
   // need to handle circular
   //if(!(qh->next & EHCI_QH_PTR_T))
   //  dump_qh((ehci_qh_t *) (qh->next & EHCI_QH_PTR_MASK), indent);
+#endif
 }
 
 /* ************************************************** */
@@ -613,11 +647,21 @@ void ehci_detach_td(ehci_qh_t *qh)
   qh->alt_td = EHCI_TD_PTR_T;
 }
 
-void ehci_attach_td(ehci_qh_t *qh, ehci_td_t *td)
+status ehci_attach_td(ehci_qh_t *qh, ehci_td_t *td)
 {
   qh->current_td = EHCI_TD_PTR_T; /* clear current TD */
   qh->overlay[0] = 0;             /* clear status of overlay */
+#ifdef USE_VMM
+  u32 phys;
+  if(vmm_get_phys_addr(td, &phys) == OK) {
+    qh->next_td = phys;
+    return OK;
+  }
+  return EINVALID;
+#else
   qh->next_td = (u32) td;         /* set new value for next TD */
+  return OK;
+#endif
 }
 
 status ehci_insert_qh(ehci_qh_t *cur, ehci_qh_t *new)
@@ -649,11 +693,24 @@ void usb_init_subdevice(usb_device_t *d, u32 endpt, usb_device_t *parent)
 
 u32 ehci_fill_td(ehci_td_t *td, u32 pidcode, void *data, s32 len, ehci_td_t *prev_td)
 {
+  u32 paddr = 0;
   u32 bytes = (len > 0x5000 ? 0x5000 : len); /* 0x5000 is max for single TD */
   memset(td, 0, 1<<5);
   td->next = EHCI_TD_PTR_T;
-  if(prev_td != NULL)
+  td->nextv = NULL;
+  if(prev_td != NULL) {
+#ifdef USE_VMM
+    if(vmm_get_phys_addr((void *) td, &paddr) != OK) {
+      DLOG(1, "vmm_get_phys_addr returned NOT OK\n");
+      return 0;                 /* FIXME: what to do */
+    }
+    prev_td->next = paddr;
+    prev_td->nextv = td;
+#else
     prev_td->next = (u32) td;
+    prev_td->nextv = td;
+#endif
+  }
   td->alt_next = EHCI_TD_PTR_T;
   td->token =
     /* total bytes to transfer */
@@ -674,7 +731,11 @@ u32 ehci_fill_td(ehci_td_t *td, u32 pidcode, void *data, s32 len, ehci_td_t *pre
   u32 addr = (u32) data, next;
   while(len > 0 && cpage < 5) {
 #ifdef USE_VMM
-    vmm_get_phys_addr((void *) addr, &td->buf[cpage])
+    if(vmm_get_phys_addr((void *) addr, &paddr) != OK) {
+      DLOG(1, "vmm_get_phys_addr returned NOT OK\n");
+      return 0;                 /* FIXME: what to do */
+    }
+    td->buf[cpage] = paddr;
 #else
     td->buf[cpage] = addr;
 #endif
@@ -692,24 +753,30 @@ u32 ehci_fill_td(ehci_td_t *td, u32 pidcode, void *data, s32 len, ehci_td_t *pre
 
 status ehci_td_chain_active(ehci_td_t *td)
 {
-  while((((u32) td) & EHCI_TD_PTR_T) == 0) {
+  while(td != NULL) {
     if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
       return EINVALID;          /* not active */
     if((td->token & EHCI_TD_TOKEN_H) != 0)
       return EINVALID;          /* halted */
-    td = (ehci_td_t *) td->next;
+
+    if((td->next & EHCI_TD_PTR_T) == 1)
+      break;                    /* done */
+    td = (ehci_td_t *) td->nextv;
   }
   return OK;
 }
 
 status ehci_td_chain_status(ehci_td_t *td)
 {
-  while((((u32) td) & EHCI_TD_PTR_T) == 0) {
+  while(td != NULL) {
     if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
       return OK;                /* not active */
     if((td->token & EHCI_TD_TOKEN_H) != 0)
       return EDATA;             /* halted */
-    td = (ehci_td_t *) td->next;
+
+    if((td->next & EHCI_TD_PTR_T) == 1)
+      break;                    /* done */
+    td = (ehci_td_t *) td->nextv;
   }
   return EINCOMPLETE;
 }
@@ -1312,7 +1379,17 @@ void hsusbhc_init()
   usb_init_subdevice(usbd, 0, usbd); /* self-parent */
 
   /* don't insert QH until it is setup */
+
+#ifdef USE_VMM
+  u32 paddr = 0;
+  if(vmm_get_phys_addr((void *) &usbd->qh, &paddr) != OK) {
+    DLOG(1, "vmm_get_phys_addr returned NOT OK\n");
+    return;                 /* FIXME: what to do */
+  }
+  R(EHCI_ASYNCLISTADDR) = paddr;
+#else
   R(EHCI_ASYNCLISTADDR) = (u32) &usbd->qh;
+#endif
 
   /* can't seem to enable async schedule until something is on the list */
 

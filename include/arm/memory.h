@@ -45,6 +45,7 @@
 #include "arm/memory-basics.h"
 
 #define CTRL_MMU    BIT(0)
+#define CTRL_ALIGN  BIT(1)
 #define CTRL_DCACHE BIT(2)
 #define CTRL_ICACHE BIT(12)
 #define CTRL_HIGHVT BIT(13)

@@ -37,12 +37,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Memory mapped IO pages used: */
-/* 0x48000000 */
-/* 0x48200000 */
-/* 0x4A000000 */
-/* 0x4A300000 */
-
 #include "ats_types.h"
 #include "ats_basics.h"
 #include <pool.h>
@@ -51,6 +45,17 @@
 unsigned int _scheduler_capacity = 4 << 14;
 unsigned int _scheduler_period = 15 << 14;
 unsigned int _scheduler_affinity = 1;
+
+mapping_t _mappings[] = {
+  { 0x48050000, NULL, 10, 12, 0, 0, R_RW, "needed for GPIO" },
+  { 0x4A064000, NULL, 1, 12, 0, 0, R_RW, "EHCI base" },
+  { 0x4A009000, NULL, 1, 12, 0, 0, R_RW, "CM base" },
+  { 0x4A062000, NULL, 1, 12, 0, 0, R_RW, "USBTLL base" },
+  { 0x4A064000, NULL, 1, 12, 0, 0, R_RW, "HSUSBHOST base" },
+  { 0x4A310000, NULL, 2, 12, 0, 0, R_RW, "needed for GPIO" },
+  { 0x4A30A000, NULL, 1, 12, 0, 0, R_RW, "SCRM base" },
+  { 0, 0, 0, 0, 0, 0, 0, 0 }
+};
 
 /* ************************************************** */
 

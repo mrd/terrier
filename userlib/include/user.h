@@ -45,6 +45,26 @@
 #include"../../include/status.h"
 #include"../../include/arm/memory-basics.h"
 
+PACKED_STRUCT(mapping) {
+  physaddr pstart;              /* starting physical address of region */
+  void *vstart;                 /* starting virtual address of region */
+  u32 page_count;               /* number of pages in this region */
+  u16 page_size_log2;           /* size of pages in this region (log2) */
+#define R_B 1                   /* set "buffered" bit */
+#define R_C 2                   /* set "cached" bit */
+  u8 cache_buf:4;               /* cache/buffer attributes */
+#define R_S 1                   /* set "shared" bit */
+#define R_NG 2                  /* set "not-global" bit */
+  u8 shared_ng:4;               /* shared/not-global attributes */
+#define R_NA 0                  /* no access (besides use of System/ROM bits) */
+#define R_PM 1                  /* privileged mode only */
+#define R_RO 2                  /* user-mode can read-only */
+#define R_RW 3                  /* user-mode can read-write */
+  u8 access;                    /* access permission attributes */
+  char *desc;                   /* description of mapping */
+} PACKED_END;
+typedef struct mapping mapping_t;
+
 int snprintf(char *str, int size, const char *format, ...);
 int vsnprintf(char *str, int size, const char *format, va_list ap);
 

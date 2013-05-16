@@ -42,7 +42,7 @@ $(NAME).elf: $(OBJS)
 
 .PHONY: clean distclean
 clean:
-	rm -f $(OBJS) $(ATSCTEMPS) program $(NAME).elf
+	rm -f $(OBJS) $(DFILES) $(ATSCTEMPS) program $(NAME).elf
 distclean: clean
 	rm -f $(DFILES)
 

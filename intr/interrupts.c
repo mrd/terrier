@@ -578,11 +578,12 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
   DLOG(1, "_handle_undefined_instruction @%#x = %#x\n", lr - 4, *((u32 *)(lr - 4)));
 }
 
+DEF_PER_CPU(u32 *, cpu_svc_stack_top);
+
 void _handle_swi2(u32 lr, u32 *r4_r11)
 {
   process_t *cur = cpu_read(process_t *, current);
-  extern u32 svc_stack_top;
-  u32 *stack = (&svc_stack_top) - 7;
+  u32 *stack = (cpu_read(u32 *, cpu_svc_stack_top)) - 7;
   cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
   cpu_write(context_t *, _next_context, &cpu_read(process_t *, current)->ctxt);
   lr -= 4;                      /* the SWI is the previous instruction */
@@ -612,7 +613,7 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
       else
         DLOG(1, "%s", (char *) fmt);
     } else
-      DLOG(1, "invalid pointer given to syscall3 (ptr=%#x len=%d)\n", fmt, fmtlen);
+      DLOG(1, "pid=%d: invalid pointer given to syscall3 (ptr=%#x len=%d) stack=%#x\n", cur->pid, fmt, fmtlen, stack);
 
     return;
   }

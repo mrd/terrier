@@ -213,7 +213,12 @@ static u32 update_prev_sched(void)
 #define process_iter_has_next(x) (x <= MAX_PROCESSES && process[x-1].pid != NOPID)
 #define process_iter_done(x)
 
-static inline u32 skip_unused(u32 n) { while(process[n - 1].pid == NOPID) n++; return n; }
+static inline u32 skip_unused(u32 n)
+{
+  u32 mask = 1 << cpu_index();
+  while(process[n - 1].pid == NOPID || (process[n - 1].affinity & mask) == 0) n++;
+  return n;
+}
 #define processlst_is_cons(n) ((n) > 0 && (n) <= MAX_PROCESSES)
 static inline u32 processlst_uncons(u32 n, void *ptr) { *((process_t **) ptr) = &process[n - 1]; return skip_unused(++n); }
 #define the_processlst_get() skip_unused(1)

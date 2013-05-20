@@ -202,6 +202,12 @@ status process_new(process_t **return_p)
       pagetable_append(&p->tables, ptl2);
       l2 = &ptl2->elt;
       vmm_activate_pagetable(l2);
+
+      /* Set IGNORE bits in first entry (addr=0x0) to 1s so that it is
+       * left unused by further VM page allocations, because pointers
+       * to 0x0 are frowned upon in user programs. */
+      l2->ptvaddr[0] = ~3;
+
 #endif
       p->regions = NULL;
 
@@ -563,6 +569,87 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
   return OK;
 }
 
+PACKED_STRUCT(mapping) {
+  physaddr pstart;              /* starting physical address of region */
+  void *vstart;                 /* starting virtual address of region */
+  u32 page_count;               /* number of pages in this region */
+  u16 page_size_log2;           /* size of pages in this region (log2) */
+#define R_B 1                   /* set "buffered" bit */
+#define R_C 2                   /* set "cached" bit */
+  u8 cache_buf:4;               /* cache/buffer attributes */
+#define R_S 1                   /* set "shared" bit */
+#define R_NG 2                  /* set "not-global" bit */
+  u8 shared_ng:4;               /* shared/not-global attributes */
+#define R_NA 0                  /* no access (besides use of System/ROM bits) */
+#define R_PM 1                  /* privileged mode only */
+#define R_RO 2                  /* user-mode can read-only */
+#define R_RW 3                  /* user-mode can read-write */
+  u8 access;                    /* access permission attributes */
+  char *desc;                   /* description of mapping */
+} PACKED_END;
+typedef struct mapping mapping_t;
+
+status interpret_mappings(process_t *p, mapping_t *m, void *pstart, Elf32_Shdr *data)
+{
+  region_list_t *rl;
+  pagetable_t *pt;
+
+  for(;m->pstart != 0;m++) {
+    DLOG(1, "mapping: %#x %dkB cb=%d sng=%d perms=%d desc=\"%s\"\n",
+         m->pstart, m->page_count << (m->page_size_log2 - 10),
+         m->cache_buf, m->shared_ng, m->access,
+         ((char *) (pstart + data->sh_offset + ((u32) m->desc - data->sh_addr))));
+
+    /* Sanity and safety checks on mapping */
+    if(m->page_size_log2 != PAGE_SIZE_LOG2) {
+      DLOG(1, "mapping: must use %d page size\n", 1 << PAGE_SIZE_LOG2);
+      /* FIXME: clean-up previous resources */
+      return EINVALID;
+    }
+
+    /* FIXME: more */
+
+    /* Describe mapping for the benefit of memory management */
+    rl = region_list_pool_alloc();
+    if(rl == NULL) {
+      DLOG(1, "interpret_mappings: region_list_pool_alloc failed.\n");
+      /* FIXME: clean-up previous resources */
+      return ENOSPACE;
+    }
+    rl->elt.pstart = m->pstart;
+    rl->elt.vstart = NULL;
+#ifdef USE_VMM
+    pt = &p->tables->next->elt; /* l2 pagetable in process */
+    rl->elt.pt = pt;
+#else
+    rl->elt.pt = NULL;
+#endif
+    rl->elt.page_count = m->page_count;
+    rl->elt.page_size_log2 = m->page_size_log2;
+
+    rl->elt.cache_buf = m->cache_buf;
+    rl->elt.shared_ng = m->shared_ng;
+
+    rl->elt.access = m->access;
+    region_append(&p->regions, rl);
+
+#ifdef USE_VMM
+    /* Create region in process's pagetables */
+    /* FIXME: be able to create new l2 pagetables if needed */
+    if(vmm_map_region_find_vstart(&rl->elt) != OK) {
+      DLOG(1, "interpret_mappings: unable to vmm_map_region_find_vstart\n");
+      return ENOSPACE;
+    }
+#else
+    rl->elt.vstart = m->pstart;               /* identity map */
+#endif
+
+    m->vstart = rl->elt.vstart;
+    DLOG(1, "mapping: => %#x\n", rl->elt.vstart);
+  }
+  return OK;
+}
+
 /* Load a (relocatable) ELF program the image of which begins at
  * 'pstart' and, if successful, will place the pointer to the
  * process_t data structure into the 'return_p' location. */
@@ -676,11 +763,6 @@ status program_load(void *pstart, process_t **return_p)
     return EINVALID;
   }
 
-  DLOG(1, "entry=%#x _start=%#x _end_entry=%#x\n",
-       entry,
-       program_find_symbol(pstart, "_start")->st_value,
-       program_find_symbol(pstart, "_end_entry")->st_value);
-
   /*** Find end of entry stub */
   sym = program_find_symbol(pstart, "_end_entry");
   if(sym == NULL) {
@@ -690,6 +772,8 @@ status program_load(void *pstart, process_t **return_p)
 
   p->entry = (void *) entry;
   p->end_entry = (void *) sym->st_value;
+  DLOG(1, "entry=%#x _end_entry=%#x\n", entry, p->end_entry);
+
 
   Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
 #if SCHED==rms || SCHED==rms_sched
@@ -767,6 +851,15 @@ status program_load(void *pstart, process_t **return_p)
 #endif
 
   vmm_dump_region(&rl->elt);
+
+  /*** Interpret and implement desired memory mappings */
+  sym = program_find_symbol(pstart, "_mappings");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _mappings -- assuming none\n");
+  } else {
+    DLOG(1, "_mappings=%#x\n", ((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))));
+    interpret_mappings(p, ((mapping_t *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))), pstart, data);
+  }
 
   /*** Copy sections into their final memory locations */
 

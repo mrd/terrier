@@ -353,7 +353,7 @@ typedef struct _usb_str_desc usb_str_desc_t;
 /* ************************************************** */
 /* EHCI registers */
 
-#define EHCI_BASE 0x4A064C00
+#define EHCI_BASE (_mappings[1].vstart + 0xC00) // 0x4A064C00
 #define EHCI_HCSPARAMS (EHCI_BASE + 0x04)
 #define EHCI_HCCPARAMS (EHCI_BASE + 0x08)
 #define EHCI_CMD (EHCI_BASE + 0x10)
@@ -459,10 +459,21 @@ void dump_qh(ehci_qh_t *qh, u32 indent)
 /* ************************************************** */
 /* GPIO */
 
-static u32 omap4460_gpio_base[] = {
-  0x4A310000, 0x48055000, 0x48057000,
-  0x48059000, 0x4805B000, 0x4805D000
-};
+static u32 omap4460_gpio_base[6];
+/*  = {
+ *   0x4A310000, 0x48055000, 0x48057000,
+ *   0x48059000, 0x4805B000, 0x4805D000
+ * }; */
+
+void omap4460_gpio_init(void)
+{
+  omap4460_gpio_base[0] = (u32) _mappings[5].vstart;
+  omap4460_gpio_base[1] = (u32) _mappings[0].vstart + 0x5000;
+  omap4460_gpio_base[2] = (u32) _mappings[0].vstart + 0x7000;
+  omap4460_gpio_base[3] = (u32) _mappings[0].vstart + 0x9000;
+  omap4460_gpio_base[4] = (u32) _mappings[0].vstart + 0xB000;
+  omap4460_gpio_base[5] = (u32) _mappings[0].vstart + 0xD000;
+}
 
 #define GPIO_BASE(x) (omap4460_gpio_base[(x) >> 5])
 #define GPIO_INDX(x) ((x) & 0x1F)
@@ -698,7 +709,9 @@ void usb_init_subdevice(usb_device_t *d, u32 endpt, usb_device_t *parent)
 
 u32 ehci_fill_td(ehci_td_t *td, u32 pidcode, void *data, s32 len, ehci_td_t *prev_td)
 {
+#ifdef USE_VMM
   u32 paddr = 0;
+#endif
   u32 bytes = (len > 0x5000 ? 0x5000 : len); /* 0x5000 is max for single TD */
   memset(td, 0, 1<<5);
   td->next = EHCI_TD_PTR_T;
@@ -1211,12 +1224,18 @@ void ehci_enumerate(usb_port_t *p, usb_device_t *usbd)
 
 void hsusbhc_init()
 {
+  int i;
   DLOG(1, "hsusbhc_init\n");
+  for(i=0; i<sizeof(_mappings)/sizeof(mapping_t) && _mappings[i].pstart; i++)
+    DLOG(1, "mapping: %#x => %#x desc=\"%s\"\n", _mappings[i].pstart, _mappings[i].vstart, _mappings[i].desc);
+
+  /* initialize base addresses of GPIO interface */
+  omap4460_gpio_init();
 
   /* ************************************************** */
   /* SCRM */
   /* (necessary) */
-#define SCRM_BASE 0x4A30A000
+#define SCRM_BASE (_mappings[6].vstart) // 0x4A30A000
 #define SCRM_ALTCLKSRC (SCRM_BASE + 0x110)
 #define SCRM_AUXCLK3 (SCRM_BASE + 0x31C)
 
@@ -1254,10 +1273,14 @@ void hsusbhc_init()
   /* ************************************************** */
   /* Clocks */
   /* (necessary) */
-#define CM_BASE 0x4a009000
+#define CM_BASE (_mappings[2].vstart) // 0x4a009000
+
+
   /* p978 */
-  R(CM_BASE + 0x3D0) |= BIT(1);
-  DLOG(1, "CM_L3INIT_FSUSB_CLKCTRL=%#x\n", R(0x4A0093D0));
+  /* full-speed, unnecessary */
+  //R(CM_BASE + 0x3D0) |= BIT(1);
+  //DLOG(1, "CM_L3INIT_FSUSB_CLKCTRL=%#x\n", R(0x4A0093D0));
+  //DLOG(1, "CM_L3INIT_FSUSB_CLKCTRL=%#x\n", R(0x4A0093D0));
 
   /* p980 */
   /* BIT(0): Module is managed automatically by hardware according to
@@ -1280,7 +1303,8 @@ void hsusbhc_init()
   /* p978 */
   /* BIT(0): Module is managed automatically by hardware according to
      clock domain transition.  */
-  R(CM_BASE + 0x368) = BIT(0);
+  R(CM_BASE + 0x368) |= BIT(0);
+  DLOG(1, "CM_L3INIT_HSUSBTLL_CLKCTRL=%#x\n", R(CM_BASE + 0x368));
   DLOG(1, "CM_L3INIT_HSUSBTLL_CLKCTRL=%#x\n", R(CM_BASE + 0x368));
 
   //R(0x4A009300) |= BIT(1);
@@ -1289,7 +1313,7 @@ void hsusbhc_init()
   /* ************************************************** */
   /* USBTLL p5110 */
   /* (optional) */
-#define USBTLL_BASE 0x4a062000
+#define USBTLL_BASE (_mappings[3].vstart) // 0x4a062000
 #define USBTLL_SYS_CONFIG (USBTLL_BASE + 0x10)
 #define USBTLL_SYS_STATUS (USBTLL_BASE + 0x14)
 
@@ -1305,7 +1329,7 @@ void hsusbhc_init()
   /* ************************************************** */
   /* High-speed Host p5147 */
   /* (optional) */
-#define HSUSBHOST_BASE 0x4a064000
+#define HSUSBHOST_BASE (_mappings[4].vstart) // 0x4a064000
 #define HSUSBHOST_SYS_CONFIG (HSUSBHOST_BASE + 0x10)
 #define HSUSBHOST_HOST_CONFIG (HSUSBHOST_BASE + 0x40)
 

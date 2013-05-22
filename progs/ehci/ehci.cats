@@ -61,6 +61,16 @@ mapping_t _mappings[] = {
 
 /* some helper stuff for now until I sort out where it should go */
 
+static inline u32 memcpy(void *dest, void *src, u32 count)
+{
+  u32 i;
+  u8 *dest8 = (u8 *) dest;
+  u8 *src8 = (u8 *) src;
+  for(i=0;i<count;i++)
+    dest8[i] = src8[i];
+  return i;
+}
+
 static inline void svc3(char *ptr, u32 len, u32 noprefix)
 {
   register char *r0 asm("r0") = ptr;

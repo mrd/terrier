@@ -605,6 +605,9 @@ void usb_clear_device(usb_device_t *d)
   d->dev_desc.bMaxPacketSize0 = 8; /* default */
 }
 
+typedef u8 scratch_buf_t[128];
+DEVICE_POOL_DEFN(scratch_buf,scratch_buf_t,2,4);
+
 void ehci_init_bulk_qh(usb_device_t *d, u32 endpt)
 {
   ehci_qh_t *qh = &d->qh;
@@ -871,6 +874,7 @@ void ehci_irq_handler(u32 v)
   } while(0)
 
 
+/* data must be in device memory */
 static status usb_control_write(usb_device_t *d, u32 bmRequestType, u32 bRequest, u32 wValue, u32 wIndex, u32 wLength, void *data)
 {
   ALLOC_TDS(devr,td,3);
@@ -899,6 +903,7 @@ static status usb_control_write(usb_device_t *d, u32 bmRequestType, u32 bRequest
   return s;
 }
 
+/* data must be in device memory */
 static status usb_control_read(usb_device_t *d, u32 bmRequestType, u32 bRequest, u32 wValue, u32 wIndex, u32 wLength, void *data)
 {
   ALLOC_TDS(devr,td,3);
@@ -963,7 +968,11 @@ static status usb_clear_feature(usb_device_t *d, u32 bmRequestType, u32 wValue, 
 
 static status usb_get_status(usb_device_t *d, u32 bmRequestType, u32 wValue, u32 wIndex, u32 wLength, void *buf)
 {
-  return usb_control_read(d, bmRequestType, USB_GET_STATUS, wValue, wIndex, wLength, buf);
+  scratch_buf_t *sb = scratch_buf_pool_alloc(); if(sb == NULL) return ENOSPACE;
+  status s = usb_control_read(d, bmRequestType, USB_GET_STATUS, wValue, wIndex, wLength, sb);
+  if(s == OK) memcpy(buf, sb, wLength);
+  scratch_buf_pool_free(sb);
+  return s;
 }
 
 status usb_set_configuration(usb_device_t *d, u32 cfgval)
@@ -1077,9 +1086,12 @@ static status usb_hub_port_enabled(usb_port_t *p)
 static status usb_hub_get_descriptor(usb_device_t *d, usb_hub_desc_t *hubd)
 {
 #define USB_HUB_DESCRIPTOR_TYPE 0x29
-  return usb_control_read(d, USB_REQ_DEVICE_TO_HOST | USB_REQ_TYPE_CLASS, USB_GET_DESCRIPTOR,
-                          USB_HUB_DESCRIPTOR_TYPE << 8, 0, sizeof(usb_hub_desc_t), hubd);
-
+  scratch_buf_t *sb = scratch_buf_pool_alloc(); if(sb == NULL) return ENOSPACE;
+  status s = usb_control_read(d, USB_REQ_DEVICE_TO_HOST | USB_REQ_TYPE_CLASS, USB_GET_DESCRIPTOR,
+                              USB_HUB_DESCRIPTOR_TYPE << 8, 0, sizeof(usb_hub_desc_t), sb);
+  if(s == OK) memcpy(hubd, sb, sizeof(usb_hub_desc_t));
+  scratch_buf_pool_free(sb);
+  return s;
 }
 
 static status usb_hub_port_power_on(usb_port_t *p)
@@ -1147,34 +1159,39 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
 static status probe_hub(usb_device_t *d)
 {
   status retval;
-  usb_cfg_desc_t cfgd;
+  usb_cfg_desc_t *cfgd;
   u32 cfgidx, ifidx, eptidx;
-  u8 buffer[128];               /* temporary buffer */
+  scratch_buf_t *sb = scratch_buf_pool_alloc();
+  if(sb == NULL) return ENOSPACE;
 
   for(cfgidx=0;cfgidx<d->dev_desc.bNumConfigurations;cfgidx++) {
     /* get config descriptor; mostly to find wTotalLength */
     retval = usb_control_read(d, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR,
                               (USB_TYPE_CFG_DESC << 8) | cfgidx,
-                              0, sizeof(usb_cfg_desc_t), &cfgd);
+                              0, sizeof(usb_cfg_desc_t), sb);
     if(retval != OK)
       DLOG(1, "Get configuration descriptor retval=%d\n", retval);
 
-    dump_usb_cfg_desc(&cfgd);
+    cfgd = (usb_cfg_desc_t *) sb;
+    dump_usb_cfg_desc(cfgd);
 
-    if(cfgd.wTotalLength > sizeof(buffer)) {
+    if(cfgd->wTotalLength > sizeof(scratch_buf_t)) {
       /* FIXME: figure out a better way to handle really long config descriptors */
+      DLOG(1, "probe_hub: configuration too long=%d.\n", cfgd->wTotalLength);
+      scratch_buf_pool_free(sb);
       return EINVALID;
     }
 
     /* get config descriptor + interfaces + endpoints */
     retval = usb_control_read(d, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR,
                               (USB_TYPE_CFG_DESC << 8) | cfgidx,
-                              0, cfgd.wTotalLength, buffer);
+                              0, cfgd->wTotalLength, sb);
     if(retval != OK)
       DLOG(1, "Get configuration descriptor retval=%d\n", retval);
 
-    void *ptr = buffer + sizeof(usb_cfg_desc_t);
-    for(ifidx=0; ifidx<cfgd.bNumInterfaces; ifidx++) {
+    void *ptr = ((void *) sb) + sizeof(usb_cfg_desc_t);
+
+    for(ifidx=0; ifidx<cfgd->bNumInterfaces; ifidx++) {
       usb_if_desc_t *ifd = (usb_if_desc_t *) ptr;
       dump_usb_if_desc(ifd);
       ptr += sizeof(usb_if_desc_t);
@@ -1183,8 +1200,10 @@ static status probe_hub(usb_device_t *d)
         dump_usb_ept_desc(eptd);
 
         if(ifd->bInterfaceClass == 9) {
-          DLOG(1, "Found hub cfgval=%d\n", cfgd.bConfigurationValue);
-          return setup_hub(d, cfgd.bConfigurationValue, 0);
+          u32 cv = cfgd->bConfigurationValue;
+          DLOG(1, "Found hub cfgval=%d\n", cv);
+          scratch_buf_pool_free(sb);
+          return setup_hub(d, cv, 0);
         }
 
         ptr += sizeof(usb_ept_desc_t);
@@ -1192,6 +1211,7 @@ static status probe_hub(usb_device_t *d)
     }
   }
 
+  scratch_buf_pool_free(sb);
   return EINVALID;
 }
 

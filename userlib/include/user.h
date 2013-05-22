@@ -68,6 +68,9 @@ typedef struct mapping mapping_t;
 int snprintf(char *str, int size, const char *format, ...);
 int vsnprintf(char *str, int size, const char *format, va_list ap);
 
+#define _DEVICE_SECTION ".device"
+#define DEVICE_ATTR __attribute__((section(_DEVICE_SECTION)))
+
 #endif
 
 /*

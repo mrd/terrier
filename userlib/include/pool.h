@@ -44,8 +44,7 @@
   extern ty *name##_pool_alloc(void);           \
   extern void name##_pool_free(ty *)
 
-#define POOL_DEFN(name,ty,size,align)                           \
-  ALIGNED(align,static ty, __##name##_pool_array[size]);        \
+#define _POOL_FUNC_DEFN(name,ty,size,align)                     \
   static u32 __##name##_pool_bitmap[size >> 3];                 \
   void name##_pool_init(void) {                                 \
     int i;                                                      \
@@ -69,6 +68,14 @@
         return;                                                 \
       }                                                         \
   }
+
+#define POOL_DEFN(name,ty,size,align)                           \
+  ALIGNED(align,static ty, __##name##_pool_array[size]);        \
+  _POOL_FUNC_DEFN(name,ty,size,align)
+
+#define DEVICE_POOL_DEFN(name,ty,size,align)                            \
+  static ty __##name##_pool_array[size] __attribute__((aligned(align),section(_DEVICE_SECTION))); \
+  _POOL_FUNC_DEFN(name,ty,size,align)
 
 #endif
 

@@ -174,6 +174,7 @@ PACKED_STRUCT(_usb_dev_req) {
 } PACKED_END;
 typedef struct _usb_dev_req usb_dev_req_t;
 
+DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 4, 64);
 
 /*
  * USB_DEV_DESC : Standard Device Descriptor
@@ -404,7 +405,7 @@ struct _ehci_td {
 typedef struct _ehci_td ehci_td_t;
 
 /* memory pool of TDs for dynamic alloc */
-POOL_DEFN (ehci_td, ehci_td_t, 16, 64);
+DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 8, 64);
 
 /* ************************************************** */
 
@@ -586,7 +587,7 @@ typedef struct {
 } usb_device_t;
 
 // create a pool for simple dynamic allocation
-POOL_DEFN(usb_device,usb_device_t,8,32);
+DEVICE_POOL_DEFN(usb_device,usb_device_t,8,32);
 
 void usb_clear_device(usb_device_t *d)
 {
@@ -838,77 +839,106 @@ void ehci_irq_handler(u32 v)
   DLOG(1, "IRQ\n");
 }
 
+/* macros to help use proper device memory for TDs */
+#define ALLOC_TDS(devr,td,n)                            \
+  usb_dev_req_t *devr = usb_dev_req_pool_alloc();       \
+  ehci_td_t *td[n];                                     \
+  do {                                                  \
+    int i;                                              \
+    if(devr == NULL) return ENOSPACE;                   \
+    for(i=0;i<n;i++) {                                  \
+      td[i] = ehci_td_pool_alloc();                     \
+      if(td[i] == NULL) {                               \
+        DLOG(1, "ALLOC_TDS: unable to alloc TD.\n");    \
+        usb_dev_req_pool_free(devr);                    \
+        for(;i>0;--i)                                   \
+            ehci_td_pool_free(td[i-1]);                 \
+        return ENOSPACE; } } } while (0)
+
+#define FREE_TDS(devr,tdvar,n) do {             \
+    int i; usb_dev_req_pool_free(devr);         \
+    for(i=0;i<n;i++) ehci_td_pool_free(td[i]);  \
+  } while(0)
+
+
 static status usb_control_write(usb_device_t *d, u32 bmRequestType, u32 bRequest, u32 wValue, u32 wIndex, u32 wLength, void *data)
 {
-  usb_dev_req_t devr;
-  ehci_td_t td[3];
+  ALLOC_TDS(devr,td,3);
 
-  usb_device_request(&devr, bmRequestType, bRequest, wValue, wIndex, wLength);
+  usb_device_request(devr, bmRequestType, bRequest, wValue, wIndex, wLength);
 
   /* setup qTDs */
   ehci_detach_td(&d->qh);
-  ehci_fill_td(&td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  if(ehci_fill_td(&td[1], EHCI_PIDCODE_OUT, data, wLength, &td[0]) != 0) /* DATA stage */
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  if(ehci_fill_td(td[1], EHCI_PIDCODE_OUT, data, wLength, td[0]) != 0) { /* DATA stage */
+    FREE_TDS(devr,td,3);
     return ENOSPACE;                                      /* FIXME: cannot handle control xfers longer than 0x5000 bytes */
-  ehci_fill_td(&td[2], EHCI_PIDCODE_IN, NULL, 0, &td[1]); /* STATUS stage */
+  }
+  ehci_fill_td(td[2], EHCI_PIDCODE_IN, NULL, 0, td[1]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(&d->qh, &td[0]);
+  ehci_attach_td(&d->qh, td[0]);
 
   /* wait for it */
-  while(ehci_td_chain_active(&td[0]) == OK);
+  while(ehci_td_chain_active(td[0]) == OK);
 
   ehci_detach_td(&d->qh);       /* detach before unwinding TD memory */
 
-  return ehci_td_chain_status(&td[0]);
+  status s = ehci_td_chain_status(td[0]);
+  FREE_TDS(devr,td,3);
+  return s;
 }
 
 static status usb_control_read(usb_device_t *d, u32 bmRequestType, u32 bRequest, u32 wValue, u32 wIndex, u32 wLength, void *data)
 {
-  usb_dev_req_t devr;
-  ehci_td_t td[3];
+  ALLOC_TDS(devr,td,3);
 
-  usb_device_request(&devr, bmRequestType, bRequest, wValue, wIndex, wLength);
+  usb_device_request(devr, bmRequestType, bRequest, wValue, wIndex, wLength);
 
   /* setup qTDs */
   ehci_detach_td(&d->qh);
-  ehci_fill_td(&td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  if(ehci_fill_td(&td[1], EHCI_PIDCODE_IN, data, wLength, &td[0]) != 0) /* DATA stage */
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  if(ehci_fill_td(td[1], EHCI_PIDCODE_IN, data, wLength, td[0]) != 0) { /* DATA stage */
+    FREE_TDS(devr,td,3);
     return ENOSPACE;                                      /* FIXME: cannot handle control xfers longer than 0x5000 bytes */
-  ehci_fill_td(&td[2], EHCI_PIDCODE_OUT, NULL, 0, &td[1]); /* STATUS stage */
+  }
+  ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(&d->qh, &td[0]);
+  ehci_attach_td(&d->qh, td[0]);
 
   /* wait for it */
-  while(ehci_td_chain_active(&td[0]) == OK);
+  while(ehci_td_chain_active(td[0]) == OK);
 
   ehci_detach_td(&d->qh);       /* detach before unwinding TD memory */
 
-  return ehci_td_chain_status(&td[0]);
+  status s = ehci_td_chain_status(td[0]);
+  FREE_TDS(devr,td,3);
+  return s;
 }
 
 static status usb_control_nodata(usb_device_t *d, u32 bmRequestType, u32 bRequest, u32 wValue, u32 wIndex)
 {
-  usb_dev_req_t devr;
-  ehci_td_t td[2];
+  ALLOC_TDS(devr,td,2);
 
-  usb_device_request(&devr, bmRequestType, bRequest, wValue, wIndex, 0);
+  usb_device_request(devr, bmRequestType, bRequest, wValue, wIndex, 0);
 
   /* setup qTDs */
   ehci_detach_td(&d->qh);
-  ehci_fill_td(&td[0], EHCI_PIDCODE_SETUP, &devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
-  ehci_fill_td(&td[1], EHCI_PIDCODE_IN, NULL, 0, &td[0]); /* STATUS stage */
+  ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
+  ehci_fill_td(td[1], EHCI_PIDCODE_IN, NULL, 0, td[0]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(&d->qh, &td[0]);
+  ehci_attach_td(&d->qh, td[0]);
 
   /* wait for it */
-  while(ehci_td_chain_active(&td[0]) == OK);
+  while(ehci_td_chain_active(td[0]) == OK);
 
   ehci_detach_td(&d->qh);       /* detach before unwinding TD memory */
 
-  return ehci_td_chain_status(&td[0]);
+  status s = ehci_td_chain_status(td[0]);
+  FREE_TDS(devr,td,2);
+  return s;
 }
 
 static status usb_set_feature(usb_device_t *d, u32 bmRequestType, u32 wValue, u32 wIndex)

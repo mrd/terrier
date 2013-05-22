@@ -388,12 +388,31 @@ u32 program_memory_size(void *pstart)
 }
 
 /* place ALLOC sections into memory and rewrite headers; return final size */
-static u32 lay_out_sections(void *pstart, u32 base)
+static u32 lay_out_sections(void *pstart, u32 base, physaddr region_phys, region_list_t **rstart)
 {
   u32 curaddr = base;
+  region_list_t *rl = region_list_pool_alloc();
   Elf32_Ehdr *pe = (Elf32_Ehdr *) pstart;
   Elf32_Shdr *sh = (void *) pe + pe->e_shoff;
   int shnum = pe->e_shnum, i;
+  char *secname;
+
+  if(rl == NULL) {
+    DLOG(1, "lay_out_sections: region_list_pool_alloc failed.\n");
+    /* clean-up previous resources */
+    region_list_pool_free(rl);
+    //    return ENOSPACE;
+    return 0;
+  }
+
+  /* create memory region for sections */
+  *rstart = rl;
+  rl->elt.pstart = region_phys;
+  rl->elt.vstart = (void *) curaddr;
+  rl->elt.cache_buf = R_C | R_B;
+  rl->elt.shared_ng = R_NG;
+  rl->elt.access = R_RW;
+  rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
 
   /* loop through sections */
   for(i=0; i<shnum; i++) {
@@ -408,12 +427,38 @@ static u32 lay_out_sections(void *pstart, u32 base)
       /* relocate section to new address */
       sh->sh_addr = curaddr;
 
+      secname = program_find_string_in(pstart, program_find_section_index(pstart, pe->e_shstrndx), sh->sh_name);
+      /* if special "device" section then split new region */
+      if(strcmp(secname, ".device") == 0 && (curaddr & (PAGE_SIZE-1)) == 0) {
+        region_list_t *rl2 = region_list_pool_alloc();
+        if(rl2 == NULL) {
+          DLOG(1, "lay_out_sections: region_list_pool_alloc failed.\n");
+          /* clean-up previous resources */
+          region_list_pool_free(rl);
+          // return ENOSPACE;
+          return 0;
+        }
+        /* curaddr is page-aligned, as is vstart */
+        rl->elt.page_count = (curaddr - ((u32) rl->elt.vstart)) >> PAGE_SIZE_LOG2;
+        rl2->elt.pstart = rl->elt.pstart + (rl->elt.page_count << PAGE_SIZE_LOG2);
+        rl2->elt.vstart = rl->elt.vstart + (rl->elt.page_count << PAGE_SIZE_LOG2);
+        rl2->elt.cache_buf = R_B;
+        rl2->elt.shared_ng = R_S | R_NG;
+        rl2->elt.access = R_RW;
+        rl2->elt.page_size_log2 = PAGE_SIZE_LOG2;
+        region_append(rstart, rl2);
+        rl = rl2;
+      }
+      /* FIXME: support 'normal' sections that occur after device section */
+
       /* next section goes after this one */
       curaddr += sh->sh_size;
     }
     /* go to next section header */
     sh = (void *) sh + pe->e_shentsize;
   }
+
+  rl->elt.page_count = ((curaddr - ((u32) rl->elt.vstart)) + 0xFFF) >> PAGE_SIZE_LOG2;
 
   return curaddr - base;        /* return memory size */
 }
@@ -592,7 +637,9 @@ typedef struct mapping mapping_t;
 status interpret_mappings(process_t *p, mapping_t *m, void *pstart, Elf32_Shdr *data)
 {
   region_list_t *rl;
+#ifdef USE_VMM
   pagetable_t *pt;
+#endif
 
   for(;m->pstart != 0;m++) {
     DLOG(1, "mapping: %#x %dkB cb=%d sng=%d perms=%d desc=\"%s\"\n",
@@ -641,7 +688,7 @@ status interpret_mappings(process_t *p, mapping_t *m, void *pstart, Elf32_Shdr *
       return ENOSPACE;
     }
 #else
-    rl->elt.vstart = m->pstart;               /* identity map */
+    rl->elt.vstart = (void *) m->pstart; /* identity map */
 #endif
 
     m->vstart = rl->elt.vstart;
@@ -700,6 +747,7 @@ status program_load(void *pstart, process_t **return_p)
   u32 memsz = program_memory_size(pstart), memsz2;
   u32 pages, pages2, base;
   physaddr region_phys;
+  region_list_t *regions = NULL;
   DLOG(2, "program_memory_size=%d\n", memsz);
 
   if(memsz == 0) {
@@ -731,7 +779,12 @@ status program_load(void *pstart, process_t **return_p)
 #endif
 
     /* rewrite sections using new base address */
-    memsz2 = lay_out_sections(pstart, base);
+    memsz2 = lay_out_sections(pstart, base, region_phys, &regions);
+    if(memsz2 == 0) {
+      DLOG(1, "program_load: something went wrong with lay_out_sections\n");
+      /* FIXME: cleanup */
+      return ENOSPACE;
+    }
     /* postcondition: the ELF sections have been relocated to new memory addresses */
 
     pages2 = (memsz2 + 0xFFF) >> PAGE_SIZE_LOG2;
@@ -744,8 +797,27 @@ status program_load(void *pstart, process_t **return_p)
       /* clean up previous allocation */
       for(i=0; i<pages; i++)
         physical_free_page(region_phys + (i << PAGE_SIZE_LOG2));
+
+      /* clean up region description */
+      while(regions != NULL) {
+        region_list_t *next = regions->next;
+        region_list_pool_free(regions);
+        regions = next;
+      }
+
     }
   } while(pages2 != pages);
+
+  if(regions == NULL) {
+    DLOG(1, "program_load: something wrong with regions\n");
+    /* FIXME: clean-up */
+    return ENOSPACE;
+  }
+
+  /* check if regions setup correctly */
+  vmm_dump_region(&regions->elt);
+  if(regions->next)
+    vmm_dump_region(&regions->next->elt);
 
   /*** Now memsz is determined and section headers have been rewritten. */
 
@@ -812,45 +884,30 @@ status program_load(void *pstart, process_t **return_p)
   p->ctxt.psr = MODE_SYS;          /* starting status register */
 
   /*** Describe program region for the benefit of memory management */
-  region_list_t *rl = region_list_pool_alloc();
-  if(rl == NULL) {
-    DLOG(1, "process_new: region_list_pool_alloc failed.\n");
-    /* FIXME: clean-up previous resources */
-    return ENOSPACE;
-  }
-  rl->elt.pstart = region_phys;
-  rl->elt.vstart = (void *) base;
+  region_list_t *rl = regions;  /* determined in lay_out */
+  for(;rl != NULL;rl=rl->next) {
 #ifdef USE_VMM
-  pagetable_t *l2 = &p->tables->next->elt;
-  rl->elt.pt = l2;
+    rl->elt.pt = &p->tables->next->elt; /* l2 table */
 #else
-  rl->elt.pt = NULL;
+    rl->elt.pt = NULL;
 #endif
-  rl->elt.page_count = pages;
-  rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
+  }
 
-  rl->elt.cache_buf = R_C | R_B; /* cached and buffered */
-  rl->elt.shared_ng = R_NG;      /* not global */
-
-  rl->elt.access = R_RW;         /* read-write user mode */
-  region_append(&p->regions, rl);
+  p->regions = regions;
 
 #ifdef USE_VMM
-  vmm_map_region(&rl->elt);     /* Create region in process's pagetables */
+  for(rl=regions;rl != NULL;rl=rl->next) {
+    vmm_map_region(&rl->elt);     /* Create region in process's pagetables */
+  }
 
-  //DLOG_DUMP(1, &l2->ptvaddr[0], &l2->ptvaddr[16]);
-
+  /* *** cheat ***, switch to process and use its mapping */
   process_switch_to(p);
   u32 paddr;
   if(vmm_get_phys_addr((void *) 0x8000, &paddr) != OK)
     DLOG(1, "vmm_get_phys_addr failed\n");
   else
     DLOG(1, "vmm_get_phys_addr(0x8000) = %#x\n", paddr);
-  /* *** cheat ***, switch to process and use its mapping */
-
 #endif
-
-  vmm_dump_region(&rl->elt);
 
   /*** Interpret and implement desired memory mappings */
   sym = program_find_symbol(pstart, "_mappings");

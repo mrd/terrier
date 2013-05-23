@@ -92,7 +92,7 @@ void NO_RETURN c_entry()
 #ifdef OMAP4460
   smp_init();
 
-#define NO_CACHE
+  //#define NO_CACHE
 #ifdef NO_SMP
 #ifndef NO_CACHE
   arm_cache_invl_data();

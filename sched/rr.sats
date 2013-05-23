@@ -1,5 +1,5 @@
-/*
- * Status return codes
+(*
+ * Round-Robin Scheduler -- simple and straightforward stand-in
  *
  * -------------------------------------------------------------------
  *
@@ -35,27 +35,21 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+ *)
 
-#ifndef _STATUS_H_
-#define _STATUS_H_
+#define ATS_STALOADFLAG 0
 
-#define OK 0
-#define EINVALID 1
-#define EUNDEFINED 2
-#define ENOSPACE 3
-#define EINCOMPLETE 4
-#define EDATA 5
+%{#
 
-#endif
+#include "rr.cats"
 
-/*
+%}
+
+(*
  * Local Variables:
  * indent-tabs-mode: nil
- * mode: C
- * c-file-style: "gnu"
- * c-basic-offset: 2
+ * mode: ATS
  * End:
- */
+ *)
 
-/* vi: set et sw=2 sts=2: */
+(* vi: set et sw=2 sts=2: *)

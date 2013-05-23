@@ -9,6 +9,9 @@ SECTIONS
  .rodata : { *(.rodata) }
  .data : { *(.data) }
  .bss : { *(.bss) }
+  /* align device memory to page */
+ .device : ALIGN(0x1000) { *(.device) }
+ . = ALIGN(4096);               /* end on page boundary */
  /* To make arm-none-linux-gnueabi-ld shut up: */
  __aeabi_unwind_cpp_pr0 = .;
  __aeabi_unwind_cpp_pr1 = .;

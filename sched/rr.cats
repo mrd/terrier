@@ -1,5 +1,5 @@
 /*
- * Round-Robin Scheduler -- simple and straightforward stand-in
+ * Round-robin scheduler C code
  *
  * -------------------------------------------------------------------
  *
@@ -37,6 +37,8 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "ats_types.h"
+#include "ats_basics.h"
 #include "types.h"
 #include "mem/virtual.h"
 #include "mem/physical.h"
@@ -50,9 +52,27 @@
 #define MODULE "sched_rr"
 #include "debug/log.h"
 
-#define QUANTUM (1<<12)
+void schedule(void);
+void *atspre_null_ptr = 0;      //FIXME
+ats_bool_type atspre_peq(ats_ptr_type a, ats_ptr_type b)
+{
+  return a == b;
+}
 
 static pid_t runq_head;         /* global runqueue: can only hold cleanly saved processes */
+static DEFSPINLOCK(rrlock);
+
+#define get_runq_head() ((void *) &runq_head)
+#define rel_runq_head(p)
+#define get_cpuq_head(v) ((void *) (&cpu_read(pid_t, cpu_runq_head)))
+#define rel_cpuq_head(p)
+#define rrlock_lock() spinlock_lock(&rrlock)
+#define rrlock_unlock() spinlock_unlock(&rrlock)
+static status waitqueue_append(pid_t *q, process_t *p);
+#define pqueue_is_empty(q) (*((pid_t *) q) == NOPID)
+#define pqueue_is_not_empty(q) (*((pid_t *) q) != NOPID)
+
+#define QUANTUM (1<<12)
 
 DEF_PER_CPU(pid_t, cpu_runq_head); /* cpu runqueue: may hold unsaved processes */
 INIT_PER_CPU(pid_t) { cpu_write(pid_t, cpu_runq_head, NOPID); }
@@ -65,8 +85,6 @@ DEF_PER_CPU(context_t *, _prev_context);
 INIT_PER_CPU(_prev_context) { cpu_write(process_t *, _prev_context, NULL); }
 
 DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
-
-static DEFSPINLOCK(rrlock);
 
 /* precondition: either q is protected by a lock that is held, or q is
  * only usable by this CPU. */
@@ -100,52 +118,6 @@ static process_t *waitqueue_dequeue(pid_t *q)
   return p;
 }
 
-static void move_cpu_runqueue_to_global(void)
-{
-  process_t *p;
-  for(;;) {
-    p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head));
-    if(p == NULL) return;
-    spinlock_lock(&rrlock);
-    /* runq_head is shared -- must hold rrlock */
-    waitqueue_append(&runq_head, p);
-    spinlock_unlock(&rrlock);
-  }
-}
-
-void schedule(void)
-{
-  for(;;) {
-    process_t *p;
-    /* Processes on global runqueue have been waiting the longest. */
-
-    spinlock_lock(&rrlock);
-    /* runq_head is shared -- must hold rrlock */
-    p = waitqueue_dequeue(&runq_head); /* try global runqueue first */
-    spinlock_unlock(&rrlock);
-
-    if(p == NULL)
-      p = waitqueue_dequeue(&cpu_read(pid_t, cpu_runq_head)); /* try cpu runqueue */
-
-    if(p == NULL) {
-      /* go idle */
-      cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
-      cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
-      cpu_write(context_t *, _next_context, &cpu_read(process_t *, cpu_idle_process)->ctxt);
-    } else {
-      /* invariant: process p runnable by only one CPU at a time */
-      cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
-      cpu_write(process_t *, current, p);
-      process_switch_to(p);
-      cpu_write(context_t *, _next_context, &p->ctxt);
-      DLOG(1, "switch_to: pid=%d pc=%#x\n", p->pid, p->ctxt.usr.r[15]);
-      /* invariant: every process remaining on cpu_runqueue is cleanly saved */
-      move_cpu_runqueue_to_global();
-      return;
-    }
-  }
-}
-
 status sched_wakeup(process_t *p)
 {
   /* p may not be saved yet, so it must go on cpu runqueue */
@@ -156,6 +128,8 @@ status sched_wakeup(process_t *p)
    * processes that are already claimed by this CPU. */
 }
 
+static void move_cpu_runqueue_to_global(void);
+
 static void sched_timer_handler(u32 intid)
 {
   if(pvttimer_is_triggered()) {
@@ -164,6 +138,7 @@ static void sched_timer_handler(u32 intid)
     pvttimer_set(QUANTUM);
     pvttimer_ack_interrupt();   /* acknowledge and unmask */
 
+    move_cpu_runqueue_to_global();
     /* Put current process on local CPU runqueue, since its context
      * has not been saved yet. */
     waitqueue_append(&cpu_read(pid_t, cpu_runq_head), cpu_read(process_t *, current));
@@ -189,7 +164,6 @@ void sched_aux_cpu_init(void)
   pvttimer_start();
 }
 
-
 /*
  * Local Variables:
  * indent-tabs-mode: nil
@@ -200,3 +174,4 @@ void sched_aux_cpu_init(void)
  */
 
 /* vi: set et sw=2 sts=2: */
+

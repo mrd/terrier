@@ -42,13 +42,10 @@
 
 #include "types.h"
 #include "arm/asm.h"
-
-#define PAGE_SIZE_LOG2 12
-#define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
-#define CACHE_LINE_LOG2 5
-#define CACHE_LINE (1<<CACHE_LINE_LOG2)
+#include "arm/memory-basics.h"
 
 #define CTRL_MMU    BIT(0)
+#define CTRL_ALIGN  BIT(1)
 #define CTRL_DCACHE BIT(2)
 #define CTRL_ICACHE BIT(12)
 #define CTRL_HIGHVT BIT(13)
@@ -134,6 +131,25 @@ static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
     for(; count > 0; --count)
       *ptr++ = v;
   }
+}
+
+static inline u32 memcpy(void *dest, void *src, u32 count)
+{
+  u32 i;
+  u8 *dest8 = (u8 *) dest;
+  u8 *src8 = (u8 *) src;
+  for(i=0;i<count;i++)
+    dest8[i] = src8[i];
+  return i;
+}
+
+static inline u32 memset(void *dest, u32 byte, u32 count)
+{
+  u32 i;
+  u8 *dest8 = (u8 *) dest;
+  for(i=0;i<count;i++)
+    dest8[i] = (u8) byte;
+  return i;
 }
 
 /* TTB0 -- process-specific virtual mappings */

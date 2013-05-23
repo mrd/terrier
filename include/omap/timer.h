@@ -54,6 +54,7 @@ status timer_gp_ack_overflow_interrupt(int i);
 status timer_gp_stop(int i);
 status timer_gp_set_handler(int i, void (*handler)(u32));
 
+#ifdef OMAP4460
 extern volatile u32 *reg_32ksyncnt_cr; /* access to the 32-khz clock value */
 
 /* spin-wait using the 32khz clock: maximum effective wait time (2^17) seconds */
@@ -66,9 +67,15 @@ static inline void timer_32k_delay(u32 count)
   while(*reg_32ksyncnt_cr < finish);
 }
 
+static inline u32 timer_32k_value(void)
+{
+  return *reg_32ksyncnt_cr;
+}
+#endif
 
 /* Abstract private timer interface for schedulers: */
 static UNUSED void pvttimer_set(u32 count);
+static UNUSED u32 pvttimer_get(void);
 static UNUSED void pvttimer_enable_interrupt(void);
 static UNUSED void pvttimer_disable_interrupt(void);
 static UNUSED void pvttimer_ack_interrupt(void);
@@ -124,6 +131,13 @@ static void pvttimer_set(u32 count)
   /* FIXME: look into more efficient way of doing this;
    * and/or support higher clocks-per-sec in interface. */
   PVTTIMER->counter = count * pvttimer_32khz_prescaler;
+}
+
+static u32 pvttimer_get(void)
+{
+  /* FIXME: look into more efficient way of doing this;
+   * and/or support higher clocks-per-sec in interface. */
+  return PVTTIMER->counter / pvttimer_32khz_prescaler;
 }
 
 static void pvttimer_enable_interrupt(void)

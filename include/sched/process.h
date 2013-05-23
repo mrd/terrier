@@ -64,10 +64,16 @@ typedef struct {
   pid_t pid;
   pagetable_list_t *tables;
   region_list_t *regions;
+#if SCHED==rms || SCHED==rms_sched
+  u32 r, b, c, t;
+  u32 runticks, totalticks;
+#endif
+  u32 affinity;
   pid_t next;
 } process_t;
 
 process_t *process_find(u32 pid);
+status process_is_valid_pointer(process_t *p, void *ptr, u32 bytes);
 status process_switch_to(process_t *p);
 status process_new(process_t **return_p);
 void process_init(void);

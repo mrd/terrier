@@ -1,9 +1,9 @@
-/*
- * Status return codes
+(*
+ * Physical memory manager
  *
  * -------------------------------------------------------------------
  *
- * Copyright (C) 2011 Matthew Danish.
+ * Copyright (C) 2011-2013 Matthew Danish.
  *
  * All rights reserved. Please see enclosed LICENSE file for details.
  *
@@ -35,27 +35,14 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+ *)
 
-#ifndef _STATUS_H_
-#define _STATUS_H_
+#define ATS_STALOADFLAG 0 // no run-time staloading
 
-#define OK 0
-#define EINVALID 1
-#define EUNDEFINED 2
-#define ENOSPACE 3
-#define EINCOMPLETE 4
-#define EDATA 5
 
-#endif
+%{#
 
-/*
- * Local Variables:
- * indent-tabs-mode: nil
- * mode: C
- * c-file-style: "gnu"
- * c-basic-offset: 2
- * End:
- */
+#include "physical.cats"
 
-/* vi: set et sw=2 sts=2: */
+%}
+

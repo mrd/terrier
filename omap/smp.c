@@ -42,6 +42,7 @@
 #include "sched/process.h"
 #include "omap/early_uart3.h"
 #include "omap/smp.h"
+#include "omap/timer.h"
 #include "arm/memory.h"
 #include "arm/status.h"
 #include "arm/asm.h"
@@ -128,6 +129,15 @@ static inline void smp_dump_coherency_state(void)
 
 DEFSEMAPHORE(scheduling_enabled_sem);
 DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
+DEF_PER_CPU_EXTERN(u32 *, cpu_svc_stack_top);
+
+#if SCHED==rms || SCHED==rms_sched
+#ifdef OMAP4460
+DEF_PER_CPU_EXTERN(u32, prev_sched);
+#else
+#error "prev_sched not implemented"
+#endif
+#endif
 
 /* First real function for auxiliary CPUs. */
 static void NO_INLINE smp_aux_cpu_init()
@@ -190,6 +200,14 @@ static void NO_INLINE smp_aux_cpu_init()
   /* start with idle process */
   cpu_write(process_t *, current, cpu_read(process_t *, cpu_idle_process));
 
+#if SCHED==rms || SCHED==rms_sched
+#ifdef OMAP4460
+  cpu_write(u32, prev_sched, timer_32k_value());
+#else
+#error "prev_sched not implemented"
+#endif
+#endif
+
   DLOG(1, "Switching to idle process. entry=%#x\n", cpu_read(process_t *, current)->entry);
 }
 
@@ -233,7 +251,12 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
   /* call into a real function frame */
   smp_aux_cpu_init();
 
-  /* avoid stack usage and jump into idle process */
+  /* avoid stack usage from here on ... */
+
+  /* set per-cpu variable holding SVC stack for convenience */
+  cpu_write(u32 *, cpu_svc_stack_top, &newstack[4][1024]);
+
+  /* jump into idle process */
   register process_t *p = cpu_read(process_t *, cpu_idle_process);
 
   sched_launch_first_process_no_stack_patchup(p);
@@ -284,6 +307,9 @@ status smp_init(void)
 
   if(smp_init_per_cpu_spaces() != OK) return ENOSPACE;
   smp_init_invoke_percpu_constructors();
+
+  /* write CPU0 copy of per-cpu svc_stack_top variable */
+  extern u32 svc_stack_top; cpu_write(u32 *, cpu_svc_stack_top, &svc_stack_top);
 
 #ifndef NO_SMP
   SCU->invalidate_all_registers_in_secure_state = ~0; /* invalidate tag RAM */
@@ -367,7 +393,7 @@ status smp_init(void)
   smp_dump_coherency_state();
   /* tell waiting processors that caches are all enabled */
   stage = 6; arm_cache_clean_data_mva_poc((void *) &stage);
-#endif
+#endif  /* NO_SMP */
   return OK;
 }
 

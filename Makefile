@@ -37,12 +37,15 @@
 
 ##################################################
 
+SCHED=rms_sched
+
 C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
-	mem/physical.c mem/virtual.c intr/interrupts.c omap/timer.c omap/smp.c \
-	sched/process.c sched/rr.c \
+	mem/virtual.c intr/interrupts.c omap/timer.c omap/smp.c \
+	sched/process.c \
 	debug/log.c tests/cswitch.c tests/test_process.c
 S_FILES = init/startup.S intr/table.S
-PROGS = progs/idle progs/uart
+DATS_FILES = sched/$(SCHED).dats mem/physical.dats
+PROGS = progs/idle progs/uart progs/ehci
 
 IMGNAME = terrier
 ADDRESS = 0x80008000
@@ -54,13 +57,17 @@ include config.mk
 
 ##################################################
 
-CFLAGS += -Iinclude -D$(CORE)
+CFLAGS += -Iinclude -D$(CORE) -Wno-attributes
 SFLAGS += -Iinclude -D$(CORE)
+ATSFLAGS += -IATS include
+ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME -Wno-unused-function -Wno-unused-label
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0
+ATSCFLAGS += -g -O0
 else
 CFLAGS += -O$(OPT)
+ATSCFLAGS += -O$(OPT)
 endif
 CFLAGS += $(patsubst %,-DTEST_%,$(TESTS))
 
@@ -72,20 +79,32 @@ else
 LDSCRIPT = ldscripts/$(IMGNAME).ld
 endif
 
+NO_SMP=1 # FIXME: until I fix the scheduler
+ifeq ($(NO_SMP),1)
+CFLAGS += -DNO_SMP
+SFLAGS += -DNO_SMP
+endif
+
+CFLAGS += -DSCHED=$(SCHED)
+
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
 ##################################################
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
-OBJS = $(C_OBJS) $(S_OBJS)
-DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
+DATS_OBJS = $(patsubst %.dats,%_dats.o,$(DATS_FILES))
+ATSCTEMPS = $(patsubst %.dats,%_dats.c,$(DATS_FILES))
+OBJS = $(C_OBJS) $(S_OBJS) $(DATS_OBJS)
+DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES)) $(patsubst %.dats,%_dats.d,$(DATS_FILES))
 POBJS = $(patsubst %,%/program,$(PROGS))
 UBOOT = u-boot/$(CORE)/u-boot.bin
 
 ##################################################
 
 .PHONY: all
+.SECONDARY:
+
 all: $(IMGNAME.uimg) ucmd ukermit $(IMGNAME)-nand.bin
 
 $(IMGNAME).uimg: $(IMGNAME).bin.gz
@@ -108,18 +127,22 @@ program-map.ld: buildprograms
 
 .PHONY: buildprograms userlib
 buildprograms: userlib
-	for p in $(PROGS); do make -C $$p; done
+	for p in $(PROGS); do make -C $$p USE_VMM=$(USE_VMM); done
 userlib:
 	make -C userlib
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@
 
+%_dats.o: %.dats
+	$(ATSOPT) $(ATSFLAGS) --output $(patsubst %.dats,%_dats.c,$<) --dynamic $<
+	$(CC) $(ATSCFLAGS) $(CFLAGS) -o $@ -c $(patsubst %.dats,%_dats.c,$<)
+
 .PHONY: clean test tags cscope
 
 clean:
 	rm -f $(IMGNAME).uimg $(IMGNAME).elf $(IMGNAME).bin $(IMGNAME).map $(IMGNAME).bin.gz ucmd ukermit program-map.ld
-	rm -f $(OBJS) $(DFILES)
+	rm -f $(OBJS) $(DFILES) $(ATSCTEMPS)
 	for p in $(PROGS); do make -C $$p clean; done
 	make -C userlib clean
 

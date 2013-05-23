@@ -1,5 +1,5 @@
 /*
- * Status return codes
+ * ARM memory management
  *
  * -------------------------------------------------------------------
  *
@@ -37,15 +37,13 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _STATUS_H_
-#define _STATUS_H_
+#ifndef _ARM_MEMORY_BASICS_H_
+#define _ARM_MEMORY_BASICS_H_
 
-#define OK 0
-#define EINVALID 1
-#define EUNDEFINED 2
-#define ENOSPACE 3
-#define EINCOMPLETE 4
-#define EDATA 5
+#define PAGE_SIZE_LOG2 12
+#define PAGE_SIZE (1<<PAGE_SIZE_LOG2)
+#define CACHE_LINE_LOG2 5
+#define CACHE_LINE (1<<CACHE_LINE_LOG2)
 
 #endif
 

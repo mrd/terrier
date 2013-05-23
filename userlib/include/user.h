@@ -1,9 +1,9 @@
 /*
- * Virtual memory manager
+ * "Userspace" library header file
  *
  * -------------------------------------------------------------------
  *
- * Copyright (C) 2011 Matthew Danish.
+ * Copyright (C) 2013 Matthew Danish.
  *
  * All rights reserved. Please see enclosed LICENSE file for details.
  *
@@ -37,31 +37,17 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _MEM_VIRTUAL_H_
-#define _MEM_VIRTUAL_H_
+#ifndef __BUILTIN__USER_LIB_H__
+#define __BUILTIN__USER_LIB_H__
 
-#include "types.h"
-#include "list.h"
-#include "mem/pool.h"
+#include<stdarg.h>
+#include"../../include/types.h"
+#include"../../include/status.h"
+#include"../../include/arm/memory-basics.h"
 
-typedef struct pagetable {
-  void *vstart;                 /* starting virtual address managed by PT */
-  physaddr ptpaddr;             /* address of pagetable in physical memory */
-  u32 *ptvaddr;                 /* address of pagetable in virtual memory */
-  struct pagetable *parent_pt;  /* parent pagetable or self if MASTER */
-#define PT_FAULT 0
-#define PT_MASTER 1
-#define PT_COARSE 2
-  u16 type;                     /* one of PT_* */
-  u16 domain;                   /* domain of section entries if MASTER */
-} pagetable_t;
-DLIST_TYPE(pagetable,pagetable_t);
-POOL_PROTO(pagetable_list,pagetable_list_t);
-
-typedef struct {
+PACKED_STRUCT(mapping) {
   physaddr pstart;              /* starting physical address of region */
   void *vstart;                 /* starting virtual address of region */
-  pagetable_t *pt;              /* pagetable managing this region */
   u32 page_count;               /* number of pages in this region */
   u16 page_size_log2;           /* size of pages in this region (log2) */
 #define R_B 1                   /* set "buffered" bit */
@@ -75,20 +61,15 @@ typedef struct {
 #define R_RO 2                  /* user-mode can read-only */
 #define R_RW 3                  /* user-mode can read-write */
   u8 access;                    /* access permission attributes */
-} region_t;
-DLIST_TYPE(region,region_t);
-POOL_PROTO(region_list,region_list_t);
+  char *desc;                   /* description of mapping */
+} PACKED_END;
+typedef struct mapping mapping_t;
 
-extern pagetable_t l1pt;
-extern pagetable_t kernel_l2pt;
+int snprintf(char *str, int size, const char *format, ...);
+int vsnprintf(char *str, int size, const char *format, va_list ap);
 
-status vmm_activate_pagetable(pagetable_t *pt);
-status vmm_map_region(region_t *r);
-status vmm_init_pagetable(pagetable_t *pt);
-status vmm_map_region_find_vstart(region_t *r);
-status vmm_get_phys_addr(void *vaddr, physaddr *paddr);
-void vmm_dump_kernel_l2pt(u32 start, u32 end);
-void vmm_dump_region(region_t *);
+#define _DEVICE_SECTION ".device"
+#define DEVICE_ATTR __attribute__((section(_DEVICE_SECTION)))
 
 #endif
 

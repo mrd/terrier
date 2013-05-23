@@ -290,7 +290,9 @@ void intc_init(void)
   CPUBASE->ICR |= 1; /* enable interrupt forwarding in CPU interface */
 
   DLOG(1, "Testing SGI\n");
-  DISTBASE->SGIR = SETBITS(2, 24, 2) | SETBITS(3, 0, 4); /* send ID3 to self */
+  //DISTBASE->SGIR = SETBITS(2, 24, 2) | SETBITS(3, 0, 4); /* send ID3 to self */
+  //DISTBASE->SGIR = SETBITS(1, 24, 2) | SETBITS(1, 0, 4); /* send ID1 to others */
+
 #endif
 
   for(i=0;i<96;i++) irq_table[i] = NULL;
@@ -553,6 +555,16 @@ static int find_fault_status(u32 sr)
   return i;
 }
 
+#define DUMP_REGS do {                                                  \
+  u32 regs[16];                                                         \
+  clrex();                                                              \
+  ASM("STMIA %0,{r0-r15}^"::"r"(regs));                                 \
+  DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]); \
+  DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]); \
+  DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]); \
+  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x pc : %#.08x\n", regs[12], regs[13], regs[14], regs[15]); \
+  } while(0)
+
 void HANDLES() _handle_reset(void)
 {
   DLOG(1, "_handle_reset\n");
@@ -562,27 +574,49 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
 {
   u32 lr;
   ASM("MOV %0, lr":"=r"(lr));
+  DUMP_REGS;
   DLOG(1, "_handle_undefined_instruction @%#x = %#x\n", lr - 4, *((u32 *)(lr - 4)));
 }
 
+DEF_PER_CPU(u32 *, cpu_svc_stack_top);
+
 void _handle_swi2(u32 lr, u32 *r4_r11)
 {
-  extern u32 svc_stack_top;
-  u32 *stack = (&svc_stack_top) - 7;
+  process_t *cur = cpu_read(process_t *, current);
+  u32 *stack = (cpu_read(u32 *, cpu_svc_stack_top)) - 7;
   cpu_write(context_t *, _prev_context, &cpu_read(process_t *, current)->ctxt);
   cpu_write(context_t *, _next_context, &cpu_read(process_t *, current)->ctxt);
   lr -= 4;                      /* the SWI is the previous instruction */
+#if 0
   DLOG(1, "_handle_swi lr=%#x (%#x), stack=%#x\n",
        lr, *((u32 *) lr), stack);
   DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", stack[0], stack[1], stack[2], stack[3]);
   DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", r4_r11[0], r4_r11[1], r4_r11[2], r4_r11[3]);
   DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", r4_r11[4], r4_r11[5], r4_r11[6], r4_r11[7]);
   DLOG(1, "r12: %#.08x r14_irq: %#.08x spsr_irq: %#.08x\n", stack[4], stack[5], stack[6]);
-
-  switch(stack[0]) {
+#endif
+  u32 instruction = *((u32 *) lr);
+  /* SWI number is encoded as first 24 bits of SWI instruction */
+  switch(instruction & 0xffffff) {
   case 0:                       /* set entry */
     cpu_read(process_t *, current)->entry = (void *) stack[1];
     return;
+  case 3: {                        /* DLOG */
+    /* r0: string pointer */
+    /* r2: string length */
+    /* r2: no prefix? */
+    void *fmt = (void *) stack[0]; /* r0 */
+    u32 fmtlen = stack[1];         /* r1 */
+    if(process_is_valid_pointer(cur, fmt, fmtlen) == OK && ((char *)fmt)[fmtlen] == 0) {
+      if(stack[2])
+        DLOG_NO_PREFIX(1, "%s", (char *) fmt);
+      else
+        DLOG(1, "%s", (char *) fmt);
+    } else
+      DLOG(1, "pid=%d: invalid pointer given to syscall3 (ptr=%#x len=%d) stack=%#x\n", cur->pid, fmt, fmtlen, stack);
+
+    return;
+  }
   }
 }
 
@@ -600,6 +634,7 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
   u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
+  DUMP_REGS;
   sr = arm_mmu_instr_fault_status();
   DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 4, sp, sr,
        arm_mmu_instr_fault_addr());
@@ -609,18 +644,10 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
 
 void HANDLES("ABORT") _handle_data_abort(void)
 {
-  u32 *regs;
-  clrex();
-  ASM("STMFD sp!,{r0-r12}");
-  ASM("MOV %0, sp":"=r"(regs));
-  ASM("ADD sp, sp, #52");
-  u32 lr, sp, sr;
+  u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
-  DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
-  DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
-  DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
-  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x\n", regs[12], sp, lr);
+  DUMP_REGS;
   sr = arm_mmu_data_fault_status();
   DLOG(1, "_handle_data_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 8, sp, sr,
        arm_mmu_data_fault_addr());
@@ -647,7 +674,7 @@ void _handle_irq(void)
   u32 activeirq = IAR - 32;      /* shared peripheral IRQs start at 32 */
   if(IAR >= 32) {
 #endif
-    DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
+    //DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
     intc_mask_irq(activeirq);
     if(irq_table[activeirq])
       irq_table[activeirq](activeirq);
@@ -656,12 +683,12 @@ void _handle_irq(void)
 #endif
 #ifdef GIC
   } else if(IAR >= 16) {
-    DLOG(1, "_handle_irq: PRIVATE PERIPHERAL INTERRUPT IAR=%#x\n", IAR);
+    //DLOG(1, "_handle_irq: PRIVATE PERIPHERAL INTERRUPT IAR=%#x\n", IAR);
     intc_mask_intid(IAR);
     if(ppi_table[IAR - 16])
       ppi_table[IAR - 16](IAR);
   } else {
-    DLOG(1, "_handle_irq: SOFTWARE GENERATED INTERRUPT IAR=%#x\n", IAR);
+    //DLOG(1, "_handle_irq: SOFTWARE GENERATED INTERRUPT IAR=%#x\n", IAR);
     intc_mask_intid(IAR);
     if(sgi_table[IAR])
       sgi_table[IAR](IAR);

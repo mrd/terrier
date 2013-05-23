@@ -406,7 +406,7 @@ static u32 lay_out_sections(void *pstart, u32 base, physaddr region_phys, region
   }
 
   /* create memory region for sections */
-  *rstart = rl;
+  region_append(rstart, rl);
   rl->elt.pstart = region_phys;
   rl->elt.vstart = (void *) curaddr;
   rl->elt.cache_buf = R_C | R_B;
@@ -768,6 +768,12 @@ status program_load(void *pstart, process_t **return_p)
     if(physical_alloc_pages(pages, align, &region_phys) != OK) {
       DLOG(1, "process_new: physical_alloc_pages for region failed.\n");
       /* FIXME: clean-up previous resources */
+      /* clean up region description */
+      while(regions != NULL) {
+        region_list_t *next = regions->next;
+        region_list_pool_free(regions);
+        regions = next;
+      }
       return ENOSPACE;
     }
 
@@ -780,9 +786,16 @@ status program_load(void *pstart, process_t **return_p)
 
     /* rewrite sections using new base address */
     memsz2 = lay_out_sections(pstart, base, region_phys, &regions);
+
     if(memsz2 == 0) {
       DLOG(1, "program_load: something went wrong with lay_out_sections\n");
       /* FIXME: cleanup */
+      /* clean up region description */
+      while(regions != NULL) {
+        region_list_t *next = regions->next;
+        region_list_pool_free(regions);
+        regions = next;
+      }
       return ENOSPACE;
     }
     /* postcondition: the ELF sections have been relocated to new memory addresses */

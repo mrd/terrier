@@ -54,6 +54,7 @@ mapping_t _mappings[] = {
   { 0x4A064000, NULL, 1, 12, 0, 0, R_RW, "HSUSBHOST base" },
   { 0x4A310000, NULL, 2, 12, 0, 0, R_RW, "needed for GPIO" },
   { 0x4A30A000, NULL, 1, 12, 0, 0, R_RW, "SCRM base" },
+
   { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -165,6 +166,107 @@ status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
 #define USB_GET_INTERFACE        0x0A
 #define USB_SET_INTERFACE        0x0B
 #define USB_SYNCH_FRAME          0x0C
+
+/* ************************************************** */
+
+//#define DEBUGREGS
+#ifdef DEBUGREGS
+struct omapregs {
+  char *desc; u32 addr;
+} omapregs[] = {
+  // ---	Port padconfs		---
+  // -------------------------------------
+  { "USBB2_ULPITLL_CLK_NXT", 0x4A002890 },
+  { "USBB2_ULPITLL_DIR_STP", 0x4A002894 },
+  { "USBB2_ULPITLL_DAT0_DAT1", 0x4A002898 },
+  { "USBB2_ULPITLL_DAT2_DAT3", 0x4A00289C },
+  { "USBB2_ULPITLL_DAT4_DAT5", 0x4A0028A0 },
+  { "USBB2_ULPITLL_DAT6_DAT7", 0x4A0028A4 },
+  { "USBB1_ULPIPHY_CLK_NXT", 0x4A0028A8 },
+  { "USBB1_ULPIPHY_DIR_STP", 0x4A0028AC },
+  { "USBB1_ULPIPHY_DAT0_DAT1", 0x4A0028B0 },
+  { "USBB1_ULPIPHY_DAT2_DAT3", 0x4A0028B4 },
+  { "USBB1_ULPIPHY_DAT4_DAT5", 0x4A0028B8 },
+  { "USBB1_ULPIPHY_DAT6_DAT7", 0x4A0028BC },
+  { "USBB1_HSIC_DAT_STR", 0x4A0028C0 },
+  { "USBB2_HSIC_DAT_STR", 0x4A0028C4 },
+  { "USBB3_HSIC_STR", 0x4A0029DC },
+  { "USBB3_HSIC_DAT", 0x4A0029E0 },
+
+  // ---	TLL Module		---
+  // -------------------------------------
+  { "USBTLL_REVISION", 0x4A062000 },
+  { "USBTLL_HWINFO", 0x4A062004 },
+  { "USBTLL_SYSCONFIG", 0x4A062010 },
+  { "USBTLL_SYSSTATUS", 0x4A062014 },
+  { "USBTLL_IRQSTATUS", 0x4A062018 },
+  { "USBTLL_IRQENABLE", 0x4A06201C },
+  { "TLL_SHARED_CONF", 0x4A062030 },
+  { "TLL_CHANNEL_CONF_i (0)", 0x4A062040 },
+  { "TLL_CHANNEL_CONF_i (1)", 0x4A062044 },
+  { "TLL_CHANNEL_CONF_i (2)", 0x4A062048 },
+
+
+  // ---	UHH_config Module	---
+  // -------------------------------------
+  { "UHH_REVISION", 0x4A064000 },
+  { "UHH_HWINFO", 0x4A064004 },
+  { "UHH_SYSCONFIG", 0x4A064010 },
+  { "UHH_SYSSTATUS", 0x4A064014 },
+  { "UHH_HOSTCONFIG", 0x4A064040 },
+  { "UHH_DEBUG_CSR", 0x4A064044 },
+
+
+  // ---	EHCI Module		---
+  // -------------------------------------
+  { "HCCAPBASE", 0x4A064C00 },
+  { "HCSPARAMS", 0x4A064C04 },
+  { "HCCPARAMS", 0x4A064C08 },
+  { "USBCMD", 0x4A064C10 },
+  { "USBSTS", 0x4A064C14 },
+  { "USBINTR", 0x4A064C18 },
+  { "FRINDEX", 0x4A064C1C },
+  { "CTRLDSSEGMENT", 0x4A064C20 },
+  { "PERIODICLISTBASE", 0x4A064C24 },
+  { "ASYNCLISTADDR", 0x4A064C28 },
+  { "CONFIGFLAG", 0x4A064C50 },
+  { "PORTSC_0", 0x4A064C54 },
+  { "PORTSC_1", 0x4A064C58 },
+  { "PORTSC_2", 0x4A064C5C },
+  { "INSNREG00", 0x4A064C90 },
+  { "INSNREG01", 0x4A064C94 },
+  { "INSNREG02", 0x4A064C98 },
+  { "INSNREG03", 0x4A064C9C },
+  { "INSNREG04", 0x4A064CA0 },
+  { "INSNREG05_UTMI", 0x4A064CA4 },
+  { "INSNREG06", 0x4A064CA8 },
+  { "INSNREG07", 0x4A064CAC },
+  { "INSNREG08", 0x4A064CB0 },
+
+
+  // ---	CKGEN_CM2		---
+  // -------------------------------------
+  { "CM_CLKSEL_USB_60MHZ", 0x4A008104 },
+  { "CM_CLKMODE_DPLL_USB", 0x4A008180 },
+  { "CM_IDLEST_DPLL_USB", 0x4A008184 },
+  { "CM_AUTOIDLE_DPLL_USB", 0x4A008188 },
+  { "CM_CLKSEL_DPLL_USB", 0x4A00818C },
+  { "CM_DIV_M2_DPLL_USB", 0x4A008190 },
+  { "CM_SSC_DELTAMSTEP_DPLL_USB", 0x4A0081A8 },
+  { "CM_SSC_MODFREQDIV_DPLL_USB", 0x4A0081AC },
+  { "CM_CLKDCOLDO_DPLL_USB", 0x4A0081B4 },
+
+
+  // ---	L3INIT_CM2		---
+  // -------------------------------------
+  { "CM_L3INIT_CLKSTCTRL", 0x4A009300 },
+  { "CM_L3INIT_HSUSBHOST_CLKCTRL", 0x4A009358 },
+  { "CM_L3INIT_HSUSBTLL_CLKCTRL", 0x4A009368 }
+};
+
+#endif
+
+/* ************************************************** */
 
 /* USB datastructures */
 
@@ -428,7 +530,13 @@ void dump_indent(indent)
 void dump_td(ehci_td_t *td, u32 indent)
 {
 #ifdef USE_VMM
-  /* FIXME */
+  /* FIXME: physical->virtual */
+  dump_indent(indent);
+  DLOG_NO_PREFIX(1, "TD: %#x %#x %#x (%s) [%#x %#x %#x %#x %#x]\n",
+                 td->next, td->alt_next, td->token,
+                 td->token & EHCI_TD_TOKEN_A ? "A" : "a", /* active? */
+                 td->buf[0], td->buf[1], td->buf[2],
+                 td->buf[3], td->buf[4]);
 #else
   dump_indent(indent);
   DLOG_NO_PREFIX(1, "TD: %#x %#x %#x (%s) [%#x %#x %#x %#x %#x]\n",
@@ -444,7 +552,16 @@ void dump_td(ehci_td_t *td, u32 indent)
 void dump_qh(ehci_qh_t *qh, u32 indent)
 {
 #ifdef USE_VMM
-  /* FIXME */
+  /* FIXME: physical->virtual */
+  dump_indent(indent);
+  DLOG_NO_PREFIX(1, "QH: %#x %#x %#x %#x %#x %#x\n",
+                 qh->next,
+                 qh->characteristics,
+                 qh->capabilities,
+                 qh->current_td,
+                 qh->next_td,
+                 qh->alt_td);
+
 #else
   dump_indent(indent);
   DLOG_NO_PREFIX(1, "QH: %#x %#x %#x %#x %#x %#x\n",
@@ -606,7 +723,7 @@ void usb_clear_device(usb_device_t *d)
 }
 
 typedef u8 scratch_buf_t[128];
-DEVICE_POOL_DEFN(scratch_buf,scratch_buf_t,2,4);
+DEVICE_POOL_DEFN(scratch_buf,scratch_buf_t,4,4);
 
 void ehci_init_bulk_qh(usb_device_t *d, u32 endpt)
 {
@@ -1227,11 +1344,14 @@ status ehci_setup_new_device(usb_device_t *usbd)
   u32 new_addr = unused_address++;
   if(usb_control_nodata(usbd, USB_REQ_HOST_TO_DEVICE, USB_SET_ADDRESS, new_addr, 0) != OK) {
     DLOG(1, "Unable to SET_ADDRESS\n");
+    /* FIXME: should I reuse address? */
     return EINVALID;
   }
 
   usbd->address = new_addr;
   ehci_set_qh_address(&usbd->qh, new_addr);
+
+  DLOG(1, "ehci_setup_new_device new_addr=%d\n", new_addr);
 
   /* get_descriptor: device descriptor (expect BABBLE) */
   usb_control_read(usbd, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR,
@@ -1243,7 +1363,8 @@ status ehci_setup_new_device(usb_device_t *usbd)
   /* get_descriptor: device descriptor */
   if(usb_control_read(usbd, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR,
                       USB_TYPE_DEV_DESC << 8, 0, sizeof(usb_dev_desc_t), &usbd->dev_desc) != OK) {
-    DLOG(1, "Unable to read device descriptor\n");
+    DLOG(1, "ehci_setup_new_device: Unable to read device descriptor\n");
+    /* FIXME: should I reuse address? */
     return EINVALID;
   }
 
@@ -1365,7 +1486,6 @@ void hsusbhc_init()
      clock domain transition.  */
   R(CM_BASE + 0x368) |= BIT(0);
   DLOG(1, "CM_L3INIT_HSUSBTLL_CLKCTRL=%#x\n", R(CM_BASE + 0x368));
-  DLOG(1, "CM_L3INIT_HSUSBTLL_CLKCTRL=%#x\n", R(CM_BASE + 0x368));
 
   //R(0x4A009300) |= BIT(1);
   DLOG(1, "CM_L3INIT_CLKSTCTRL=%#x\n", R(CM_BASE + 0x300));
@@ -1447,7 +1567,6 @@ void hsusbhc_init()
   ehci_microframewait(500 << 3); /* 500 ms */
   DLOG(1, "EHCI PORTSC0=%#x PORTSC1=%#x PORTSC2=%#x\n",
        R(EHCI_PORTSC(0)), R(EHCI_PORTSC(1)), R(EHCI_PORTSC(2)));
-
   DLOG(1, "EHCI_FRINDEX=%#x\n", R(EHCI_FRINDEX));
 
   /* setup root ports */
@@ -1480,13 +1599,20 @@ void hsusbhc_init()
   R(EHCI_ASYNCLISTADDR) = (u32) &usbd->qh;
 #endif
 
+  DLOG(1, "EHCI_ASYNCLISTADDR=%#x\n", R(EHCI_ASYNCLISTADDR));
+
   /* can't seem to enable async schedule until something is on the list */
 
   /* enable asynchronous schedule */
   R(EHCI_CMD) |= BIT(5);
 
-  DLOG(1, "EHCI_CMD=%#x EHCI_STS=%#x\n",
-       R(EHCI_CMD), R(EHCI_STS));
+#ifdef DEBUGREGS
+  {
+    int i;
+    for(i=0;i<(sizeof(omapregs)/sizeof(struct omapregs));i++)
+      DLOG(1, "%s = %#x\n", omapregs[i].desc, R(omapregs[i].addr));
+  }
+#endif
 
   ehci_enumerate(&rootport[0].port, usbd);
   //ehci_enumerate(&rootport[1].port, &qh1);

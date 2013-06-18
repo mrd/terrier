@@ -55,6 +55,7 @@
 #include "debug/log.h"
 
 process_t process[MAX_PROCESSES];
+#define FOR_ALL_PROCESSES(p) for(p=process;p<process+MAX_PROCESSES;p++) if(p->pid != NOPID)
 static process_t idle_process[MAX_CPUS];
 DEF_PER_CPU(process_t *, cpu_idle_process);
 INIT_PER_CPU(cpu_idle_process) {
@@ -240,6 +241,18 @@ void process_init(void)
     idle_process[i].ctxt.lr = idle_context.lr;
     idle_process[i].entry = idle_loop;
     idle_process[i].end_entry = idle_loop;
+  }
+}
+
+void dump_ipcmappings(ipcmapping_t *ipcm)
+{
+  for(;ipcm->type;ipcm++) {
+    DLOG(1, "ipcmapping: type=%d name='%s' flags=%#x proto='%s' pages=%d\n",
+         ipcm->type,
+         ipcm->name,
+         ipcm->flags,
+         ipcm->proto,
+         ipcm->pages);
   }
 }
 
@@ -697,6 +710,17 @@ status interpret_mappings(process_t *p, mapping_t *m, void *pstart, Elf32_Shdr *
   return OK;
 }
 
+typedef struct {
+  ipcmapping_t m;               /* copy of mapping in kernel */
+  process_t *p;                 /* process of mapping */
+  ipcmapping_t *p_m;            /* userspace pointer to mapping */
+  physaddr frame;               /* physical location of shared buffer when allocated */
+} ipcmdb_t;
+DLIST_TYPE(ipcmdb,ipcmdb_t);
+POOL_DEFN(ipcmdb_list,ipcmdb_list_t,16,4);
+
+ipcmdb_list_t *ipcmappingdb = NULL;
+
 /* Load a (relocatable) ELF program the image of which begins at
  * 'pstart' and, if successful, will place the pointer to the
  * process_t data structure into the 'return_p' location. */
@@ -927,7 +951,7 @@ status program_load(void *pstart, process_t **return_p)
   if(sym == NULL) {
     DLOG(1, "unable to find _mappings -- assuming none\n");
   } else {
-    DLOG(1, "_mappings=%#x\n", ((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))));
+    DLOG(1, "_mappings=%#x (%#x)\n", ((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))), (u32 *) sym->st_value);
     interpret_mappings(p, ((mapping_t *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))), pstart, data);
   }
 
@@ -964,6 +988,35 @@ status program_load(void *pstart, process_t **return_p)
     sh = (void *) sh + pe->e_shentsize;
   }
 
+  /*** Find ipcmappings and save for later */
+
+  sym = program_find_symbol(pstart, "_ipcmappings");
+  if(sym == NULL) {
+    DLOG(1, "unable to find _ipcmappings -- assuming none\n");
+  } else {
+    DLOG(1, "_ipcmappings=%#x (%#x)\n", (pstart + data->sh_offset + (sym->st_value - data->sh_addr)), (u32 *) sym->st_value);
+    ipcmapping_t *ipcmappings = (ipcmapping_t *) sym->st_value, *m;
+
+    for(m=ipcmappings;m->type;m++) {
+      ipcmdb_list_t *db = ipcmdb_list_pool_alloc();
+      if(db == NULL) {
+        DLOG(1, "ipcmdb_list_pool_alloc failed\n");
+      } else {
+        db->elt.m = *m;         /* copy mapping */
+        db->elt.p = p;
+        db->elt.p_m = m;        /* save userspace pointer */
+        db->elt.frame = 0;
+        /* adjust internal pointers to point at kernel data */
+        db->elt.m.name = (pstart + data->sh_offset + (((u32) m->name) - data->sh_addr));
+        db->elt.m.proto = (pstart + data->sh_offset + (((u32) m->proto) - data->sh_addr));
+        DLOG(1, "_ipcmappings[0].name=%s .proto=%s\n", db->elt.m.name, db->elt.m.proto);
+        ipcmdb_append(&ipcmappingdb, db);
+      }
+    }
+    dump_ipcmappings(ipcmappings);
+  }
+
+  /* Return pointer to process */
   *return_p = p;
 
   /*** Ensure programs are written to main memory */
@@ -1002,6 +1055,91 @@ void show_program_params(void)
 #endif
 #endif
 
+ipcmdb_list_t *find_ipcmdb(u32 type, char *name, char *proto)
+{
+  ipcmdb_list_t *db;
+  for(db=ipcmappingdb;db!=NULL;db=db->next) {
+    if(db->elt.m.type == type &&
+       strcmp(db->elt.m.name, name) == 0 &&
+       strcmp(db->elt.m.proto, proto) == 0) {
+      return db;
+    }
+  }
+  return NULL;
+}
+
+void interpret_ipcmappings(void)
+{
+  process_t *p;
+  DLOG(1,"interpret_ipcmappings\n");
+  ipcmdb_list_t *db;
+
+  /* connect mappings */
+  for(db=ipcmappingdb;db!=NULL;db=db->next) {
+    DLOG(1,"db->name=%s db->proto=%s\n", db->elt.m.name, db->elt.m.proto);
+    if(db->elt.frame == 0) {
+      if(db->elt.m.type == IPC_SEEK) {
+        ipcmdb_list_t *other = find_ipcmdb(IPC_OFFER, db->elt.m.name, db->elt.m.proto);
+        if(other != NULL) {
+          physaddr frame;
+          if(physical_alloc_pages(db->elt.m.pages, 1, &frame) != OK) {
+            DLOG(1, "interpret_ipcmappings: unable to allocate physical memory\n");
+          } else {
+            DLOG(1, "interpret_ipcmappings: processes %d and %d now sharing frame %#x for ('%s', '%s')\n",
+                 db->elt.p->pid, other->elt.p->pid, frame, db->elt.m.name, db->elt.m.proto);
+            db->elt.frame = frame;
+            other->elt.frame = frame;
+          }
+        }
+      }
+    }
+  }
+
+  /* now map memory (if necessary) and write address into slot */
+  for(db=ipcmappingdb;db!=NULL;db=db->next) {
+    if(db->elt.frame != 0) {
+      p = db->elt.p;
+      /* Describe mapping for the benefit of memory management */
+      region_list_t *rl = region_list_pool_alloc();
+      if(rl == NULL) {
+        DLOG(1, "interpret_ipcmappings: region_list_pool_alloc failed.\n");
+        /* FIXME: clean-up previous resources */
+        break;
+      }
+      rl->elt.pstart = db->elt.frame;
+      rl->elt.vstart = NULL;
+#ifdef USE_VMM
+      rl->elt.pt = &p->tables->next->elt; /* l2 pagetable in process */
+#else
+      rl->elt.pt = NULL;
+#endif
+      rl->elt.page_count = db->elt.m.pages;
+      rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
+
+      rl->elt.cache_buf = 0;
+      rl->elt.shared_ng = R_S | R_NG;
+
+      rl->elt.access = R_RW;
+      region_append(&p->regions, rl);
+
+#ifdef USE_VMM
+      /* Create region in process's pagetables */
+      /* FIXME: be able to create new l2 pagetables if needed */
+      if(vmm_map_region_find_vstart(&rl->elt) != OK) {
+        DLOG(1, "interpret_ipcmappings: unable to vmm_map_region_find_vstart\n");
+        break;
+      }
+#else
+      rl->elt.vstart = (void *) rl->elt.pstart; /* identity map */
+#endif
+
+      /* *** cheat ***, switch to process and use its mapping */
+      process_switch_to(p);
+      db->elt.p_m->address = rl->elt.vstart; /* write address into slot */
+    }
+  }
+}
+
 status programs_init(void)
 {
   extern u32 _program_map_start, _program_map_count;
@@ -1022,6 +1160,8 @@ status programs_init(void)
     }
     sched_wakeup(p);
   }
+
+  interpret_ipcmappings();
 
   extern semaphore_t scheduling_enabled_sem;
   extern u32 num_cpus;

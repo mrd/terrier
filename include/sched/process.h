@@ -51,6 +51,20 @@ typedef u32 pid_t;
 #define VIRTUAL_BASE_ADDR 0x8000 /* if using VMM */
 
 typedef struct {
+#define IPC_SEEK 1
+#define IPC_OFFER 2
+#define IPC_MULTIOFFER 3
+  u32 type;
+  char *name;
+#define IPC_READ 1
+#define IPC_WRITE 2
+  u32 flags;
+  char *proto;
+  u32 pages;
+  void *address;
+} ipcmapping_t;
+
+typedef struct {
   u32 psr, lr;
   struct {
     u32 r[16];

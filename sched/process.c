@@ -590,10 +590,15 @@ status program_relocate(void *pstart, u32 base, u32 *entry)
     if(sh->sh_flags & SHF_ALLOC)
       sym[i].st_value += sh->sh_addr;
 
-    DLOG(4, "Elf32_Sym name=\"%s\" shndx=%d value=%#x\n",
+    DLOG(4, "Elf32_Sym name=\"%s\" shndx=%d info=%#x value=%#x\n",
          program_find_string(pstart, sym[i].st_name),
          sym[i].st_shndx,
+         (u32) sym[i].st_info,
          sym[i].st_value);
+    if(sym[i].st_shndx == 0 && (ELF32_ST_BIND(sym[i].st_info) & STB_GLOBAL)) {
+      DLOG(1, "*** Undefined global symbol \"%s\"\n", program_find_string(pstart, sym[i].st_name));
+      return EINVALID;
+    }
   }
 
 

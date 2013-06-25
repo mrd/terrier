@@ -17,8 +17,8 @@ CFLAGS += $(USER_CFLAGS) -Wno-attributes
 SFLAGS +=
 LDFLAGS += -r $(USER_LDFLAGS)
 
-ATSFLAGS += -IATS ../../include
-ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME -Wno-unused-function -Wno-unused-label
+ATSFLAGS += -IATS ../../include -IATS ../../userlib
+ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME -Wno-unused-function -Wno-unused-label -I../../userlib -I../../include
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
@@ -31,7 +31,7 @@ program: $(NAME).elf
 	$(LD) -r -b binary $< -o $@
 
 $(NAME).elf: $(OBJS)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) $(OBJS) -o $@ $(LIBS)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) $(OBJS) -o $@ $(LIBS) $(USER_LIBS) $(LIBS)
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@

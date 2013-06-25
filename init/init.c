@@ -81,6 +81,8 @@ void NO_RETURN c_entry()
   clear_bss();
   perfmon_init();
   reset_uart3();
+  printf_uart3("Terrier OS\n");
+
   identify_device();
   physical_init();
   intr_init();

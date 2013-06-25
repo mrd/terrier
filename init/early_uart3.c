@@ -78,6 +78,7 @@ ns16650_regs_t UART3 = (ns16650_regs_t) 0x49020000;
 
 #ifdef OMAP4460
 ns16650_regs_t UART3 = (ns16650_regs_t) 0x48020000;
+/* ASM("movw r2, #0x0000\n" "movt r2, #0x4802\n" "1: ldrb r3, [r2, #20]\n" "and r3, r3, #64\n" "uxtb r3, r3\n" "cmp r3, #0\n" "beq 1b\n" "strb %0, [r2]"::"r"('*'):"r2","r3"); */
 #endif
 
 /***************************************************************************

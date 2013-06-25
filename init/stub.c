@@ -56,6 +56,7 @@ void stub_init(void)
   arm_memset_log2(l1table_phys, 0, 14);
 
   /* Map stub as identity, and kernel virtual -> physical */
+  //l1table_phys[0x480] = (0x48000000 & 0xFFF00000) | 0x412; /* if UART3 needed */
   l1table_phys[phystart >> 20] = (phystart & 0xFFF00000) | 0x412;
   l1table_phys[krnstart >> 20] = (phystart & 0xFFF00000) | 0x412;
 

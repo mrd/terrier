@@ -41,6 +41,7 @@
 #include "types.h"
 #include "arm/memory.h"
 #include "arm/asm.h"
+#include "arm/smp/per-cpu.h"
 #define MODULE "vmm"
 #include "omap/early_uart3.h"
 #include "debug/log.h"
@@ -106,7 +107,10 @@ CASSERT(sizeof(pt_sizes_log2) == sizeof(pt_sng_offsets), vmm);
 
 /* Set to the pagetable struct corresponding to the current value of
  * the TTB control register. */
-static pagetable_t *current_base_table = &l1pt;
+DEF_PER_CPU(pagetable_t *, current_base_table);
+INIT_PER_CPU(current_base_table) {
+  cpu_write(pagetable_t *, current_base_table, &l1pt);
+}
 
 /* Assume freshly filled out pagetable_t struct, not yet used. */
 status vmm_init_pagetable(pagetable_t *pt)
@@ -206,7 +210,7 @@ status vmm_activate_pagetable(pagetable_t *pt)
   switch(pt->type) {
   case PT_MASTER:
     arm_mmu_set_ttb0(pt->ptpaddr);
-    current_base_table = pt;
+    cpu_write(pagetable_t *, current_base_table, pt);
     break;
   case PT_COARSE:
     /* ARMv7 Short-descriptor first-level Page Table entry */
@@ -309,6 +313,23 @@ void vmm_dump_kernel_l2pt(u32 start, u32 end)
 }
 
 POOL_DEFN(pagetable_list,pagetable_list_t,16,4);
+
+u32 vmm_find_mapping_entry(pagetable_list_t *ptl, void *addr)
+{
+  u32 ar = (u32) addr;
+  for(;ptl != NULL;ptl = ptl->next) {
+    u32 vstart = (u32) ptl->elt.vstart;
+    u32 vend = vstart + (1 << pt_entry_sizes_log2[ptl->elt.type - 1]);
+    if(ptl->elt.type == PT_COARSE && vstart <= ar && ar < vend) {
+      u32 idx = (u32) addr;
+      idx &= pt_start_masks[ptl->elt.type];
+      idx >>= pt_entry_sizes_log2[ptl->elt.type];
+      return ptl->elt.ptvaddr[idx];
+    }
+  }
+  return 0;
+}
+
 
 #endif
 

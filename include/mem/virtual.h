@@ -43,6 +43,7 @@
 #include "types.h"
 #include "list.h"
 #include "mem/pool.h"
+#include "arm/smp/per-cpu.h"
 
 typedef struct pagetable {
   void *vstart;                 /* starting virtual address managed by PT */
@@ -89,6 +90,9 @@ status vmm_map_region_find_vstart(region_t *r);
 status vmm_get_phys_addr(void *vaddr, physaddr *paddr);
 void vmm_dump_kernel_l2pt(u32 start, u32 end);
 void vmm_dump_region(region_t *);
+u32 vmm_find_mapping_entry(pagetable_list_t *ptl, void *addr);
+
+DEF_PER_CPU_EXTERN(pagetable_t *, current_base_table);
 
 #endif
 

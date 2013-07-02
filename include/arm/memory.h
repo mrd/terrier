@@ -165,7 +165,7 @@ static inline void arm_mmu_set_ttb0(physaddr ttbp)
 }
 
 /* Get translation table base address for MMU. */
-static inline physaddr arm_mmu_get_ttb0(void *ttbp)
+static inline physaddr arm_mmu_get_ttb0(void)
 {
   u32 ttb;
   ASM("MRC p15, #0, %0, c2, c0, #0":"=r"(ttb));
@@ -182,7 +182,7 @@ static inline void arm_mmu_set_ttb1(physaddr ttbp)
 }
 
 /* Get translation table base address for MMU. */
-static inline physaddr arm_mmu_get_ttb1(void *ttbp)
+static inline physaddr arm_mmu_get_ttb1(void)
 {
   u32 ttb;
   ASM("MRC p15, #0, %0, c2, c0, #1":"=r"(ttb));
@@ -283,6 +283,13 @@ DEF_CACHE_OP_ALL_SETWAY(arm_cache_invl_data,"MCR p15, #0, %0, c7, c6, #2");
 static inline void arm_mmu_set_context_id(u32 cid)
 {
   ASM("MCR p15, #0, %0, c13, c0, #1"::"r"(cid));
+}
+
+static inline u32 arm_mmu_get_context_id(void)
+{
+  u32 cid;
+  ASM("MRC p15, #0, %0, c13, c0, #1":"=r"(cid));
+  return cid;
 }
 
 static inline u32 arm_mmu_data_fault_status(void)

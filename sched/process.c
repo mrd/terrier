@@ -102,6 +102,7 @@ status process_is_valid_pointer(process_t *p, void *ptr, u32 bytes)
 status process_switch_to(process_t *p)
 {
 #ifdef USE_VMM
+  //ARM Manual pg B3-1378
   //Set TTBCR.PD0 = 1
   //ISB
   //Change ASID to new value
@@ -113,7 +114,7 @@ status process_switch_to(process_t *p)
 
   prefetch_flush();
   arm_mmu_set_context_id(p->pid-1);
-  vmm_activate_pagetable(&p->tables->elt);
+  vmm_activate_pagetable(&p->tables->elt); /* FIXME: optimize */
   data_sync_barrier();
 
   prefetch_flush();
@@ -423,6 +424,7 @@ static u32 lay_out_sections(void *pstart, u32 base, physaddr region_phys, region
   rl->elt.pstart = region_phys;
   rl->elt.vstart = (void *) curaddr;
   rl->elt.cache_buf = R_C | R_B;
+  /* Not-Global bit is required for process-specific mappings */
   rl->elt.shared_ng = R_NG;
   rl->elt.access = R_RW;
   rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
@@ -455,7 +457,13 @@ static u32 lay_out_sections(void *pstart, u32 base, physaddr region_phys, region
         rl->elt.page_count = (curaddr - ((u32) rl->elt.vstart)) >> PAGE_SIZE_LOG2;
         rl2->elt.pstart = rl->elt.pstart + (rl->elt.page_count << PAGE_SIZE_LOG2);
         rl2->elt.vstart = rl->elt.vstart + (rl->elt.page_count << PAGE_SIZE_LOG2);
-        rl2->elt.cache_buf = R_B;
+        rl2->elt.cache_buf = R_B; /* Device memory, no caching */
+
+        /* ARM deprecates the marking of Device memory with a shareability attribute other than Outer Shareable or
+         * Shareable. This means ARM strongly recommends that Device memory is never assigned a shareability attribute
+         * on Non-shareable or Inner Shareable. -- A3-134 */
+
+        /* Not-Global bit is required for process-specific mappings */
         rl2->elt.shared_ng = R_S | R_NG;
         rl2->elt.access = R_RW;
         rl2->elt.page_size_log2 = PAGE_SIZE_LOG2;
@@ -660,9 +668,9 @@ status interpret_mappings(process_t *p, mapping_t *m, void *pstart, Elf32_Shdr *
 #endif
 
   for(;m->pstart != 0;m++) {
-    DLOG(1, "mapping: %#x %dkB cb=%d sng=%d perms=%d desc=\"%s\"\n",
+    DLOG(1, "mapping: %#x %dkB cb=%d perms=%d desc=\"%s\"\n",
          m->pstart, m->page_count << (m->page_size_log2 - 10),
-         m->cache_buf, m->shared_ng, m->access,
+         m->cache_buf, m->access,
          ((char *) (pstart + data->sh_offset + ((u32) m->desc - data->sh_addr))));
 
     /* Sanity and safety checks on mapping */
@@ -693,7 +701,14 @@ status interpret_mappings(process_t *p, mapping_t *m, void *pstart, Elf32_Shdr *
     rl->elt.page_size_log2 = m->page_size_log2;
 
     rl->elt.cache_buf = m->cache_buf;
-    rl->elt.shared_ng = m->shared_ng;
+
+    /* ARM deprecates the marking of Device memory with a shareability attribute other than Outer Shareable or
+     * Shareable. This means ARM strongly recommends that Device memory is never assigned a shareability attribute
+     * on Non-shareable or Inner Shareable. -- A3-134 */
+
+    /* Not-Global bit is required for process-specific mappings */
+
+    rl->elt.shared_ng = R_NG | R_S;
 
     rl->elt.access = m->access;
     region_append(&p->regions, rl);
@@ -1122,7 +1137,9 @@ void interpret_ipcmappings(void)
       rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
 
       rl->elt.cache_buf = 0;
-      rl->elt.shared_ng = R_S | R_NG;
+      /* Assume Shareability: IPC may be interprocessor */
+      /* Not-Global bit is required for process-specific mappings */
+      rl->elt.shared_ng = R_NG | R_S;
 
       rl->elt.access = R_RW;
       region_append(&p->regions, rl);
@@ -1138,9 +1155,13 @@ void interpret_ipcmappings(void)
       rl->elt.vstart = (void *) rl->elt.pstart; /* identity map */
 #endif
 
+      DLOG(1, "interpret_ipcmappings: pid=%d frame=%#x address=%#x\n",
+           db->elt.p->pid, db->elt.frame, rl->elt.vstart);
+
       /* *** cheat ***, switch to process and use its mapping */
       process_switch_to(p);
       db->elt.p_m->address = rl->elt.vstart; /* write address into slot */
+      memset(rl->elt.vstart, 0, rl->elt.page_count << rl->elt.page_size_log2); /* clear it */
     }
   }
 }

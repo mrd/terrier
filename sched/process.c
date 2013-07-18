@@ -1162,6 +1162,8 @@ void interpret_ipcmappings(void)
       process_switch_to(p);
       db->elt.p_m->address = rl->elt.vstart; /* write address into slot */
       memset(rl->elt.vstart, 0, rl->elt.page_count << rl->elt.page_size_log2); /* clear it */
+
+      arm_cache_clean_invl_data(); /* FIXME: why is this necessary? */
     }
   }
 }

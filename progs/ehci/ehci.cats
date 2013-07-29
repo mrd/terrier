@@ -39,6 +39,7 @@
 
 #include "ats_types.h"
 #include "ats_basics.h"
+#include "arm/memory.h"
 #include <pool.h>
 #include <user.h>
 
@@ -60,8 +61,25 @@ mapping_t _mappings[] = {
 
 /* ************************************************** */
 
-/* some helper stuff for now until I sort out where it should go */
+void *atspre_null_ptr = 0;      //FIXME
 
+ats_bool_type atspre_pgt(const ats_ptr_type p1, const ats_ptr_type p2) {
+  return (p1 > p2) ;
+}
+
+ipcmapping_t _ipcmappings[] = {
+  { IPC_SEEK, "uart", IPC_WRITE, "fourslot2w", 1, NULL },
+  {0}
+};
+
+/* ************************************************** */
+
+static int uart_token = 0;
+static inline int get_uart_token_vt() { return uart_token; }
+static inline void put_uart_token_vt(int t) { uart_token = t; }
+
+/* some helper stuff for now until I sort out where it should go */
+#if 0
 static inline u32 memcpy(void *dest, void *src, u32 count)
 {
   u32 i;
@@ -71,6 +89,7 @@ static inline u32 memcpy(void *dest, void *src, u32 count)
     dest8[i] = src8[i];
   return i;
 }
+#endif
 
 static inline void svc3(char *ptr, u32 len, u32 noprefix)
 {
@@ -99,6 +118,7 @@ void debuglog(u32 noprefix, u32 lvl, const char *fmt, ...)
 #define DLOG(lvl,fmt,...) debuglog(0,lvl,fmt,##__VA_ARGS__)
 #define DLOG_NO_PREFIX(lvl,fmt,...) debuglog(1,lvl,fmt,##__VA_ARGS__)
 
+#if 0
 static inline u32 memset(void *dest, u32 byte, u32 count)
 {
   u32 i;
@@ -107,6 +127,7 @@ static inline u32 memset(void *dest, u32 byte, u32 count)
     dest8[i] = (u8) byte;
   return i;
 }
+#endif
 
 #ifdef USE_VMM
 
@@ -124,6 +145,27 @@ status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
   return OK;
 }
 #endif
+
+ats_bool_type atspre_ieq(ats_int_type a, ats_int_type b)
+{
+  return a == b;
+}
+
+#define atspre_mul_bool1_bool1 atspre_mul_bool_bool
+ats_bool_type atspre_mul_bool_bool (ats_bool_type b1, ats_bool_type b2) {
+  if (b1) { return b2 ; } else { return ats_false_bool ; }
+}
+
+#define atspre_ineq atspre_neq_int_int
+ats_bool_type atspre_neq_int_int (ats_int_type i1, ats_int_type i2) {
+  return (i1 != i2);
+}
+ats_bool_type atspre_eq_int_int (ats_int_type i1, ats_int_type i2) {
+  return (i1 == i2);
+}
+ats_int_type atspre_add_int_int (ats_int_type i1, ats_int_type i2) {
+  return (i1 + i2);
+}
 
 
 /* ************************************************** */
@@ -1409,6 +1451,12 @@ void hsusbhc_init()
   DLOG(1, "hsusbhc_init\n");
   for(i=0; i<sizeof(_mappings)/sizeof(mapping_t) && _mappings[i].pstart; i++)
     DLOG(1, "mapping: %#x => %#x desc=\"%s\"\n", _mappings[i].pstart, _mappings[i].vstart, _mappings[i].desc);
+
+  for(i=0; i<sizeof(_ipcmappings)/sizeof(ipcmapping_t) && _ipcmappings[i].type; i++)
+    DLOG(1, "ipcmapping: address=%#x desc=\"%s\"\n", _ipcmappings[i].address, _ipcmappings[i].name);
+
+  u32 *ptr = (u32 *)_ipcmappings[0].address;
+  DLOG(1, "ptr[0]=%#x\n", ptr[0]);
 
   /* initialize base addresses of GPIO interface */
   omap4460_gpio_init();

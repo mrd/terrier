@@ -14,7 +14,7 @@ endif
 CFLAGS +=
 
 C_FILES = printf.c arm.c
-DATS_FILES = ipcmem.dats
+DATS_FILES = fourslot.dats fourslot2w.dats ipcmem.dats
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 DATS_OBJS = $(patsubst %.dats,%_dats.o,$(DATS_FILES))

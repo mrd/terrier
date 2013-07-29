@@ -65,6 +65,20 @@ PACKED_STRUCT(mapping) {
 } PACKED_END;
 typedef struct mapping mapping_t;
 
+typedef struct {
+#define IPC_SEEK 1
+#define IPC_OFFER 2
+#define IPC_MULTIOFFER 3
+  u32 type;
+  char *name;
+#define IPC_READ 1
+#define IPC_WRITE 2
+  u32 flags;
+  char *proto;
+  u32 pages;
+  void *address;
+} ipcmapping_t;
+
 int snprintf(char *str, int size, const char *format, ...);
 int vsnprintf(char *str, int size, const char *format, va_list ap);
 

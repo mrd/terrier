@@ -72,7 +72,7 @@ extern fun get_latest {l:addr} {n:nat} {a:t@ype} (
 
 (* The new value of 'reading' needs to be the same as 'latest' was *)
 extern fun write_reading {l:addr} {n:nat} {a:t@ype} {rp: bool} (
-    pf_fs: !fourslot_v (l, n, a, false), pf: latest_v rp | fs: ptr l, p: bool
+    pf_fs: !fourslot_v (l, n, a, false), pf: latest_v rp | fs: ptr l, p: bool rp
   ): (read_v rp | void)
   = "mac#_write_reading_c"
 

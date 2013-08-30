@@ -5,64 +5,95 @@
 staload "ipcmem.sats"
 staload "fourslot.sats"
 
+// implication
+infix ==>
+stadef ==> (p: bool, q: bool) = (~p || q)
+
+// small hack for naming convenience
+sortdef bit = bool
+typedef bit (x: bit) = bool x
+
+
 (* ************************************************** *)
 
-absview read_v (p: bool)                  (* view of 'reading' *)
-absview slot_v (i:bool,p':bool,i': bool)  (* view of slot[i] where (p',i') are used by other process *)
+// when we view the state of 'reading' we know either it is equal to rp,
+// or if it is not equal to rp, then WS1 precedes RS2
+absview ws1_read_v (R: bit, rstep: int, rp: bit)
 
-extern fun get_reading {l:addr} {n:nat} {a:t@ype} (
-    pf_fs: !fourslot_v (l,n,a,true) | fs: ptr l
-  ): [reading: bool] (read_v reading | bool reading) = "mac#_get_reading_c"
+extern fun get_reading_state {l:addr} {n:nat} {a:t@ype} (
+      pf_fs: !fourslot_v (l, n, a, true) | fs: ptr l
+    ): [rstep: nat] [R, rp: bit | R == rp || (R <> rp ==> rstep < 2)]
+       (ws1_read_v (R, rstep, rp) | bit R) = "mac#_get_reading_c"
 
-(* get_write_slot asserts that we can only read from the 'not reading' slot and if wp == rp then wi == ri *)
-extern fun get_write_slot {l:addr} {n:nat} {a:t@ype} {wp: bool} (
-    pf_fs: !fourslot_v (l,n,a,true), pfr: read_v (~wp) |
-    fs: ptr l, p: bool wp
-  ): [wi',rp,ri: bool | wp <> rp || wi' == ri] (slot_v (wi',rp,ri) | bool wi')
-  = "mac#_get_write_slot_c"
+// if WS1 preceeded RS2 then it also preceeded RS3
+// we know slot[wp] == ri until WS4 consumes this proof
+absview ws2_slot_v (s: bit, rp: bit, ri: bit)
 
-(* Primary assertion: wp <> rp || wi <> ri. Either the pairs are unequal or the indices are unequal. *)
-(* We also need to know that the current slot has the opposite value from our index. *)
-extern fun{a:t@ype} write_data {l: addr} {n: nat} {wp,wi,rp,ri: bool | wp <> rp || wi <> ri} (
+extern fun get_write_slot_index {l:addr} {n:nat} {a:t@ype} {R, wp, rp: bit} {rstep: nat} (
+    pf_fs: !fourslot_v (l, n, a, true), pfr: !ws1_read_v (R, rstep, rp) |
+    fs: ptr l, wp: bit wp
+  ): [s, ri: bit | (rstep < 3 && wp == rp) ==> s == ri]
+     (ws2_slot_v (s, rp, ri) | bit s) = "mac#_get_write_slot_c"
+
+// central assertion: wp <> rp || wi <> ri
+extern fun{a:t@ype}
+write_data {l: addr} {n: nat} {R, s, wp, wi, rp, ri: bit | wp <> rp || wi <> ri} {rstep: nat} (
     pf_fs: !fourslot_v (l, n, a, true),
-    pf_s: !slot_v (~wi, rp, ri) |
-    fs: ptr l, p: bool wp, i: bool wi, item: a
+    pfr: !ws1_read_v (R, rstep, rp),
+    pfs: !ws2_slot_v (s, rp, ri) |
+    fs: ptr l, wp: bit wp, wi: bit wi, item: a
   ): void
 
-extern fun write_data_c {a:t@ype} {l: addr} {n,e: nat} {wp,wi,rp,ri: bool | wp <> rp || wi <> ri} (
+extern fun
+write_data_c {l: addr} {n: nat} {a:t@ype} {R, s, wp, wi, rp, ri: bit | wp <> rp || wi <> ri} {rstep: nat} (
     pf_fs: !fourslot_v (l, n, a, true),
-    pf_s: !slot_v (~wi, rp, ri) |
-    fs: ptr l, p: bool wp, i: bool wi, item: a, elsz: size_t e
+    pfr: !ws1_read_v (R, rstep, rp),
+    pfs: !ws2_slot_v (s, rp, ri) |
+    fs: ptr l, wp: bit wp, wi: bit wi, item: a, elsz: size_t (sizeof a)
   ): void = "mac#_write_data_c"
 
-implement{a} write_data (pf_fs, pf_s | fs, p, i, item) = write_data_c (pf_fs, pf_s | fs, p, i, item, sizeof<a>)
+implement{a} write_data (pf_fs, pfr, pfs | fs, p, i, item) = write_data_c (pf_fs, pfr, pfs | fs, p, i, item, sizeof<a>)
 
-(* Write back the slot value knowing that the existing value is the opposite. *)
-(* Regain the view of 'reading' so that it must be dealt with. *)
-extern fun write_slot {l:addr} {n:nat} {a:t@ype} {wp, wi, rp, ri: bool} (
+// consume slot view since it is changed, and now this 'pair' is considered to be "fresh"
+absview ws4_fresh_v (p: bit)
+
+extern fun
+save_write_slot_index {l:addr} {n:nat} {a:t@ype} {R, s, wp, wi, rp, ri: bit | wi <> s} {rstep: nat} (
     pf_fs: !fourslot_v (l, n, a, true),
-    pf: slot_v (~wi,rp,ri) |
-    fs: ptr l, p: bool wp, i: bool wi
-  ): (read_v (~wp) | void) = "mac#_write_slot_c"
+    pfr: !ws1_read_v (R, rstep, rp),
+    pfs: ws2_slot_v (s, rp, ri) |
+    fs: ptr l, wp: bit wp, wi: bit wi
+  ): (ws4_fresh_v wp | void) = "mac#_write_slot_c"
 
-(* Discharge the read_v by writing it with the opposite value to 'latest' *)
-extern fun write_latest {l:addr} {n:nat} {a:t@ype} {reading: bool} (
-    pf_fs: !fourslot_v (l, n, a, true), pf: read_v reading |
-    fs: ptr l, p: bool (~reading)
+// updating 'latest' means reader can modify 'reading' state, so view is consumed
+// the refreshed 'pair' is used to update 'latest' state
+extern fun
+save_latest_state {l:addr} {n:nat} {a:t@ype} {R, rp, wp: bit | wp <> R} {rstep: nat} (
+    pf_fs: !fourslot_v (l, n, a, true),
+    pfr: ws1_read_v (R, rstep, rp),
+    pff: ws4_fresh_v wp |
+    fs: ptr l, wp: bit wp
   ): void = "mac#_write_latest_c"
 
 implement{a} fourslot_write (pf_fs | fs, item) = () where {
-  val (pfr | reading) = get_reading (pf_fs | fs)
-  val wp = not reading
-  val (pfs | wi) = get_write_slot (pf_fs, pfr | fs, wp)
-  val _ = write_data (pf_fs, pfs | fs, wp, not wi, item)
-  val (pfr | _) = write_slot (pf_fs, pfs | fs, wp, not wi)
-  val _ = write_latest (pf_fs, pfr | fs, wp)
+  val (pfr | R) = get_reading_state (pf_fs | fs)
+  val wp = not R
+
+  val (pfs | s) = get_write_slot_index (pf_fs, pfr | fs, wp)
+  val wi = not s
+
+  val _ = write_data (pf_fs, pfr, pfs | fs, wp, wi, item)
+
+  val (pff | _) = save_write_slot_index (pf_fs, pfr, pfs | fs, wp, wi)
+
+  val _ = save_latest_state (pf_fs, pfr, pff | fs, wp)
 }
 
 (* ************************************************** *)
 
 absview latest_v (p: bool)      (* view of 'latest' *)
+absview read_v (p: bool)
+absview slot_v (a:bool,b:bool,c:bool)
 
 extern fun get_latest {l:addr} {n:nat} {a:t@ype} (
     pf_fs: !fourslot_v (l, n, a, false) |

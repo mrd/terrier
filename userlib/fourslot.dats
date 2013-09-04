@@ -91,35 +91,35 @@ implement{a} fourslot_write (pf_fs | fs, item) = () where {
 
 (* ************************************************** *)
 
-absview latest_v (p: bool)      (* view of 'latest' *)
-absview read_v (p: bool)
-absview slot_v (a:bool,b:bool,c:bool)
-
-extern fun get_latest {l:addr} {n:nat} {a:t@ype} (
+absview rs1_latest_v (L: bit)
+extern fun get_latest_state {l:addr} {n:nat} {a:t@ype} (
     pf_fs: !fourslot_v (l, n, a, false) |
     fs: ptr l
-  ): [latest: bool] (latest_v latest | bool latest)
+  ): [L: bool] (rs1_latest_v L | bit L)
   = "mac#_get_latest_c"
 
 (* The new value of 'reading' needs to be the same as 'latest' was *)
-extern fun write_reading {l:addr} {n:nat} {a:t@ype} {rp: bool} (
-    pf_fs: !fourslot_v (l, n, a, false), pf: latest_v rp | fs: ptr l, p: bool rp
-  ): (read_v rp | void)
+absview rs2_read_v (R: bit)
+extern fun save_reading_state {l:addr} {n:nat} {a:t@ype} {L, rp: bit | L == rp} (
+    pf_fs: !fourslot_v (l, n, a, false), pf: rs1_latest_v L | fs: ptr l, p: bit rp
+  ): [R: bit | R == rp] (rs2_read_v R | void)
   = "mac#_write_reading_c"
 
 (* Exchange the view of 'reading' for a slot view; we know that wi will be negated by other process *)
-extern fun get_read_slot {l:addr} {n:nat} {a:t@ype} {rp: bool} (
-    pf_fs: !fourslot_v (l, n, a, false), pf: read_v rp | fs: ptr l, p: bool rp
-  ): [ri,wp,wi: bool | wp <> rp || ri == wi] (slot_v (ri, wp, ~wi) | bool ri)
+absview rs3_slot_v (s: bit, wp: bit, wi: bit)
+extern fun get_read_slot_index {l:addr} {n:nat} {a:t@ype} {R, rp: bit} (
+    pf_fs: !fourslot_v (l, n, a, false), pf: rs2_read_v R | fs: ptr l, p: bit rp
+  ): [s, wp, wi: bool | wp == rp ==> s == ~wi] (rs3_slot_v (s, wp, wi) | bit s)
   = "mac#_get_read_slot_c"
 
 (* Read the data from the slot, requires slot view *)
 extern fun{a:t@ype} read_data {l:addr} {n:nat} {rp, ri, wp, wi: bool | wp <> rp || ri <> wi} (
-    pf_fs: !fourslot_v (l, n, a, false), pf: !slot_v (ri, wp, wi) | fs: ptr l, p: bool rp, i: bool ri
+    pf_fs: !fourslot_v (l, n, a, false), pf: rs3_slot_v (ri, wp, wi) | fs: ptr l, p: bit rp, i: bit ri
   ): a
 
-extern fun read_data_c {a:t@ype} {l:addr} {n,e:nat | e == sizeof a} {rp, ri, wp, wi: bool | wp <> rp || ri <> wi} (
-    pf_fs: !fourslot_v (l, n, a, false), pf: !slot_v (ri, wp, wi) | fs: ptr l, p: bool rp, i: bool ri, item: &a? >> a, elsz: size_t e
+extern fun read_data_c {a:t@ype} {l:addr} {n: nat} {rp, ri, wp, wi: bool | wp <> rp || ri <> wi} (
+    pf_fs: !fourslot_v (l, n, a, false), pf: rs3_slot_v (ri, wp, wi) |
+    fs: ptr l, p: bit rp, i: bit ri, item: &a? >> a, elsz: size_t (sizeof a)
   ): void
   = "mac#_read_data_c"
 
@@ -128,14 +128,11 @@ implement{a} read_data (pf_fs, pf | fs, p, i) = item where {
   val _ = read_data_c (pf_fs, pf | fs, p, i, item, sizeof<a>)
 }
 
-extern prfun release_read_slot {i,p',i':bool} (pf: slot_v (i,p',i')): void
-
-implement{a} fourslot_read (pf_fs | fs) = read where {
-  val [rp: bool] (pfl | rp) = get_latest (pf_fs | fs)
-  val (pfr | _) = write_reading (pf_fs, pfl | fs, rp)
-  val (pfs | ri) = get_read_slot (pf_fs, pfr | fs, rp)
-  val read = read_data (pf_fs, pfs | fs, rp, ri)
-  prval _ = release_read_slot pfs
+implement{a} fourslot_read (pf_fs | fs) = item where {
+  val (pfl | rp) = get_latest_state (pf_fs | fs)
+  val (pfr | _) = save_reading_state (pf_fs, pfl | fs, rp)
+  val (pfs | ri) = get_read_slot_index (pf_fs, pfr | fs, rp)
+  val item = read_data (pf_fs, pfs | fs, rp, ri)
 }
 
 (* ************************************************** *)

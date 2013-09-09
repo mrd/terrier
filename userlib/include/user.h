@@ -82,6 +82,25 @@ typedef struct {
 int snprintf(char *str, int size, const char *format, ...);
 int vsnprintf(char *str, int size, const char *format, va_list ap);
 
+static inline void *memcpy(void *dest, void *src, u32 count)
+{
+  u32 i;
+  u8 *dest8 = (u8 *) dest;
+  u8 *src8 = (u8 *) src;
+  for(i=0;i<count;i++)
+    dest8[i] = src8[i];
+  return dest;
+}
+
+static inline void *memset(void *dest, u32 byte, u32 count)
+{
+  u32 i;
+  u8 *dest8 = (u8 *) dest;
+  for(i=0;i<count;i++)
+    dest8[i] = (u8) byte;
+  return dest;
+}
+
 #define _DEVICE_SECTION ".device"
 #define DEVICE_ATTR __attribute__((section(_DEVICE_SECTION)))
 

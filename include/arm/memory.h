@@ -133,23 +133,23 @@ static inline void arm_memset_log2(void *addr, u32 v, u32 exp)
   }
 }
 
-static inline u32 memcpy(void *dest, void *src, u32 count)
+static inline void *memcpy(void *dest, void *src, u32 count)
 {
   u32 i;
   u8 *dest8 = (u8 *) dest;
   u8 *src8 = (u8 *) src;
   for(i=0;i<count;i++)
     dest8[i] = src8[i];
-  return i;
+  return dest;
 }
 
-static inline u32 memset(void *dest, u32 byte, u32 count)
+static inline void *memset(void *dest, u32 byte, u32 count)
 {
   u32 i;
   u8 *dest8 = (u8 *) dest;
   for(i=0;i<count;i++)
     dest8[i] = (u8) byte;
-  return i;
+  return dest;
 }
 
 /* TTB0 -- process-specific virtual mappings */

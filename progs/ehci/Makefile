@@ -13,7 +13,7 @@ else
 CFLAGS += -O$(OPT)
 endif
 
-CFLAGS += $(USER_CFLAGS) -Wno-attributes
+CFLAGS += $(USER_CFLAGS) -Wno-attributes -ffreestanding
 SFLAGS +=
 LDFLAGS += -r $(USER_LDFLAGS)
 

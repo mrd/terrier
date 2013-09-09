@@ -39,7 +39,6 @@
 
 #include "ats_types.h"
 #include "ats_basics.h"
-#include "arm/memory.h"
 #include <pool.h>
 #include <user.h>
 

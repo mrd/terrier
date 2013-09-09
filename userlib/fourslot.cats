@@ -4,7 +4,6 @@
 #include "ats_types.h"
 #include "ats_basics.h"
 #include "types.h"
-#include "arm/memory.h"
 #include <user.h>
 
 #define PAGE_SIZE_LOG2 12

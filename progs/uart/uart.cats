@@ -8,6 +8,8 @@ unsigned int _scheduler_capacity = 1 << 14;
 unsigned int _scheduler_period = 2 << 14;
 unsigned int _scheduler_affinity = 2;
 
+typedef struct { char s[124]; } buf_t;
+
 static inline void svc3(char *ptr, u32 len, u32 noprefix)
 {
   register char *r0 asm("r0") = ptr;
@@ -71,6 +73,11 @@ void debuglog(u32 noprefix, u32 lvl, const char *fmt, ...)
 void printnum(int i)
 {
   DLOG(1, "uart num=%d\n", i);
+}
+
+void printbuf(buf_t b)
+{
+  DLOG(1, "uart: %s\n", b.s);
 }
 
 ipcmapping_t _ipcmappings[] = {

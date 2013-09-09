@@ -73,6 +73,17 @@ ipcmapping_t _ipcmappings[] = {
 
 /* ************************************************** */
 
+typedef struct { char s[124]; } buf_t;
+
+static inline int strnlen(const char *s, int max)
+{
+  int count = 0;
+  while(s[count] != 0 && count < max) count++;
+  return count;
+}
+
+#define buf_init(bref,str) do { memset((bref)->s, 0, 124); memcpy((bref)->s,str,strnlen(str, 123)); } while (0)
+
 static int uart_token = 0;
 static inline int get_uart_token_vt() { return uart_token; }
 static inline void put_uart_token_vt(int t) { uart_token = t; }

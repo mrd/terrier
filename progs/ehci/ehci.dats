@@ -12,7 +12,10 @@ extern fun hsusbhc_init(): void = "mac#hsusbhc_init"
 
 extern fun atsmain (): int = "ext#atsmain"
 
-typedef uart_ipc_t = @(int,int)
+typedef buf_t = $extype "buf_t"
+extern fun buf_init {n: nat | n < 123} (b: &buf_t? >> buf_t, x: string n): void = "mac#buf_init"
+
+typedef uart_ipc_t = @(int,buf_t)
 
 absviewt@ype uart_token_vt = int
 extern fun get_uart_token_vt (): uart_token_vt = "mac#get_uart_token_vt"
@@ -21,12 +24,15 @@ extern castfn int_of_uart_token_vt (_: uart_token_vt): int
 extern castfn uart_token_vt_of_int (_: int): uart_token_vt
 
 // write a number to the UART process via IPC
-fun write_num_uart {l: addr} {n: nat} (
+fun write_string_uart {l: addr} {len, n: nat | len < 123} (
         pf_uart: !fourslot2w_v (l, n, int, uart_ipc_t, A) |
         utoken: &uart_token_vt,
         uart: ptr l,
-        num: int
+        s: string len
       ): void = let
+
+  var ctrbuf : @(int, buf_t)
+  val _ = buf_init (ctrbuf.1, s)
 
   fun loop {l:addr} {n:nat} (
         pf_uart: !fourslot2w_v (l, n, int, uart_ipc_t, A) |
@@ -46,12 +52,12 @@ fun write_num_uart {l: addr} {n: nat} (
   // loop until counter increments up from old value
   val counter' = loop (pf_uart | uart, counter)
 in
+  ctrbuf.0 := counter';
   // write data to UART
-  fourslot2w_writeA (pf_uart | uart, @(counter', num));
+  fourslot2w_writeA (pf_uart | uart, ctrbuf);
   // save new token
   utoken := uart_token_vt_of_int counter'
 end // end [write_num_uart]
-
 
 implement atsmain () = let
   fun do_nothing ():void = do_nothing ()
@@ -69,12 +75,12 @@ in
 
         (* ... *)
         var utoken = get_uart_token_vt ()
-        val _ = write_num_uart (pf_uart | utoken, uart, 8)
-        val _ = write_num_uart (pf_uart | utoken, uart, 9)
+        val _ = write_string_uart (pf_uart | utoken, uart, "a")
+        val _ = write_string_uart (pf_uart | utoken, uart, "b")
 
 
         val _ = hsusbhc_init ()
-        val _ = write_num_uart (pf_uart | utoken, uart, 10)
+        val _ = write_string_uart (pf_uart | utoken, uart, "c")
 
         val _ = put_uart_token_vt utoken
         val _ = do_nothing ()

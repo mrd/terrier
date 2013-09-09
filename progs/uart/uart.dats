@@ -11,9 +11,11 @@ staload _ = "fourslot2w.dats"
 
 extern fun atsmain (): int = "ext#atsmain"
 extern fun mydelay (): void = "mac#mydelay"
-extern fun printnum (_: int): void = "mac#printnum"
 
-typedef uart_ipc_t = @(int,int)
+typedef buf_t = $extype "buf_t"
+extern fun printbuf (_: buf_t): void = "mac#printbuf"
+
+typedef uart_ipc_t = @(int,buf_t)
 
 implement atsmain () = let
   fun do_nothing (): void = do_nothing ()
@@ -22,11 +24,12 @@ implement atsmain () = let
         uart: ptr l,
         counter: int
       ): void = let
-    val (stamp,v) = fourslot2w_readB<int,uart_ipc_t> (pf_uart | uart)
+    val @(stamp, v) = fourslot2w_readB<int,uart_ipc_t> (pf_uart | uart)
     val counter' = if stamp = counter
                      then counter + 1 where {
                        val _ = fourslot2w_writeB<int,uart_ipc_t> (pf_uart | uart, counter + 1)
-                       val _ = printnum v }
+                       val _ = printbuf v
+                     }
                      else counter
   in
     loop (pf_uart | uart, counter')

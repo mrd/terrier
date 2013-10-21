@@ -82,7 +82,7 @@ implement{a} fourslot_write (pf_fs | fs, item) = () where {
   val (pfs | s) = get_write_slot_index (pf_fs, pfr | fs, wp)
   val wi = not s
 
-  val _ = write_data (pf_fs, pfr, pfs | fs, wp, wi, item)
+  val _ = write_data<a> (pf_fs, pfr, pfs | fs, wp, wi, item)
 
   val (pff | _) = save_write_slot_index (pf_fs, pfr, pfs | fs, wp, wi)
 
@@ -132,7 +132,7 @@ implement{a} fourslot_read (pf_fs | fs) = item where {
   val (pfl | rp) = get_latest_state (pf_fs | fs)
   val (pfr | _) = save_reading_state (pf_fs, pfl | fs, rp)
   val (pfs | ri) = get_read_slot_index (pf_fs, pfr | fs, rp)
-  val item = read_data (pf_fs, pfs | fs, rp, ri)
+  val item = read_data<a> (pf_fs, pfs | fs, rp, ri)
 }
 
 (* ************************************************** *)

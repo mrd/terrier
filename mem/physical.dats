@@ -39,7 +39,9 @@
 
 #define ATS_DYNLOADFLAG 0
 
-staload "physical.sats"
+staload _ = "prelude/DATS/integer.dats"
+
+staload "./physical.sats"
 
 // prototypes for various helper functions, types and values
 

@@ -56,34 +56,34 @@ implement{a1,a2} fourslot2w_init (pf | p, pages, s) = fourslot2w_init_c (pf | p,
 
 // A-side
 implement{a1,a2} fourslot2w_readA (pf_fs | p1) = let
-  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitA (pf_fs | p1)
+  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitA<a1,a2> (pf_fs | p1)
   val x = fourslot_read<a1> (pf1 | p1)
+  prval _ = pf_fs := fourslot2w_joinA (pf_s, pf1, pf2)
 in
-  pf_fs := fourslot2w_joinA (pf_s, pf1, pf2);
   x
 end
 
 implement{a1,a2} fourslot2w_writeA (pf_fs | p1, item) = let
-  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitA (pf_fs | p1)
+  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitA<a1,a2> (pf_fs | p1)
   val _ = fourslot_write<a2> (pf2 | p2, item)
+  prval _ = pf_fs := fourslot2w_joinA (pf_s, pf1, pf2)
 in
-  pf_fs := fourslot2w_joinA (pf_s, pf1, pf2)
 end
 
 // B-side
 implement{a1,a2} fourslot2w_readB (pf_fs | p1) = let
-  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitB (pf_fs | p1)
+  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitB<a1,a2> (pf_fs | p1)
   val x = fourslot_read<a2> (pf2 | p2)
+  prval _ = pf_fs := fourslot2w_joinB (pf_s, pf1, pf2)
 in
-  pf_fs := fourslot2w_joinB (pf_s, pf1, pf2);
   x
 end
 
 implement{a1,a2} fourslot2w_writeB (pf_fs | p1, item) = let
-  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitB (pf_fs | p1)
+  val ((pf_s, pf1, pf2) | p2) = fourslot2w_splitB<a1,a2> (pf_fs | p1)
   val _ = fourslot_write<a1> (pf1 | p1, item)
+  prval _ = pf_fs := fourslot2w_joinB (pf_s, pf1, pf2)
 in
-  pf_fs := fourslot2w_joinB (pf_s, pf1, pf2)
 end
 
 

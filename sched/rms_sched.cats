@@ -40,7 +40,9 @@
 #ifdef OMAP4460
 
 #include "ats_types.h"
-#include "ats_basics.h"
+//#include "ats_basics.h"
+#include "pats_ccomp_basics.h"
+#include "prelude/CATS/integer.cats"
 #include "types.h"
 #include "mem/virtual.h"
 #include "mem/physical.h"

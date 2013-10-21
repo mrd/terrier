@@ -38,7 +38,10 @@
  */
 
 #include "ats_types.h"
-#include "ats_basics.h"
+//#include "ats_basics.h"
+#include "pats_ccomp_basics.h"
+#include "prelude/CATS/pointer.cats"
+#include "prelude/CATS/integer.cats"
 #include <pool.h>
 #include <user.h>
 

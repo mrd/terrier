@@ -2,7 +2,8 @@
 #define _FOURSLOT_CATS_
 
 #include "ats_types.h"
-#include "ats_basics.h"
+//#include "ats_basics.h"
+#include "pats_ccomp_basics.h"
 #include "types.h"
 #include <user.h>
 

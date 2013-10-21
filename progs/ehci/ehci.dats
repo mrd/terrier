@@ -3,9 +3,12 @@
 // (currently testing IPC as well)
 
 #define ATS_DYNLOADFLAG 0
+staload _ = "prelude/DATS/integer.dats"
+
 staload "ehci.sats"
 staload "ipcmem.sats"
 staload "fourslot2w.sats"
+staload _ = "fourslot.dats"
 staload _ = "fourslot2w.dats"
 
 extern fun hsusbhc_init(): void = "mac#hsusbhc_init"
@@ -40,7 +43,7 @@ fun write_string_uart {l: addr} {len, n: nat | len < 123} (
         oldcounter: int
       ): int = let
 
-    val counter = fourslot2w_readA (pf_uart | uart)
+    val counter = fourslot2w_readA<int,uart_ipc_t> (pf_uart | uart)
   in
     if counter = oldcounter then
       loop (pf_uart | uart, oldcounter)
@@ -54,7 +57,7 @@ fun write_string_uart {l: addr} {len, n: nat | len < 123} (
 in
   ctrbuf.0 := counter';
   // write data to UART
-  fourslot2w_writeA (pf_uart | uart, ctrbuf);
+  fourslot2w_writeA<int,uart_ipc_t> (pf_uart | uart, ctrbuf);
   // save new token
   utoken := uart_token_vt_of_int counter'
 end // end [write_num_uart]
@@ -65,7 +68,7 @@ implement atsmain () = let
   var pages: int?
   val (opt_pf | uart) = ipcmem_get_view (0, pages)
 in
-  if uart > null then
+  if uart > 0 then
     let
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, A)
@@ -104,7 +107,7 @@ in
 end // [atsmain]
 
 
-%{
+%{$
 
 int main(void)
 {

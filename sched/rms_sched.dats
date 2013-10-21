@@ -13,8 +13,9 @@
 #define ATS_DYNLOADFLAG 0
 (* #define MAX_PROCESSES 16 *)
 
+staload _ = "prelude/DATS/integer.dats"
 
-staload "rms_sched.sats"
+staload "./rms_sched.sats"
 
 (* ****** ****** *)
 
@@ -146,10 +147,10 @@ in
   end // end of [if]
 end // end of [loop]
 //
-val T0 = if process_is_idle (p_next) then MAX_T()
-         else process_get_period (p_next)
-val res = if process_is_idle (p_next) then t_now + MAX_T()
-          else t_now + process_get_budget (p_next)
+val T0 = (if process_is_idle (p_next) then MAX_T()
+         else process_get_period (p_next)): span
+val res = (if process_is_idle (p_next) then t_now + MAX_T()
+          else t_now + process_get_budget (p_next)): tick
 //
 in
   loop (ps, T0, res)
@@ -198,7 +199,7 @@ in if process_is_idle (p_next) then
                      arm_read_cycle_counter () - cyc_now);
        // eat some of idle time, if enough, to dump out useful statistics
        if STATS_DUMP_THRESHOLD() < ticks then begin
-         DLOG(1, "idling for ticks=%d\n", @(int_of_span ticks));
+         $extfcall(void, "DLOG", 1, "idling for ticks=%d\n", int_of_span ticks);
          dump_stats ();
          dump_process_stats ()
       end

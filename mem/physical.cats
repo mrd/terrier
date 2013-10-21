@@ -38,7 +38,9 @@
  */
 
 #include "ats_types.h"
-#include "ats_basics.h"
+//#include "ats_basics.h"
+#include "pats_ccomp_basics.h"
+#include "prelude/CATS/integer.cats"
 #include "types.h"
 #include "status.h"
 #include "arm/memory.h"
@@ -61,7 +63,7 @@ ats_bool_type atspre_neq_int_int(ats_int_type a, ats_int_type b);
 
 status physical_alloc_pages(u32 n, u32 align, physaddr *start)
 {
-  ATSextern_fun(ats_int_type, _ats_physical_alloc_pages) (ats_int_type, ats_int_type, ats_ref_type) ;
+  ats_int_type _ats_physical_alloc_pages(ats_int_type, ats_int_type, ats_ref_type) ;
   return _ats_physical_alloc_pages(n, align, start);
 }
 

@@ -1,6 +1,9 @@
 #include "ats_types.h"
-#include "ats_basics.h"
+//#include "ats_basics.h"
+#include "pats_ccomp_basics.h"
 #include<user.h>
+#include "prelude/CATS/pointer.cats"
+#include "prelude/CATS/integer.cats"
 
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */

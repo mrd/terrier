@@ -47,10 +47,10 @@ fun{a1,a2:t@ype} fourslot2w_init {l:addr | l > null} {pages: nat} {s: fourslot2w
   ): #[st:int] status st
 
 fun fourslot2w_init_c {a1,a2:t@ype} {l:addr | l > null}
-                      {pages, e1, e2: nat | e1 == sizeof a1 && e2 == sizeof a2}
+                      {pages: nat}
                       {s: fourslot2w_side} (
     pf: !ipcmem_v (l, pages) >> either_v (ipcmem_v (l, pages), fourslot2w_v (l, pages, a1, a2, s), st == 0) |
-    p: ptr l, pages: int pages, s: fourslot2w_side s, elsz1: size_t e1, elsz2: size_t e2
+    p: ptr l, pages: int pages, s: fourslot2w_side s, elsz1: size_t (sizeof a1), elsz2: size_t (sizeof a2)
   ): #[st:int] status st
   = "mac#_fourslot2w_init_c"
 

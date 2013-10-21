@@ -13,12 +13,12 @@ else
 CFLAGS += -O$(OPT)
 endif
 
-CFLAGS += $(USER_CFLAGS) -Wno-attributes
+CFLAGS += $(USER_CFLAGS) -Wno-attributes -ffreestanding
 SFLAGS +=
 LDFLAGS += -r $(USER_LDFLAGS)
 
 ATSFLAGS += -IATS ../../include -IATS ../../userlib
-ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME -Wno-unused-function -Wno-unused-label -I../../userlib -I../../include
+ATSCFLAGS += -I../../userlib -I../../include $(USER_ATSCFLAGS)
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))

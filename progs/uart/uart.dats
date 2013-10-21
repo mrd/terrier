@@ -4,9 +4,13 @@
 
 #define ATS_DYNLOADFLAG 0
 
+//staload _ = "prelude/DATS/basics.dats"
+staload _ = "prelude/DATS/integer.dats"
+
 staload "uart.sats"
 staload "ipcmem.sats"
 staload "fourslot2w.sats"
+staload _ = "fourslot.dats"
 staload _ = "fourslot2w.dats"
 
 extern fun atsmain (): int = "ext#atsmain"
@@ -25,12 +29,12 @@ implement atsmain () = let
         counter: int
       ): void = let
     val @(stamp, v) = fourslot2w_readB<int,uart_ipc_t> (pf_uart | uart)
-    val counter' = if stamp = counter
+    val counter' = (if stamp = counter
                      then counter + 1 where {
                        val _ = fourslot2w_writeB<int,uart_ipc_t> (pf_uart | uart, counter + 1)
                        val _ = printbuf v
                      }
-                     else counter
+                     else counter): int
   in
     loop (pf_uart | uart, counter')
   end // end [loop]
@@ -38,7 +42,7 @@ implement atsmain () = let
   var pages: int?
   val (opt_pf | uart) = ipcmem_get_view (0, pages)
 in
-  if uart > null then
+  if uart > 0 then
     let
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, B)
@@ -71,7 +75,7 @@ in
 end // end [atsmain]
 
 
-%{
+%{$
 
 int main(void)
 {

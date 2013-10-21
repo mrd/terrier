@@ -1,7 +1,8 @@
 include ../config.mk
 
 ATSFLAGS += -IATS ../include
-ATSCFLAGS += -D_ATS_HEADER_NONE -D_ATS_PRELUDE_NONE -I$$ATSHOME -I../include -Iinclude -Wno-unused-function -Wno-unused-label
+ATSCFLAGS = $(USER_ATSCFLAGS)
+ATSCFLAGS += -I../include -Iinclude
 
 ifeq ($(DEBUG),1)
 CFLAGS += -g -O0

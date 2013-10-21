@@ -150,7 +150,8 @@ fun do_idle(): void = "mac#do_idle"
 
 (* ****** ****** *)
 
-fun DLOG {ts:types} (_:int, _: printf_c ts, _: ts): void = "mac#DLOG"
+// fun DLOG {ts:types} (_:int, _: printf_c ts, _: ts): void = "mac#DLOG"
+
 
 
 (* end of [rms.sats] *)

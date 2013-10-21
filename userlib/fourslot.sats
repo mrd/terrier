@@ -31,8 +31,8 @@ fun{a:t@ype} fourslot_ipc_writer_init2 {l:addr | l > null} {pages: nat} (
     p: ptr l, pages: int pages
   ): #[s:int] status s
 
-fun fourslot_ipc_writer_init_c {a:t@ype} {l:addr | l > null} {pages, e: nat | e == sizeof a} (
-    pf: ipcmem_v (l, pages) | p: ptr l, pages: int pages, elsz: size_t e
+fun fourslot_ipc_writer_init_c {a:t@ype} {l:addr | l > null} {pages: nat} (
+    pf: ipcmem_v (l, pages) | p: ptr l, pages: int pages, elsz: size_t (sizeof a)
   ): [s:int] (option_v (fourslot_v (l, pages, a, true), s == 0) | status s)
   = "mac#_fourslot_ipc_writer_init_c"
 

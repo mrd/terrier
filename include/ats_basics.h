@@ -151,8 +151,10 @@ do { \
 
 #define ats_selptrset_mac(ty, x, lab, v) (((ty*)x)->lab = (v))
 
-#define ats_caselind_mac(ty, x, ind) (((ty*)(x))ind)
-#define ats_caselptr_mac(ty, x, lab) (((ty*)(x))->lab)
+#define ats_caselind_mac(ty, x, ind) (((ty*)(&(x)))ind)
+
+#define ats_caselptrind_mac(ty, x, ind) (((ty*)(x))ind)
+#define ats_caselptrlab_mac(ty, x, lab) (((ty*)(x))->lab)
 
 #define ats_varget_mac(ty, x) (x)
 #define ats_ptrget_mac(ty, x) (*(ty*)(x))

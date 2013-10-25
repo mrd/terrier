@@ -61,6 +61,16 @@ mapping_t _mappings[] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
+u32 *_irq_status_table = 0;     /* FIXME: must be initialized, until I
+                                 * figure out what to do about ELF
+                                 * "Common" symbols. */
+
+volatile u32 irq_state = 0;     /* IRQ state avoids race condition
+                                 * between saving previous context and
+                                 * loading interrupt context. */
+
+u32 saved_context[18] = {0};
+
 /* ************************************************** */
 
 void *atspre_null_ptr = 0;      //FIXME
@@ -103,6 +113,13 @@ static inline u32 memcpy(void *dest, void *src, u32 count)
   return i;
 }
 #endif
+
+static inline u32 *svc1(void)
+{
+  register u32 *r0 asm("r0");
+  asm volatile("SVC #1":"=r" (r0));
+  return r0;
+}
 
 static inline void svc3(char *ptr, u32 len, u32 noprefix)
 {
@@ -1021,7 +1038,12 @@ void usb_device_request(usb_dev_req_t *req, u32 bmrt, u32 br, u32 wv, u32 wi, u3
 
 void ehci_irq_handler(u32 v)
 {
-  DLOG(1, "IRQ\n");
+  irq_state = 2;            /* Handler could be forcibly restarted
+                             * until IRQ state is set to a value
+                             * greater than or equal to 2. */
+  DLOG(1, "ehci_irq_handler: IRQ\n");
+  for(;;);
+  /* not normal function */
 }
 
 /* macros to help use proper device memory for TDs */

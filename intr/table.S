@@ -46,9 +46,9 @@
         MRC     p15,0,r0,c0,c0,5;  /* r0 = cpu index */                       \
         AND     r0, r0, #7;        /* mask first 3 bits */                    \
         LDR     r12, [r12, r0, LSL #2]; /* r12 = _per_cpu_spaces[r0] */       \
-        MOVW    r1, #:lower16:x;                                              \
-        MOVT    r1, #:upper16:x;                                              \
-        ADD     r12, r12, r1 /* r12 = &_per_cpu_spaces[r0][r1] */
+        MOVW    r0, #:lower16:x;                                              \
+        MOVT    r0, #:upper16:x;                                              \
+        ADD     r12, r12, r0 /* r12 = &_per_cpu_spaces[old_r0][newer_r0] */
 
 /* Beginning of vector table: ARM processor sets PC to entry in vector
  * table when encountering an exception.  */

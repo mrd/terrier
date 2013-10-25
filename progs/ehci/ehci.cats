@@ -1036,14 +1036,22 @@ void usb_device_request(usb_dev_req_t *req, u32 bmrt, u32 br, u32 wv, u32 wi, u3
   req->wLength = l;
 }
 
-void ehci_irq_handler(u32 v)
+void NAKED ehci_irq_handler(u32 v)
 {
   irq_state = 2;            /* Handler could be forcibly restarted
                              * until IRQ state is set to a value
                              * greater than or equal to 2. */
   DLOG(1, "ehci_irq_handler: IRQ\n");
-  for(;;);
-  /* not normal function */
+
+  irq_state = 3;                /* Once IRQ state is 3, any interrupt
+                                 * will cause the process of context
+                                 * restoration to take place,
+                                 * returning us to our previous place
+                                 * in the program. */
+
+  /* (could jump directly to entry stub but first need to figure out
+   * how to obtain value of kernel context pointer) */
+  ASM("SVC #0xFF");
 }
 
 /* macros to help use proper device memory for TDs */

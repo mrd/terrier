@@ -18,7 +18,7 @@ LDFLAGS += -r $(USER_LDFLAGS)
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
-OBJS = $(C_OBJS) $(S_OBJS)
+OBJS = $(C_OBJS) $(S_OBJS) $(USER_STARTOBJ)
 DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES))
 
 program: $(NAME).elf

@@ -26,7 +26,10 @@ DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(STARTASM)) $(patsub
 
 USERLIB = libuser.a
 
-USERLIBOBJS = $(C_OBJS) $(STARTOBJ) $(DATS_OBJS)
+USERLIBOBJS = $(C_OBJS) $(DATS_OBJS)
+
+.PHONY: all
+all: $(USERLIB) $(STARTOBJ)
 
 $(USERLIB): $(USERLIBOBJS)
 	$(AR) r $@ $(USERLIBOBJS)

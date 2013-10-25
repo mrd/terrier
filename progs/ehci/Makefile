@@ -1,6 +1,6 @@
 NAME = ehci
 C_FILES =
-S_FILES =
+S_FILES = ehci_start.S
 DATS_FILES = ehci.dats
 
 include ../../config.mk

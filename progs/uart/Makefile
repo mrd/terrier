@@ -24,7 +24,7 @@ C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 S_OBJS = $(patsubst %.S,%.o,$(S_FILES))
 DATS_OBJS = $(patsubst %.dats,%_dats.o,$(DATS_FILES))
 ATSCTEMPS = $(patsubst %.dats,%_dats.c,$(DATS_FILES))
-OBJS = $(C_OBJS) $(S_OBJS) $(DATS_OBJS)
+OBJS = $(C_OBJS) $(S_OBJS) $(DATS_OBJS) $(USER_STARTOBJ)
 DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES)) $(patsubst %.dats,%_dats.d,$(DATS_FILES))
 
 program: $(NAME).elf

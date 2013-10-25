@@ -131,6 +131,9 @@ _far_call_return:
         LDR     lr, [r12, #0x48]           /* lr = entry point (process_t.entry)
                                             * assumes ctxt is embedded in process_t */
 
+        asm_cpu_pointer(irq_status_table)
+        LDMIA   r12, {r12}^                /* r12_user = *r12, just in case of FIQ mode  */
+
         MOVS    pc, lr                     /* jump to entry point, load SPSR */
 
 _vector_table_data:

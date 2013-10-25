@@ -44,6 +44,7 @@
 #include "arm/status.h"
 #include "arm/asm.h"
 #include "arm/smp/per-cpu.h"
+#include "mem/physical.h"
 #include "mem/virtual.h"
 #include "sched/process.h"
 #define MODULE "intr"
@@ -187,6 +188,31 @@ static u32 GICVERSION, num_cpus, num_ints, num_ext_ints;
 static u32 num_supported, num_permanent, num_prio_levels, min_binary_point;
 static u32 supported[32], permanent[32];
 #endif
+
+DEF_PER_CPU(u8 *, irq_status_table); /* dynamically allocate with special page permissions */
+INIT_PER_CPU(irq_status_table) {
+  /* setup IRQ status register table */
+  physaddr irq_sr_phys = physical_alloc_page();
+  u8 *irq_sr;
+  if(irq_sr_phys == 0) {
+    early_panic("irq_sr: physical_alloc_page failed.\n");
+    return;
+  }
+#ifdef USE_VMM
+  /* 1 normal page, no caching or buffering, user-mode read-only */
+  region_t rtmp = { irq_sr_phys, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, 0, R_RO };
+  if(vmm_map_region_find_vstart(&rtmp) != OK) {
+    early_panic("irq_sr: vmm_map_region_find_vstart failed.\n");
+    return;
+  }
+  irq_sr = rtmp.vstart;
+#else
+  irq_sr = (u8 *) irq_sr_phys;
+#endif
+  DLOG(1, "irq_sr=%#x irq_sr_phys=%#x\n", irq_sr, irq_sr_phys);
+  cpu_write(u8 *, irq_status_table, irq_sr);
+  arm_memset_log2(irq_sr, 0, PAGE_SIZE_LOG2);
+}
 
 #ifdef GIC
 static irq_handler_t sgi_table[16];
@@ -601,6 +627,9 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   case 0:                       /* set entry */
     cpu_read(process_t *, current)->entry = (void *) stack[1];
     return;
+  case 1:
+    stack[0] = cpu_read(u8 *, irq_status_table); /* set r0 = irq_status_table pointer */
+    return;
   case 3: {                        /* DLOG */
     /* r0: string pointer */
     /* r2: string length */
@@ -676,8 +705,14 @@ void _handle_irq(void)
 #endif
     //DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
     intc_mask_irq(activeirq);
+
+    /* mark IRQ status */
+    cpu_read(u8 *, irq_status_table)[activeirq] = 1;
+
+    /* find and call handler if available */
     if(irq_table[activeirq])
       irq_table[activeirq](activeirq);
+
 #ifdef OMAP3530
     intc->control = INTCPS_CONTROL_NEWIRQAGR;
 #endif

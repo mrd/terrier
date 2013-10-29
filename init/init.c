@@ -85,11 +85,12 @@ void NO_RETURN c_entry()
 
   identify_device();
   physical_init();
-  intr_init();
 
 #ifdef USE_VMM
   vmm_init();
 #endif
+
+  intr_init();
 
 #ifdef OMAP4460
   smp_init();

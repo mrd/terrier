@@ -93,6 +93,17 @@ u32 num_cpus;
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
 
+void smp_dump_coherency_processors(void)
+{
+  u32 scucfg = SCU->configuration;
+  DLOG(1, "SCU control=%#x config=%#x num_cpus=%d\n", SCU->control, scucfg, num_cpus);
+  DLOG(1, "Taking part in SMP and coherency: %s%s%s%s\n",
+       GETBITS(scucfg, 4, 1) ? "cpu0 " : "",
+       GETBITS(scucfg, 5, 1) ? "cpu1 " : "",
+       GETBITS(scucfg, 6, 1) ? "cpu2 " : "",
+       GETBITS(scucfg, 7, 1) ? "cpu3 " : "");
+}
+
 #ifndef NO_SMP
 static void *alloc_stack(void)
 {

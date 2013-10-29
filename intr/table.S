@@ -60,10 +60,14 @@ _vector_table:
         LDR     pc, _vector_table_data+4
         B       _swi_stub
         LDR     pc, _vector_table_data+12
-        LDR     pc, _vector_table_data+16
+        B       _data_abort_stub
         NOP
         B       _irq_stub
         LDR     pc, _vector_table_data+24
+
+_data_abort_stub:
+        STMFD   r13!, {r0-r15}^           /* save usr registers on stack for examination */
+        LDR     pc, _vector_table_data+16 /* far call, don't expect return at this time */
 
 _swi_stub:
         /* in SVC mode */

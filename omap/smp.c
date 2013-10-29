@@ -130,6 +130,7 @@ static inline void smp_dump_coherency_state(void)
 DEFSEMAPHORE(scheduling_enabled_sem);
 DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
 DEF_PER_CPU_EXTERN(u32 *, cpu_svc_stack_top);
+DEF_PER_CPU_EXTERN(u32 *, cpu_abt_stack_top);
 
 #if SCHED==rms || SCHED==rms_sched
 #ifdef OMAP4460
@@ -255,6 +256,7 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
 
   /* set per-cpu variable holding SVC stack for convenience */
   cpu_write(u32 *, cpu_svc_stack_top, &newstack[4][1024]);
+  cpu_write(u32 *, cpu_abt_stack_top, &newstack[3][1024]);
 
   /* jump into idle process */
   register process_t *p = cpu_read(process_t *, cpu_idle_process);
@@ -310,6 +312,7 @@ status smp_init(void)
 
   /* write CPU0 copy of per-cpu svc_stack_top variable */
   extern u32 svc_stack_top; cpu_write(u32 *, cpu_svc_stack_top, &svc_stack_top);
+  extern u32 abt_stack_top; cpu_write(u32 *, cpu_abt_stack_top, &abt_stack_top);
 
 #ifndef NO_SMP
   SCU->invalidate_all_registers_in_secure_state = ~0; /* invalidate tag RAM */

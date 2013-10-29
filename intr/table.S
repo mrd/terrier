@@ -59,11 +59,15 @@ _vector_table:
         LDR     pc, _vector_table_data+0
         LDR     pc, _vector_table_data+4
         B       _swi_stub
-        LDR     pc, _vector_table_data+12
+        B       _prefetch_abort_stub
         B       _data_abort_stub
         NOP
         B       _irq_stub
         LDR     pc, _vector_table_data+24
+
+_prefetch_abort_stub:
+        STMFD   r13!, {r0-r15}^           /* save usr registers on stack for examination */
+        LDR     pc, _vector_table_data+12 /* far call, don't expect return at this time */
 
 _data_abort_stub:
         STMFD   r13!, {r0-r15}^           /* save usr registers on stack for examination */

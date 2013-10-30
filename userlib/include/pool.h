@@ -44,29 +44,29 @@
   extern ty *name##_pool_alloc(void);           \
   extern void name##_pool_free(ty *)
 
-#define _POOL_FUNC_DEFN(name,ty,size,align)                     \
-  static u32 __##name##_pool_bitmap[size >> 3];                 \
-  void name##_pool_init(void) {                                 \
-    int i;                                                      \
-    for(i=0;i<size;i++)                                         \
-      BITMAP_CLR(__##name##_pool_bitmap, i);                    \
-  }                                                             \
-  ty *name##_pool_alloc(void) {                                 \
-    int i;                                                      \
-    for(i=0;i<size;i++)                                         \
-      if(BITMAP_TST(__##name##_pool_bitmap, i) == 0) {          \
-        BITMAP_SET(__##name##_pool_bitmap, i);                  \
-        return &__##name##_pool_array[i];                       \
-      }                                                         \
-    return NULL;                                                \
-  }                                                             \
-  void name##_pool_free(ty *x) {                                \
-    int i;                                                      \
-    for(i=0;i<size;i++)                                         \
-      if((u32) x == (u32) &__##name##_pool_array[i]) {          \
-        BITMAP_CLR(__##name##_pool_bitmap, i);                  \
-        return;                                                 \
-      }                                                         \
+#define _POOL_FUNC_DEFN(name,ty,size,align)                             \
+  static u32 __##name##_pool_bitmap[(((size) - 1) >> 3) + 1];           \
+  void name##_pool_init(void) {                                         \
+    int i;                                                              \
+    for(i=0;i<(size);i++)                                               \
+      BITMAP_CLR(__##name##_pool_bitmap, i);                            \
+  }                                                                     \
+  ty *name##_pool_alloc(void) {                                         \
+    int i;                                                              \
+    for(i=0;i<(size);i++)                                               \
+      if(BITMAP_TST(__##name##_pool_bitmap, i) == 0) {                  \
+        BITMAP_SET(__##name##_pool_bitmap, i);                          \
+        return &__##name##_pool_array[i];                               \
+      }                                                                 \
+    return NULL;                                                        \
+  }                                                                     \
+  void name##_pool_free(ty *x) {                                        \
+    int i;                                                              \
+    for(i=0;i<(size);i++)                                               \
+      if((u32) x == (u32) &__##name##_pool_array[i]) {                  \
+        BITMAP_CLR(__##name##_pool_bitmap, i);                          \
+        return;                                                         \
+      }                                                                 \
   }
 
 #define POOL_DEFN(name,ty,size,align)                           \

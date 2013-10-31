@@ -65,12 +65,23 @@ _vector_table:
         B       _irq_stub
         LDR     pc, _vector_table_data+24
 
+/* ARM architectural reference manual B9.3.17 STM (User registers):
+
+ * In a PL1 mode other than System mode, Store Multiple (user registers) stores multiple User mode registers to
+consecutive memory locations using an address from a base register. The processor reads the base register value
+normally, using the current mode to determine the correct Banked version of the register. This instruction cannot
+writeback to the base register. */
+
+/* Therefore, "STMFD r13!, {r0-r15}^" is not allowed. Go figure. */
+
 _prefetch_abort_stub:
-        STMFD   r13!, {r0-r15}^           /* save usr registers on stack for examination */
+        STMFD   r13, {r0-r15}^            /* save usr registers on stack for examination */
+        SUB     r13, r13, #64
         LDR     pc, _vector_table_data+12 /* far call, don't expect return at this time */
 
 _data_abort_stub:
-        STMFD   r13!, {r0-r15}^           /* save usr registers on stack for examination */
+        STMFD   r13, {r0-r15}^            /* save usr registers on stack for examination */
+        SUB     r13, r13, #64
         LDR     pc, _vector_table_data+16 /* far call, don't expect return at this time */
 
 _swi_stub:

@@ -1,8 +1,11 @@
+/* entry stub: must be restartable and reentrant, expect to be interrupted at any time. */
         .globl _start
         .section .entry
 _start: CMP     r13, #0         /* r13==0 iff initial entry */
         LDREQ   sp, =_stack
         LDREQ   pc, =main
+
+        /* r13 is pointer to kernel saved context */
 
         LDR     r11, =irq_state /* check IRQ state for value of 3 */
         LDR     r1, [r11]
@@ -26,6 +29,7 @@ _start: CMP     r13, #0         /* r13==0 iff initial entry */
         STMIA   r1!, {r2-r10}
         LDMIA   r13!, {r2-r10}
         STMIA   r1!, {r2-r10}
+        SUB     r13, r13, #0x48
 
         MOV     r0, #1
         STR     r0, [r11]       /* set IRQ state to 1 */
@@ -33,11 +37,16 @@ _start: CMP     r13, #0         /* r13==0 iff initial entry */
         /* If IRQ state == 1 then load fresh IRQ handling context */
 1:
         MOV     r0, #0
-        MSR     cpsr_sf, r0
+        STR     r0, [r13]
         LDR     r0, =ehci_irq_handler
-        LDR     sp, =_irq_stack
-        MOV     pc, r0          /* C code will set IRQ state to 2 */
-        /* control flow ends */
+        STR     r0, [r13, #0x44] /* set PC in kernel saved context */
+        LDR     r0, =_irq_stack
+        STR     r0, [r13, #0x3C] /* set SP in kernel saved context */
+
+        MOV     r0, #2
+        STR     r0, [r11]       /* set IRQ state to 2 */
+
+        B       2f              /* normal context loading */
 3:
         /* If IRQ state == 3 then restore saved context */
         /* assumption: r13 == pointer to kernel saved context */
@@ -53,7 +62,7 @@ _start: CMP     r13, #0         /* r13==0 iff initial entry */
 
         /* fall-thru to normal context loading */
 2:
-        LDR     r0, [r13]       /* r13 is pointer to saved context */
+        LDR     r0, [r13]       /* r13 is pointer to kernel saved context */
         MSR     cpsr_sf, r0     /* restore cpsr (status, flags) */
         ADD     r13, r13, #8
         LDMIA   r13, {r0-r15}   /* load context, branch to it */

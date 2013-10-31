@@ -1038,11 +1038,7 @@ void usb_device_request(usb_dev_req_t *req, u32 bmrt, u32 br, u32 wv, u32 wi, u3
 
 void NAKED ehci_irq_handler(u32 v)
 {
-  irq_state = 2;            /* Handler could be forcibly restarted
-                             * until IRQ state is set to a value
-                             * greater than or equal to 2. */
   DLOG(1, "ehci_irq_handler: IRQ\n");
-
   irq_state = 3;                /* Once IRQ state is 3, any interrupt
                                  * will cause the process of context
                                  * restoration to take place,

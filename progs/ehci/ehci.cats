@@ -70,6 +70,7 @@ volatile u32 irq_state = 0;     /* IRQ state avoids race condition
                                  * loading interrupt context. */
 
 u32 saved_context[18] = {0};
+u32 *_kernel_saved_context = NULL;
 
 /* ************************************************** */
 
@@ -1045,9 +1046,7 @@ void NAKED ehci_irq_handler(u32 v)
                                  * returning us to our previous place
                                  * in the program. */
 
-  /* (could jump directly to entry stub but first need to figure out
-   * how to obtain value of kernel context pointer) */
-  ASM("SVC #0xFF");
+  ASM("B restore_saved_context");
 }
 
 /* macros to help use proper device memory for TDs */

@@ -741,6 +741,18 @@ POOL_DEFN(ipcmdb_list,ipcmdb_list_t,16,4);
 
 ipcmdb_list_t *ipcmappingdb = NULL;
 
+/* helper macro: look up symbol in program, and do something with it */
+#define WITH_SYM_PTR(pstart, sym_name, ifnotfound, x, line) do {        \
+    Elf32_Sym *_sym = program_find_symbol(pstart, sym_name);            \
+    if(_sym == NULL) {                                                  \
+      ifnotfound;                                                       \
+    } else {                                                            \
+      u32 *x = (u32 *) _sym->st_value;                                  \
+      line;                                                             \
+    }                                                                   \
+  } while (0);
+
+
 /* Load a (relocatable) ELF program the image of which begins at
  * 'pstart' and, if successful, will place the pointer to the
  * process_t data structure into the 'return_p' location. */
@@ -903,35 +915,6 @@ status program_load(void *pstart, process_t **return_p)
   p->end_entry = (void *) sym->st_value;
   DLOG(1, "entry=%#x _end_entry=%#x\n", entry, p->end_entry);
 
-
-  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
-#if SCHED==rms || SCHED==rms_sched
-  /*** Obtain scheduler parameters */
-  /* Capacity */
-  sym = program_find_symbol(pstart, "_scheduler_capacity");
-  if(sym == NULL) {
-    DLOG(1, "unable to find _scheduler_capacity\n");
-    return EINVALID;
-  }
-  p->c = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
-  /* Period */
-  sym = program_find_symbol(pstart, "_scheduler_period");
-  if(sym == NULL) {
-    DLOG(1, "unable to find _scheduler_period\n");
-    return EINVALID;
-  }
-  p->t = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
-  DLOG(1, "capacity=%#x period=%#x\n", p->c, p->t);
-#endif
-  /* CPU affinity */
-  sym = program_find_symbol(pstart, "_scheduler_affinity");
-  if(sym == NULL) {
-    DLOG(1, "unable to find _scheduler_affinity -- assuming CPU0\n");
-    p->affinity = 1;
-  } else
-    p->affinity = *((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr)));
-  DLOG(1, "affinity=%#x\n", p->affinity);
-
   /*** Setup context for scheduling */
   for(i=0;i<sizeof(context_t)>>2;i++)
     ((u32 *)&p->ctxt)[i] = 0;
@@ -966,17 +949,7 @@ status program_load(void *pstart, process_t **return_p)
     DLOG(1, "vmm_get_phys_addr(0x8000) = %#x\n", paddr);
 #endif
 
-  /*** Interpret and implement desired memory mappings */
-  sym = program_find_symbol(pstart, "_mappings");
-  if(sym == NULL) {
-    DLOG(1, "unable to find _mappings -- assuming none\n");
-  } else {
-    DLOG(1, "_mappings=%#x (%#x)\n", ((u32 *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))), (u32 *) sym->st_value);
-    interpret_mappings(p, ((mapping_t *) (pstart + data->sh_offset + (sym->st_value - data->sh_addr))), pstart, data);
-  }
-
-  /*** Copy sections into their final memory locations */
-
+  /****** Copy sections into their final memory locations */
   u8 *dest, *src;
   Elf32_Shdr *sh = (void *) pe + pe->e_shoff; /* start at first section */
 
@@ -1008,8 +981,28 @@ status program_load(void *pstart, process_t **return_p)
     sh = (void *) sh + pe->e_shentsize;
   }
 
-  /*** Find ipcmappings and save for later */
+  /****** Read and write various global info variables */
 
+  /* if _kernel_saved_context exists then write address of context into it */
+  WITH_SYM_PTR(pstart, "_kernel_saved_context", , x, *x = (u32) &p->ctxt; DLOG(1, "_kernel_saved_context=%#x\n", x));
+
+#if SCHED==rms || SCHED==rms_sched
+  /*** Obtain scheduler parameters */
+  /* Capacity and period */
+  WITH_SYM_PTR(pstart, "_scheduler_capacity", DLOG(1, "unable to find _scheduler_capacity\n"); return EINVALID, x, p->c = *x);
+  WITH_SYM_PTR(pstart, "_scheduler_period", DLOG(1, "unable to find _scheduler_period\n"); return EINVALID, x, p->t = *x);
+  DLOG(1, "capacity=%#x period=%#x\n", p->c, p->t);
+#endif
+
+  /* CPU affinity */
+  WITH_SYM_PTR(pstart, "_scheduler_affinity", p->affinity = 1, x, p->affinity = *x);
+  DLOG(1, "affinity=%#x\n", p->affinity);
+
+  /*** Interpret and implement desired memory mappings */
+  Elf32_Shdr *data = program_find_section(pstart, ".data", SHT_PROGBITS);
+  WITH_SYM_PTR(pstart, "_mappings", DLOG(1, "unable to find _mappings -- assuming none\n"), x, DLOG(1, "_mappings=%#x\n", x); interpret_mappings(p, (mapping_t *) x, pstart, data));
+
+  /*** Find ipcmappings and save for later */
   sym = program_find_symbol(pstart, "_ipcmappings");
   if(sym == NULL) {
     DLOG(1, "unable to find _ipcmappings -- assuming none\n");
@@ -1026,7 +1019,7 @@ status program_load(void *pstart, process_t **return_p)
         db->elt.p = p;
         db->elt.p_m = m;        /* save userspace pointer */
         db->elt.frame = 0;
-        /* adjust internal pointers to point at kernel data */
+        /* adjust internal pointers to point at kernel copy of data, not userspace addresses */
         db->elt.m.name = (pstart + data->sh_offset + (((u32) m->name) - data->sh_addr));
         db->elt.m.proto = (pstart + data->sh_offset + (((u32) m->proto) - data->sh_addr));
         DLOG(1, "_ipcmappings[0].name=%s .proto=%s\n", db->elt.m.name, db->elt.m.proto);

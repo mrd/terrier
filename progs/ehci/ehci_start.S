@@ -68,6 +68,13 @@ _start: CMP     r13, #0         /* r13==0 iff initial entry */
         LDMIA   r13, {r0-r15}   /* load context, branch to it */
         /* control flow ends */
 
+        .globl restore_saved_context
+restore_saved_context:
+        LDR     r13, =_kernel_saved_context /* discarding stack */
+        LDR     r13, [r13]
+        LDR     r11, =irq_state /* r11 must be address of irq_state */
+        B       3b              /* assume IRQ state == 3 */
+
         .section .bss
         .space 2048
 _stack:

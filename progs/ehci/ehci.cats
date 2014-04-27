@@ -61,7 +61,7 @@ mapping_t _mappings[] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
-u32 *_irq_status_table = 0;     /* FIXME: must be initialized, until I
+u8 *_irq_status_table = 0;      /* FIXME: must be initialized, until I
                                  * figure out what to do about ELF
                                  * "Common" symbols. */
 
@@ -115,9 +115,9 @@ static inline u32 memcpy(void *dest, void *src, u32 count)
 }
 #endif
 
-static inline u32 *svc1(void)
+static inline u8 *svc1(void)
 {
-  register u32 *r0 asm("r0");
+  register u8 *r0 asm("r0");
   asm volatile("SVC #1":"=r" (r0));
   return r0;
 }
@@ -426,6 +426,7 @@ void dump_usb_cfg_desc(usb_cfg_desc_t *d)
   DLOG(1, "USB_CFG_DESC:\n");
   DLOG_NO_PREFIX(1, "  bLength=%d bDescriptorType=%d wTotalLength=%d\n",
                  d->bLength, d->bDescriptorType, d->wTotalLength);
+
   DLOG_NO_PREFIX(1, "  bNumInterfaces=%d bConfigurationValue=%#x iConfiguration=%d\n",
                  d->bNumInterfaces, d->bConfigurationValue, d->iConfiguration);
   DLOG_NO_PREFIX(1, "  bmAttributes=%#x %s%sbMaxPower=%dmA\n",
@@ -590,7 +591,7 @@ struct _ehci_td {
 typedef struct _ehci_td ehci_td_t;
 
 /* memory pool of TDs for dynamic alloc */
-DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 8, 64);
+DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 16, 64);
 
 /* ************************************************** */
 
@@ -1486,7 +1487,9 @@ void ehci_enumerate(usb_port_t *p, usb_device_t *usbd)
 void hsusbhc_init()
 {
   int i;
-  DLOG(1, "hsusbhc_init\n");
+  _irq_status_table = svc1();
+  DLOG(1, "hsusbhc_init _irq_status_table=%#x _kernel_saved_context=%#x\n", _irq_status_table, _kernel_saved_context);
+  DLOG(1, "irq_state=%d\n", irq_state);
   for(i=0; i<sizeof(_mappings)/sizeof(mapping_t) && _mappings[i].pstart; i++)
     DLOG(1, "mapping: %#x => %#x desc=\"%s\"\n", _mappings[i].pstart, _mappings[i].vstart, _mappings[i].desc);
 
@@ -1704,6 +1707,8 @@ void hsusbhc_init()
   //ehci_enumerate(&rootport[1].port, &qh1);
   //ehci_enumerate(&rootport[2].port, &qh1);
 
+  DLOG(1, "_irq_status_table[77] = %#x\n", _irq_status_table[77]);
+  DLOG(1, "irq_state=%d\n", irq_state);
   DLOG(1, "initialization complete\n");
   ehci_microframewait(1000 << 3); /* 1000 ms */
 }

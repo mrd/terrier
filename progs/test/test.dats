@@ -21,13 +21,13 @@ typedef ehci_info_t = int
 
 implement atsmain () = let
   fun do_nothing (): void = do_nothing ()
-  fun loop {l: addr} {n: nat} (
-        pf_ms: !mslot_v (l, n, ehci_info_t, false) |
-        ms: ptr l
+  fun loop {l: addr} {n, i: nat} (
+        pf_ms: !mslot_v (l, n, ehci_info_t, false, i) |
+        ms: ptr l, i: int i
       ): void = let
-    val x = multislot_read (pf_ms | ms)
+    val x = multislot_read (pf_ms | ms, i)
   in
-    if x > 40 then printnum x else loop (pf_ms | ms)
+    if x > 40 then printnum x else loop (pf_ms | ms, i)
   end // end [loop]
 
   var pages: int?
@@ -36,14 +36,15 @@ in
   if ms > 0 then
     let
       prval Some_v pf_ipcmem = opt_pf
-      val (e_pf | s) = multislot_initialize_reader (pf_ipcmem | ms, pages)
+      var i: int?
+      val (e_pf | s) = multislot_initialize_reader (pf_ipcmem | ms, pages, i)
     in
       if s = 0 then 0 where {
         prval Right_v pf_ms = e_pf
 
         (* ... *)
 
-        val _ = loop (pf_ms | ms)
+        val _ = loop (pf_ms | ms, i)
         val _ = do_nothing ()
 
         prval pf_ipcmem = multislot_release pf_ms

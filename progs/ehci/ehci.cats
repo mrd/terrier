@@ -1718,6 +1718,7 @@ void hsusbhc_init()
 #error "High Speed USB Host Controller not implemented"
 #endif
 
+#undef R
 
 /*
  * Local Variables:

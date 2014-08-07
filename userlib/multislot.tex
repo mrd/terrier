@@ -1,0 +1,669 @@
+% -*- Mode: LaTeX; TeX-PDF-mode: t -*-
+\documentclass{article}
+\usepackage{amsmath,proof,amsthm,graphicx}
+\usepackage[section]{placeins}
+\newtheorem{thm}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{defn}{Definition}
+\newtheorem{prop}{Property}
+\newcommand\set[1]{\left\{#1\right\}}
+\newcommand\len[1]{\left|#1\right|}
+\newcommand\paren[1]{\left({#1}\right)}
+\newcommand\RS[1]{\ensuremath{\text{R}_{S#1}}}
+\newcommand\WS[1]{\ensuremath{\text{W}_{S#1}}}
+\newcommand\W[1]{\ensuremath{w\left[#1\right]}}
+\newcommand\R[1]{\ensuremath{r\left[#1\right]}}
+\newcommand\data[1]{\ensuremath{d\left[#1\right]}}
+\newcommand\ip{\ensuremath{ip}}
+\newcommand\op{\ensuremath{op}}
+\newcommand\gneg[1]{\neg\paren{#1}}
+
+\graphicspath{{./img/}}
+
+\begin{document}
+\section{Introduction}
+The ``four-slot mechanism''\footnote{Simpson. {\em Four-slot fully
+    asynchronous communication mechanism}. IEE Proceedings, Vol. 137,
+  Pt. E, No. 1, January 1990.} is an asynchronous communication
+mechanism designed to allow one-way, memory-less communication between
+a writer program and a reader program without the use of locks. This
+mechanism was later generalized to multiple readers and multiple
+writers.\footnote{Simpson. {\em Multireader and multiwriter
+    asynchronous communication mechanisms}. IEE Proceedings, Vol. 144,
+  No. 4, July 1997.}
+
+The following sections use the formulation of the mechanism that was
+developed in the second paper, a form which varies significantly from
+the original, but is more easily generalized. First is shown a proof
+of coherency for the single reader version. Then it is expanded and
+shown that each of the steps has a linearization
+point.\footnote{Herlihy and Wing. {\em Linearizability: A correctness condition for concurrent
+  objects}. ACM Transactions on Programming Languages and Systems 12
+  (3): 463, 1990.} Finally, a similar proof is elaborated for the
+multiple-reader version of the mechanism. In the future, a
+multiple-writer version will be added.
+
+\subsection{Definitions}
+\begin{defn}[Potentially conflicting steps]
+  \RS1 and \WS3 are examples of operations that take time to read or
+  write the data array, and therefore, could conflict with each other
+  if they are both operating on the same element of the array during
+  overlapping periods of time.
+\end{defn}
+
+\begin{defn}[The ``precede'' relation]
+  When operation $A$ is said to precede operation $B$, it means that
+  operation $A$ occurs prior to the execution of operation $B$, and
+  the full effect of operation $A$ is visible and available to
+  operation $B$.
+\end{defn}
+
+\begin{defn}[Interacting operations]
+  If two operations, $A$ and $B$, act upon the same memory address
+  then they are said to be interacting. If those operations are
+  linearizable then the ordering is strict: either $A$ precedes $B$ or
+  $B$ precedes $A$.
+\end{defn}
+
+\begin{defn}[Associated operations]
+  The operations which set up the state variables in preparation for
+  the subsequent read or write are considered to be ``associated''
+  with that read or write. For example, instances of \WS2 and \WS3 are
+  associated with the subsequent instance of \WS1. And instances of
+  \RS1 and \RS2 are associated with the subsequent \RS3.
+\end{defn}
+
+\subsection{Proof style}
+
+% use of "precede" relation and why it works
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \begin{defn}[Atomic operation, or linearizable]
+%   An atomic operation, or step, appears to happen either all at once,
+%   or not at all. If two atomic operations, $A$ and $B$, occur
+%   simultaneously, then the outcome of the operations will appear as if
+%   $A$ preceded $B$, or as if $B$ preceded $A$. The model is strict
+%   consistency, meaning that the effect of any writes to a memory
+%   address by the earlier operation are available to the later
+%   operation.
+% \end{defn}
+\section{Single Reader}
+\subsection{Definitions}
+
+\begin{itemize}
+  \item $r,w$ are shared bit-arrays, $\len r=\len w=2$.
+  \item $\ip,\op$ are shared bit variables
+  \item $\data{\cdot,\cdot}$ is the four slot array indexed by two dimensions
+\end{itemize}
+
+\begin{prop}\label{prop:linearizable}
+  Steps \WS2, \WS3, \RS1, and \RS2 are all linearizable.
+\end{prop}
+
+\subsubsection{Reader}
+\begin{itemize}
+\item[\RS 1] $r\gets w$
+\item[\RS 2] $\op\gets\neg\ip$
+\item[\RS 3] read data from $\data{\op,\R{\op}}$
+\end{itemize}
+
+\subsubsection{Writer}
+\begin{itemize}
+\item[\WS 1] write data into $\data{\ip,\W{\ip}}$
+\item[\WS 2] $\ip\gets\neg\ip$
+\item[\WS 3] $\W{\ip}\gets\neg{\R{\ip}}$
+\end{itemize}
+
+\subsection{Proofs}
+\subsubsection{Reader}
+The following lemmas apply to the reader code and are applicable until
+the reader completes \RS3.
+
+\begin{lemma}\label{lma:ws3notbetween}
+  Given an instance of \WS3, if it does not occur in the time between
+  the beginning of \RS1 and the completion of \RS3, then the
+  associated \WS1 is non-conflicting because $\op\neq\ip$ or it does
+  not overlap with a conflicting \RS3.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{reader_ws3notbetween}
+  \caption{\WS 3 does not occur between \RS 1 and completion of \RS 3}
+  \label{fig:l1i1}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \WS1 which potentially conflicts with \RS3, but
+  the associated \WS3 operation occurred preceding the \RS1, as shown
+  in figure~\ref{fig:l1i1}. Then by transitivity, it must be the case
+  that the associated \WS2 preceded \RS2, and therefore it is safe to
+  say that $\op\neq\ip$ because \RS2 sets $\op\gets\neg\ip$.
+\end{proof}
+
+\begin{lemma}\label{lma:ws3between}
+  Given an instance of \WS3, if it does occur in the time between the
+  beginning of \RS1 and the completion of \RS3, then the associated
+  \WS1 is non-conflicting because $\R{\ip}\neq\W{\ip}$, $\op\neq\ip$
+  or it does not overlap with a conflicting \RS3.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{reader_ws3between}
+  \caption{\WS 3 occurs at least once between \RS 1 and completion of \RS 3}
+  \label{fig:l1i2}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \WS1 which potentially conflicts with \RS3, and
+  the associated \WS3 is preceded by \RS1, as shown in
+  figure~\ref{fig:l1i2}. Because \RS1 controls the value of $r$, any
+  occurrence of \WS3 will then set $\W{\ip}\gets\neg\R{\ip}$ so that
+  $\W{\ip}\neq\R{\ip}$ for the associated \WS1.
+\end{proof}
+
+% \begin{lemma}\label{lma:rint}
+%   If \RS1 precedes \WS3 then either $\W{\ip}\neq\R{\ip}$ at \RS3, or
+%   that \RS3 does not conflict with any \WS1.
+% \end{lemma}
+% \begin{proof}
+%   \RS1 controls the value of $r$ and therefore, when \WS3 occurs after
+%   it, then $\W{\ip}\gets\neg{\R{\ip}}$. Now consider the case where
+%   \RS3 might potentially conflict with an invocation of \WS1: the step
+%   \RS3 must occur after \WS3 but before \WS2. But \WS3 has ensured
+%   that $\W{\ip}\neq\R{\ip}$. No matter how many times the writer runs
+%   and modifies the value of \ip, it is still the case that \WS3 will
+%   ensure $\W{\ip}\neq\R{\ip}$ during a potentially conflicting \RS3.
+% \end{proof}
+
+% \begin{lemma}\label{lma:ipint}
+%   If \WS2 precedes \RS2 then $\op\neq\ip$ at the following \RS3.
+% \end{lemma}
+% \begin{proof}
+%   \WS2 controls the value of \ip\ and by the premise, \WS2 must come
+%   before \RS2. Therefore, when \RS2 sets $\op\gets\neg\ip$ it must be
+%   the case that $\op\neq\ip$ at \RS3.
+% \end{proof}
+
+\begin{thm}[Coherency of reader]\label{thm:rcoh}
+  If \RS3 may potentially conflict with \WS1, then either $\op\neq\ip$ or $\W{\ip}\neq\R{\op}$.
+\end{thm}
+\begin{proof}
+  A potential conflict between \RS3 and \WS1 means that \WS1 does not occur strictly before \RS2.
+
+  If the writer has not yet completed its first invocation, and \WS2 has
+  not occurred at all yet, then $\op\neq\ip$ because nothing could have
+  changed the value of $\ip$.
+
+  Interacting operations \RS2 and \WS2 must occur in one order or the
+  other. The same goes for interacting operations \RS1 and \WS3.
+  Lemmas~\ref{lma:ws3notbetween}~and~\ref{lma:ws3between} cover the
+  cases.
+
+ % If \WS2 precedes \RS2 then $\op\neq\ip$ by
+ %  lemma~\ref{lma:ipint}.
+
+% I want to redo this, think about interaction of WS2 and RS3.
+  % If \RS2 precedes \WS2 then by transitivity it must be the case that
+  % \RS1 precedes \WS3. By lemma~\ref{lma:rint} it is the case that
+  % $\W{\ip}\neq\R{\ip}$. Then there are two cases: either $\op\neq\ip$,
+  % in which case we are done, or $\op=\ip$, in which case
+  % $\W{\ip}\neq\R{\op}$.
+
+
+\end{proof}
+
+\subsubsection{Writer}
+
+The following lemmas apply to the writer code and are applicable until
+the writer completes \WS1.
+
+\begin{lemma}\label{lma:rs1notbetween}
+  Given an instance of \RS1, if it does not occur in the time between
+  the beginning of \WS3 and the completion of \WS1, then the
+  associated \RS3 is non-conflicting because $\W{\ip}\neq\R{\ip}$,
+  $\op\neq\ip$ or it does not overlap with a conflicting \WS1.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{writer_rs1notbetween}
+  \caption{\RS1 does not occur between \WS 3 and completion of \WS 1}
+  \label{fig:l3i1}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \RS3 which potentially conflicts with \WS1, but
+  the associated \RS1 occurred preceding the \WS3 step, as shown in
+  figure~\ref{fig:l3i1}. Suppose further that $\ip=\op$ because \RS2
+  preceded \WS2. Then, because \WS3 sets $\W{\ip}\gets\neg\R{\ip}$ the
+  value of $\W{\ip}\neq\R{\ip}$.
+  % Suppose there is a \WS1 which potentially conflicts with \RS3, but
+  % the associated \WS3 operation occurred preceding the \RS1, as shown
+  % in Figure~\ref{fig:l1i1}. Then by transitivity, it must be the case
+  % that the associated \WS2 preceded \RS2, and therefore it is safe to
+  % say that $\op\neq\ip$ because \RS2 sets $\op\gets\neg\ip$.
+\end{proof}
+
+\begin{lemma}\label{lma:rs1between}
+  Given an instance of \RS1, if it does in occur in the time between
+  the beginning of \WS3 and the completion of \WS1, then the
+  associated \RS3 is non-conflicting because $\ip\neq\op$ or it does
+  not overlap with a conflicting \WS1.
+  % Given an instance of \WS3, if it does occur in the time between the
+  % beginning of \RS1 and the completion of \RS3, then the associated
+  % \WS1 is non-conflicting because $\op\neq\ip$
+  % or it does not overlap.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{writer_rs1between}
+  \caption{\RS1 occurs at least once between \WS3 and completion of \WS1, as well as a case where $\op=\ip$}
+  \label{fig:l4i1}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \RS3 which potentially conflicts with \WS1, and
+  the associated \RS1 is preceded by \WS3, as shown in
+  figure~\ref{fig:l4i1}. By transitivity, that means \WS2 precedes
+  \RS2, but then it must be the case that $\op\neq\ip$.
+  % Suppose there is a \WS1 which potentially conflicts with \RS3, and
+  % the associated \WS3 is preceded by \RS1, as shown in
+  % figure~\ref{fig:l1i2}. Because \RS1 controls the value of $r$, any
+  % occurrence of \WS3 will then set $\W{\ip}\gets\neg\R{\ip}$ so that
+  % $\W{\ip}\neq\R{\ip}$ for the associated \WS1.
+\end{proof}
+
+% \begin{lemma}\label{lma:wintopip}
+%   If \WS2 precedes \RS2, then $\op\neq\ip$ during the next \WS1.
+% \end{lemma}
+% \begin{proof}
+%   \WS2 controls the value of \ip. Every subsequent \RS2 that comes
+%   after \WS2 will set $\op\gets\neg\ip$. Therefore, $\op\neq\ip$ until
+%   \WS2 again, but that means the next \WS1 has completed.
+% \end{proof}
+% \begin{lemma}\label{lma:wbetween}
+%   If \WS3 precedes \RS1 and if \WS1 occurs between \WS3 and \RS1 then $\W{\ip}\neq\R{\ip}$ at that \WS1.
+% \end{lemma}
+% \begin{proof}
+%   \WS3 sets $\W{\ip}\gets\neg\R{\ip}$ and \RS1 sets $r\gets{}w$
+%   therefore, for any \WS1 that occurs between those two steps, it must
+%   be the case that $\W{\ip}\neq\R{\ip}$.
+% \end{proof}
+
+\begin{thm}[Coherency of writer]\label{thm:wcoh}
+  If \WS1 may potentially conflict with \RS3, then either $\op\neq\ip$ or $\W{\ip}\neq\R{\op}$.
+\end{thm}
+\begin{proof}
+  By theorem~\ref{thm:rcoh} we know that the reader will avoid conflicting with the writer.
+  Then we need to show that the writer will avoid conflicting with the reader.
+
+  If this is the first time that the writer runs then $\ip$ has not
+  yet been modified from its initial value, and the reader must run
+  \RS2 $\op\gets\neg\ip$ before reading, so $\op\neq\ip$. In
+  subsequent runs of the writer code, the question becomes about how
+  \WS2 and \WS3 make safe choices for the subsequent \WS1.
+
+  Interacting operations \RS1 and \WS3 must occur in one order or the
+  other. Lemmas~\ref{lma:rs1notbetween}~and~\ref{lma:rs1between} cover
+  the cases.
+
+% % so what I want to know is that WS1 does not conflict with RS3 (which may be satisfied above) but also
+% % that WS2 and WS3 don't cause me to step on an ongoing read operation when WS1 comes back up again.
+%   So, for one case, if \WS2 precedes \RS2, then $\op\neq\ip$ during
+%   the next \WS1 by lemma~\ref{lma:wintopip}. Consider, then, the
+%   alternative where \RS2 precedes \WS2 and
+%   $\op\overset{?}{=}\ip$. This implies that the reader may execute
+%   \RS3 and \RS1 only once until a subsequent \WS2. If, under this
+%   condition, \RS1 precedes \WS3, then the next \WS1 is non-conflicting
+%   because \RS3 precedes \RS1. The interesting case comes when \WS3
+%   precedes \RS1 and therefore, \WS1 and \RS3 are potentially
+%   overlapping in time. This case is handled by
+%   lemma~\ref{lma:wbetween}.
+\end{proof}
+
+\subsubsection{Both}
+\begin{thm}[Coherency]
+  The reader and the writer never conflict with each other.
+\end{thm}
+\begin{proof}
+  By theorems~\ref{thm:rcoh}~and~\ref{thm:wcoh}.
+\end{proof}
+
+
+\section{Single Reader (expanded)}
+
+The steps \RS1, \RS2, \WS1 and \WS2 are, in fact, composed of multiple
+atomic instructions each. The following diagrams will illustrate that
+each step has a ``linearization'' point, when the effect of that step
+appears to take place, and that the proofs are still valid based on
+those program points.
+
+\subsection{Expanded pseudocode}
+New variables $t,u$ are introduced, temporary local variables used to
+hold values that are being loaded or stored from memory by atomic
+operations.
+\subsubsection{Reader}
+\begin{itemize}
+\item[\RS {1a}] $t\gets w$
+\item[\RS {1b}] $r\gets t$
+\item[\RS {2a}] $t\gets\ip$
+\item[\RS {2b}] $\op\gets\neg t$
+\item[\RS 3] read data from $\data{\op,\R{\op}}$
+\end{itemize}
+
+\subsubsection{Writer}
+\begin{itemize}
+\item[\WS 1] write data into $\data{\ip,\W{\ip}}$
+\item[\WS {2a}] $u\gets\ip$ (see note\footnote{Modern ARM can do \WS{2a}, \WS{2b} as a single atomic operation using {\tt LDREX, STREX}})
+\item[\WS {2b}] $\ip\gets\neg u$
+\item[\WS {3a}] $u\gets\R{\ip}$
+\item[\WS {3b}] $\W{\ip}\gets\neg u$
+\end{itemize}
+
+\subsection{Linearization points}
+To claim that a program has the property of linearizability is
+equivalent to the statement that all procedures within have a
+``linearization point'', which is the step when the effect of that
+procedure appears to take place instantaneously.
+
+Of the steps stipulated in proposition~\ref{prop:linearizable}, here
+are their linearization points: \RS{1b}, \RS{2a}, \WS{2b}, and
+\WS{3a}. Below are all the diagrams, redone with the expanded
+pseudocode.
+
+\subsection{Diagrams}
+
+\begin{figure*}[h!]
+  \centering
+  \includegraphics{writer_rs1between_exp}
+  \caption{\RS1 occurs at least once between \WS3 and completion of \WS1, as well as a case where $\op=\ip$}
+  \label{fig:l4i1exp}
+\end{figure*}
+
+\begin{figure*}[h!]
+  \centering
+  \includegraphics{writer_rs1notbetween_exp}
+  \caption{\RS1 does not occur between \WS 3 and completion of \WS 1}
+  \label{fig:l3i1exp}
+\end{figure*}
+
+\begin{figure*}[h!]
+  \centering
+  \includegraphics{reader_ws3notbetween_exp}
+  \caption{\WS 3 does not occur between \RS 1 and completion of \RS 3}
+  \label{fig:l1i1exp}
+\end{figure*}
+
+\begin{figure*}[h!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{reader_ws3between_exp}
+  \caption{\WS 3 occurs at least once between \RS 1 and completion of \RS 3}
+  \label{fig:l1i2exp}
+\end{figure*}
+
+The proofs and theorems are the same as in the previous section.
+
+\section{Multi Reader}
+\renewcommand\RS[2]{\ensuremath{\text{R}^{#1}_{S#2}}}
+\renewcommand\R[2]{\ensuremath{r_{#1}\left[#2\right]}}
+
+\subsection{Definitions}
+\begin{defn}[Family of readers]
+  Suppose there are $n$ readers. Each reader is denoted by $R^i$ and
+  its steps by \RS i j, where $0\leq i<n$. The various variables are
+  defined as follows:
+\end{defn}
+
+\begin{itemize}
+\item $n$ is the number of readers.
+\item $\ip,\op_0,\ldots,\op_{n-1}\in\set{0,1}$
+\item the number of slots $\len{d}=2n+2$
+\item $\len{w}=\len{r_0}=\ldots=\len{r_{n-1}}=2$
+\item $\W 0,\R 0 0,\ldots,\R {n-1} 0\in\set{0,\ldots,n-1}$
+\item $\W 1,\R 0 1,\ldots,\R {n-1} 1\in\set{0,\ldots,n-1}$
+\end{itemize}
+
+Informally, the main difference here is that we have introduced a
+family of variables named $\op_i$, one for each reader, and a family
+of two-element arrays named $r_i$, one for each reader. In addition,
+the arrays are no longer bit-arrays but rather have each element
+contain values from 0 up to $n-1$. And of course, it is no longer
+merely a ``four slot'' array but a $2n+2$ slot array.
+
+\begin{defn}[Generalized negation]
+  $v' = \gneg{v_0,\ldots,v_{n-2}}$ is an operation with $n-1$
+  operands. The result of this operation is defined to be unequal to
+  any of the operands: for all $i<n-1$, it is the case that $v'\neq
+  v_i$.  If there is more than one allowable result value, the choice
+  is arbitrary. Examples: suppose $n=3$ then $\gneg{0,1}=2$ and
+  $\gneg{0,0}$ can be $1$ or $2$.
+\end{defn}
+
+\begin{prop}
+  Steps \WS2, \WS3, \RS i 1, and \RS i 2 are all linearizable.
+\end{prop}
+
+\subsection{Generalized negation}
+
+discussion: $1 XOR (x_1 XOR \cdots XOR x_n)$
+
+problem of duplicates
+
+masking method
+
+linearizability
+
+\subsection{Pseudocode}
+\subsubsection{Reader}
+\begin{itemize}
+\item[\RS i 1] $r_i\gets w$
+\item[\RS i 2] $\op_i\gets\neg\ip$
+\item[\RS i 3] read data from $\data{\op_i,\R i {\op_i}}$
+\end{itemize}
+
+\subsubsection{Writer}
+\begin{itemize}
+\item[\WS 1] write data into $\data{\ip,\W{\ip}}$
+\item[\WS 2] $\ip\gets\neg\ip$
+\item[\WS 3] $\W{\ip}\gets\gneg{\R 0 {\ip}, \ldots, \R {n - 1} {\ip}}$
+\end{itemize}
+
+
+\subsection{Proofs}
+\subsubsection{Reader}
+
+The following lemmas apply to the code of reader $R^i$ and are
+applicable until that reader completes \RS i 3.
+
+\begin{lemma}\label{lma:mws3notbetween}
+  Given an instance of \WS3, if it does not occur in the time between
+  the beginning of \RS i 1 and the completion of \RS i 3, then the
+  associated \WS1 is non-conflicting because $\ip\neq\op_i$ or it does
+  not overlap with a conflicting \RS i 3.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{mreader_ws3notbetween}
+  \caption{\WS 3 does not occur between \RS i 1 and completion of \RS i 3}
+  \label{fig:mrws3nb}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \WS1 which potentially conflicts with \RS i 3, but
+  the associated \WS3 operation occurred preceding the \RS i 1, as shown
+  in figure~\ref{fig:mrws3nb}. Then by transitivity, it must be the case
+  that the associated \WS2 preceded \RS i 2, and therefore it is safe to
+  say that $\ip\neq\op_i$ because \RS i 2 sets $\op_i\gets\neg\ip$.
+\end{proof}
+
+\begin{lemma}\label{lma:mws3between}
+  Given an instance of \WS3, if it does occur in the time between the
+  beginning of \RS i 1 and the completion of \RS i 3, then the associated
+  \WS1 is non-conflicting because $\W{\ip}\neq\R{i}{\ip}$, $\ip\neq\op_i$
+  or it does not overlap with a conflicting \RS i 3.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{mreader_ws3between}
+  \caption{\WS 3 occurs at least once between \RS i 1 and completion
+    of \RS i 3, as well as a case where $\ip=\op_i$}
+  \label{fig:mrws3b}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \WS1 which potentially conflicts with \RS i 3, and
+  the associated \WS3 is preceded by \RS i 1, as shown in
+  figure~\ref{fig:mrws3b}. Because \RS i 1 controls the value of $r_i$, any
+  occurrence of \WS3 will then set $\W{\ip}\gets\neg\R{i}{\ip}$ so that
+  $\W{\ip}\neq\R{i}{\ip}$ for the associated \WS1.
+\end{proof}
+
+\begin{thm}[Coherency of reader]\label{thm:mrcoh}
+  If \RS i 3 may potentially conflict with \WS1, then either
+  $\ip\neq\op_i$ or $\W{\ip}\neq\R i {\op}$.
+\end{thm}
+\begin{proof}
+  A potential conflict between \RS i 3 and \WS1 means that \WS1 does not occur strictly before \RS i 2.
+
+  If the writer has not yet completed its first invocation, and \WS2
+  has not occurred at all yet, then $\ip\neq\op_i$ because nothing
+  could have changed the value of $\ip$.
+
+  Interacting operations \RS i 2 and \WS2 must occur in one order or
+  the other. The same goes for interacting operations \RS i 1 and
+  \WS3.  Lemmas~\ref{lma:mws3notbetween}~and~\ref{lma:mws3between}
+  cover the cases.
+\end{proof}
+
+\subsubsection{Writer}
+
+The following lemmas apply to the writer code and are applicable until
+the writer completes \WS1.
+
+\begin{lemma}\label{lma:mrs1notbetween}
+  Given an instance of \RS i 1, if it does not occur in the time between
+  the beginning of \WS3 and the completion of \WS1, then the
+  associated \RS i 3 is non-conflicting because $\W{\ip}\neq\R{i}{\ip}$,
+  $\ip\neq\op_i$ or it does not overlap with a conflicting \WS1.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{mwriter_rs1notbetween}
+  \caption{\RS i 1 does not occur between \WS 3 and completion of \WS 1}
+  \label{fig:mwrs1nb}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \RS i 3 which potentially conflicts with \WS1, but
+  the associated \RS i 1 occurred preceding the \WS3 step, as shown in
+  figure~\ref{fig:mwrs1nb}. Suppose further that $\ip=\op_i$ because \RS i 2
+  preceded \WS2. Then, because \WS3 sets $\W{\ip}\gets\neg\R i {\ip}$ the
+  value of $\W{\ip}\neq\R i {\ip}$.
+\end{proof}
+
+\begin{lemma}\label{lma:mrs1between}
+  Given an instance of \RS i 1, if it does in occur in the time
+  between the beginning of \WS3 and the completion of \WS1, then the
+  associated \RS i 3 is non-conflicting because $\ip\neq\op_i$ or it
+  does not overlap with a conflicting \WS1.
+\end{lemma}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics{mwriter_rs1between}
+  \caption{\RS i 1 occurs at least once between \WS3 and completion of \WS1, as well as a case where $\op_i=\ip$}
+  \label{fig:mwrs1b}
+\end{figure*}
+
+\begin{proof}
+  Suppose there is a \RS i 3 which potentially conflicts with \WS1, and
+  the associated \RS i 1 is preceded by \WS3, as shown in
+  figure~\ref{fig:mwrs1b}. By transitivity, that means \WS2 precedes
+  \RS i 2, but then it must be the case that $\ip\neq\op_i$.
+\end{proof}
+
+\begin{thm}[Coherency of writer]\label{thm:mwcoh}
+  For any reader $R^i$, if \WS1 may potentially conflict with \RS i 3,
+  then either $\ip\neq\op_i$ or $\W{\ip}\neq\R i {\op}$.
+\end{thm}
+\begin{proof}
+  By theorem~\ref{thm:mrcoh} we know that the reader $R^i$ will avoid
+  conflicting with the writer.  Then we need to show that the writer
+  will avoid conflicting with the reader.
+
+  If this is the first time that the writer runs then $\ip$ has not
+  yet been modified from its initial value, and the reader must run
+  \RS i 2 $\op_i\gets\neg\ip$ before reading, so $\ip\neq\op_i$. In
+  subsequent runs of the writer code, the question becomes about how
+  \WS2 and \WS3 make safe choices for the subsequent \WS1.
+
+  Interacting operations \RS i 1 and \WS3 must occur in one order or the
+  other. Lemmas~\ref{lma:mrs1notbetween}~and~\ref{lma:mrs1between} cover
+  the cases.
+\end{proof}
+
+\subsubsection{Both}
+
+\begin{thm}[Coherency of multireader mechanism]
+  The reader and the writer never conflict with each other.
+\end{thm}
+\begin{proof}
+  By theorems~\ref{thm:mrcoh}~and~\ref{thm:mwcoh}.
+\end{proof}
+
+% \begin{lemma}\label{lma:rintn}
+%   If \RS i 1 precedes \WS3 then $\W{\ip}\neq\R i {\ip}$ at \RS i 3.
+% \end{lemma}
+% \begin{proof}
+%   \RS i 1 controls the value of $r_i$ and therefore, if \WS3 occurs after
+%   it, then $\W{\ip}\gets\gneg{\ldots,\R i {\ip},\ldots}$. Therefore,
+%   $\W{\ip}\neq\R i {\ip}$ until \RS i 1 runs again, which would contradict the
+%   premise.
+% \end{proof}
+
+% \begin{lemma}\label{lma:ipintn}
+%   If \WS2 precedes \RS i 2 then $\op_i\neq\ip$ at \RS i 3.
+% \end{lemma}
+% \begin{proof}
+%   \WS2 controls the value of \ip\ and by the premise, \WS2 must come
+%   before \RS i 2. Therefore, when \RS i 2 sets $\op_i\gets\neg\ip$ it must be
+%   the case that $\op_i\neq\ip$ at \RS i 3.
+% \end{proof}
+
+% \begin{thm}[Coherency of reader]
+%   If \RS i 3 may potentially conflict with \WS1, then either $\op_i\neq\ip$ or $\W{\ip}\neq\R i {\op_i}$.
+% \end{thm}
+% \begin{proof}
+%   A potential conflict between \RS i 3 and \WS1 means that \WS1 does not occur strictly before \RS i 2.
+
+%   If the writer has not yet completed its first invocation, and \WS2
+%   has not occurred at all yet, then $\op_i\neq\ip$ because nothing
+%   could have changed the value of $\ip$.
+
+%   Interacting operations \RS i 2 and \WS2 must occur in one order or the
+%   other. If \WS2 precedes \RS i 2 then $\op_i\neq\ip$ by
+%   lemma~\ref{lma:ipintn}.
+
+%   If \RS i 2 precedes \WS2 then by transitivity it must be the case that
+%   \RS i 1 precedes \WS3. By lemma~\ref{lma:rintn} it is the case that
+%   $\W{\ip}\neq\R i {\ip}$. Then there are two cases: either $\op_i\neq\ip$,
+%   in which case we are done, or $\op_i=\ip$, in which case
+%   $\W{\ip}\neq\R i {\op_i}$.
+% \end{proof}
+
+% \begin{thm}[Coherency of writer]
+%   For any \RS i 3 such that \WS1 may potentially conflict with that
+%   \RS i 3, either $\op_i\neq\ip$ or $\W{\ip}\neq\R i {\op_i}$.
+% \end{thm}
+% \begin{proof}
+%   in progress
+% \end{proof}
+
+\end{document}

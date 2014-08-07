@@ -688,6 +688,11 @@ void _handle_irq(void)
 
     /* mask IRQ until it is handled */
     intc_mask_irq(activeirq);
+
+    /* mark IRQ status */
+    cpu_read(u8 *, irq_status_table)[activeirq] = 1;
+
+    /* find and call handler if available */
     if(irq_table[activeirq])
       irq_table[activeirq](activeirq);
 #ifdef OMAP3530

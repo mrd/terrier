@@ -44,6 +44,7 @@
 #include "arm/status.h"
 #include "arm/asm.h"
 #include "arm/smp/per-cpu.h"
+#include "mem/physical.h"
 #include "mem/virtual.h"
 #include "sched/process.h"
 #define MODULE "intr"
@@ -187,6 +188,31 @@ static u32 GICVERSION, num_cpus, num_ints, num_ext_ints;
 static u32 num_supported, num_permanent, num_prio_levels, min_binary_point;
 static u32 supported[32], permanent[32];
 #endif
+
+DEF_PER_CPU(u8 *, irq_status_table); /* dynamically allocate with special page permissions */
+INIT_PER_CPU(irq_status_table) {
+  /* setup IRQ status register table */
+  physaddr irq_sr_phys = physical_alloc_page();
+  u8 *irq_sr;
+  if(irq_sr_phys == 0) {
+    early_panic("irq_sr: physical_alloc_page failed.\n");
+    return;
+  }
+#ifdef USE_VMM
+  /* 1 normal page, no caching or buffering, user-mode read-only */
+  region_t rtmp = { irq_sr_phys, NULL, &kernel_l2pt, 1, PAGE_SIZE_LOG2, 0, R_RO };
+  if(vmm_map_region_find_vstart(&rtmp) != OK) {
+    early_panic("irq_sr: vmm_map_region_find_vstart failed.\n");
+    return;
+  }
+  irq_sr = rtmp.vstart;
+#else
+  irq_sr = (u8 *) irq_sr_phys;
+#endif
+  DLOG(1, "irq_sr=%#x irq_sr_phys=%#x\n", irq_sr, irq_sr_phys);
+  cpu_write(u8 *, irq_status_table, irq_sr);
+  arm_memset_log2(irq_sr, 0, PAGE_SIZE_LOG2);
+}
 
 #ifdef GIC
 static irq_handler_t sgi_table[16];
@@ -582,6 +608,7 @@ void HANDLES("UNDEF") _handle_undefined_instruction(void)
 }
 
 DEF_PER_CPU(u32 *, cpu_svc_stack_top);
+DEF_PER_CPU(u32 *, cpu_abt_stack_top);
 
 void _handle_swi2(u32 lr, u32 *r4_r11)
 {
@@ -644,7 +671,12 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
   u32 lr; u32 sp, sr;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
-  DUMP_REGS;
+  u32 *regs = (cpu_read(u32 *, cpu_abt_stack_top)) - 16;
+  //  DUMP_REGS;
+  DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
+  DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
+  DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
+  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x pc : %#.08x\n", regs[12], regs[13], regs[14], regs[15]);
   sr = arm_mmu_instr_fault_status();
   DLOG(1, "_handle_prefetch_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 4, sp, sr,
        arm_mmu_instr_fault_addr());
@@ -654,13 +686,20 @@ void HANDLES("ABORT") _handle_prefetch_abort(void)
 
 void HANDLES("ABORT") _handle_data_abort(void)
 {
-  u32 lr; u32 sp, sr;
+  u32 lr; u32 sp, sr, ar;
   ASM("MOV %0, lr":"=r"(lr));
   ASM("MOV %0, sp":"=r"(sp));
-  DUMP_REGS;
+  u32 *regs = (cpu_read(u32 *, cpu_abt_stack_top)) - 16;
+  //  DUMP_REGS;
+  DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", regs[0], regs[1], regs[2], regs[3]);
+  DLOG(1, "r4 : %#.08x r5: %#.08x r6 : %#.08x r7 : %#.08x\n", regs[4], regs[5], regs[6], regs[7]);
+  DLOG(1, "r8 : %#.08x r9: %#.08x r10: %#.08x r11: %#.08x\n", regs[8], regs[9], regs[10], regs[11]);
+  DLOG(1, "r12: %#.08x sp: %#.08x lr : %#.08x pc : %#.08x\n", regs[12], regs[13], regs[14], regs[15]);
   sr = arm_mmu_data_fault_status();
-  DLOG(1, "_handle_data_abort lr=%#x sp=%#x sr=%#x ar=%#x\n", lr - 8, sp, sr,
-       arm_mmu_data_fault_addr());
+  ar = arm_mmu_data_fault_addr();
+  DLOG(1, "_handle_data_abort lr=%#x sp=%#x sr=%#x ar=%#x pid=%d\n", lr - 8, sp, sr,
+       ar,
+       cpu_read(process_t *, current)->pid);
   DLOG(1, "  source=%s (%s; SD=%d)\n",
        fault_status_register_encodings[find_fault_status(sr)].source,
        GETBITS(sr, 11, 1) ? "W" : "R",
@@ -695,6 +734,7 @@ void _handle_irq(void)
     /* find and call handler if available */
     if(irq_table[activeirq])
       irq_table[activeirq](activeirq);
+
 #ifdef OMAP3530
     intc->control = INTCPS_CONTROL_NEWIRQAGR;
 #endif

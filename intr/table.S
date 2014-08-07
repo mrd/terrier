@@ -46,9 +46,9 @@
         MRC     p15,0,r0,c0,c0,5;  /* r0 = cpu index */                       \
         AND     r0, r0, #7;        /* mask first 3 bits */                    \
         LDR     r12, [r12, r0, LSL #2]; /* r12 = _per_cpu_spaces[r0] */       \
-        MOVW    r1, #:lower16:x;                                              \
-        MOVT    r1, #:upper16:x;                                              \
-        ADD     r12, r12, r1 /* r12 = &_per_cpu_spaces[r0][r1] */
+        MOVW    r0, #:lower16:x;                                              \
+        MOVT    r0, #:upper16:x;                                              \
+        ADD     r12, r12, r0 /* r12 = &_per_cpu_spaces[old_r0][newer_r0] */
 
 /* Beginning of vector table: ARM processor sets PC to entry in vector
  * table when encountering an exception.  */
@@ -59,11 +59,30 @@ _vector_table:
         LDR     pc, _vector_table_data+0
         LDR     pc, _vector_table_data+4
         B       _swi_stub
-        LDR     pc, _vector_table_data+12
-        LDR     pc, _vector_table_data+16
+        B       _prefetch_abort_stub
+        B       _data_abort_stub
         NOP
         B       _irq_stub
         LDR     pc, _vector_table_data+24
+
+/* ARM architectural reference manual B9.3.17 STM (User registers):
+
+ * In a PL1 mode other than System mode, Store Multiple (user registers) stores multiple User mode registers to
+consecutive memory locations using an address from a base register. The processor reads the base register value
+normally, using the current mode to determine the correct Banked version of the register. This instruction cannot
+writeback to the base register. */
+
+/* Therefore, "STMFD r13!, {r0-r15}^" is not allowed. Go figure. */
+
+_prefetch_abort_stub:
+        STMFD   r13, {r0-r15}^            /* save usr registers on stack for examination */
+        SUB     r13, r13, #64
+        LDR     pc, _vector_table_data+12 /* far call, don't expect return at this time */
+
+_data_abort_stub:
+        STMFD   r13, {r0-r15}^            /* save usr registers on stack for examination */
+        SUB     r13, r13, #64
+        LDR     pc, _vector_table_data+16 /* far call, don't expect return at this time */
 
 _swi_stub:
         /* in SVC mode */
@@ -130,6 +149,9 @@ _far_call_return:
         MSR     spsr_cx, r0                /* store spsr (control, extension) */
         LDR     lr, [r12, #0x48]           /* lr = entry point (process_t.entry)
                                             * assumes ctxt is embedded in process_t */
+
+        asm_cpu_pointer(irq_status_table)
+        LDMIA   r12, {r12}^                /* r12_user = *r12, just in case of FIQ mode  */
 
         MOVS    pc, lr                     /* jump to entry point, load SPSR */
 

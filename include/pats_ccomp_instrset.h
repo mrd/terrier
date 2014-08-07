@@ -1,17 +1,17 @@
-/***********************************************************************/
+/* ******************************************************************* */
 /*                                                                     */
 /*                         Applied Type System                         */
 /*                                                                     */
-/***********************************************************************/
+/* ******************************************************************* */
 
-/* (*
+/*
 ** ATS/Postiats - Unleashing the Potential of Types!
-** Copyright (C) 2011-2012 Hongwei Xi, ATS Trustful Software, Inc.
+** Copyright (C) 2011-20?? Hongwei Xi, ATS Trustful Software, Inc.
 ** All rights reserved
 **
 ** ATS is free software;  you can  redistribute it and/or modify it under
-** the terms of the GNU LESSER GENERAL PUBLIC LICENSE as published by the
-** Free Software Foundation; either version 2.1, or (at your option)  any
+** the terms of  the GNU GENERAL PUBLIC LICENSE (GPL) as published by the
+** Free Software Foundation; either version 3, or (at  your  option)  any
 ** later version.
 **
 ** ATS is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -23,7 +23,7 @@
 ** along  with  ATS;  see the  file COPYING.  If not, please write to the
 ** Free Software Foundation,  51 Franklin Street, Fifth Floor, Boston, MA
 ** 02110-1301, USA.
-*) */
+*/
 
 /* ****** ****** */
 
@@ -69,13 +69,24 @@
 #define ATSifnot(x) if (!(x))
 #define ATSthen()
 #define ATSelse() else
+
+/* ****** ****** */
+
 #define ATSdo() do
 #define ATSwhile(x) while (x)
 #define ATSbreak() break
 #define ATScontinue() continue
 #define ATSgoto(lab) goto lab
+
+/* ****** ****** */
+
 #define ATSreturn(x) return (x)
 #define ATSreturn_void(x) return
+
+/* ****** ****** */
+
+#define ATSFCreturn(x) return (x)
+#define ATSFCreturn_void(x) (x); return
 
 /* ****** ****** */
 
@@ -123,7 +134,7 @@
 
 /* ****** ****** */
 
-#define ATSPMVcfunlab(knd, flab, env) (flab##$closurerize)env
+#define ATSPMVcfunlab(knd, flab, env) (flab##__closurerize)env
 
 /* ****** ****** */
 
@@ -216,6 +227,10 @@
 //
 /* ****** ****** */
 
+#define ATSINSlab(lab) lab
+
+/* ****** ****** */
+
 #define ATSINSfreeclo(cloptr) ATS_MFREE(cloptr)
 #define ATSINSfreecon(datconptr) ATS_MFREE(datconptr)
 
@@ -290,14 +305,16 @@
 //
 /* ****** ****** */
 
+#define ATSINSclosure_initize(flab, tmpenv) (flab##__closureinit)tmpenv
+
+/* ****** ****** */
+//
 #define ATSINSraise_exn(tmp, pmv) atsruntime_raise(pmv)
-
+//
 #define ATSINScaseof_fail(msg) atsruntime_handle_unmatchedval(msg)
-
-/*
-#define ATSINSfunarg_fail(msg) ...
-*/
-
+//
+#define ATSINSfunarg_fail(msg) atsruntime_handle_unmatchedarg(msg)
+//
 /* ****** ****** */
 
 #define \

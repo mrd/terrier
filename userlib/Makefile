@@ -15,7 +15,7 @@ endif
 CFLAGS +=
 
 C_FILES = printf.c arm.c freestanding.c
-DATS_FILES = fourslot.dats fourslot2w.dats ipcmem.dats
+DATS_FILES = fourslot.dats fourslot2w.dats ipcmem.dats multislot.dats
 
 C_OBJS = $(patsubst %.c,%.o,$(C_FILES))
 DATS_OBJS = $(patsubst %.dats,%_dats.o,$(DATS_FILES))
@@ -26,7 +26,10 @@ DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(STARTASM)) $(patsub
 
 USERLIB = libuser.a
 
-USERLIBOBJS = $(C_OBJS) $(STARTOBJ) $(DATS_OBJS)
+USERLIBOBJS = $(C_OBJS) $(DATS_OBJS)
+
+.PHONY: all
+all: $(USERLIB) $(STARTOBJ)
 
 $(USERLIB): $(USERLIBOBJS)
 	$(AR) r $@ $(USERLIBOBJS)

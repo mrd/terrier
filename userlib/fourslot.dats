@@ -58,9 +58,8 @@ implement{a} write_data (pf_fs, pfr, pfs | fs, p, i, item) = write_data_c (pf_fs
 absview ws4_fresh_v (p: bit)
 
 extern fun
-save_write_slot_index {l:addr} {n:nat} {a:t@ype} {R, s, wp, wi, rp, ri: bit | wi <> s} {rstep: nat} (
+save_write_slot_index {l:addr} {n:nat} {a:t@ype} {s, wp, wi, rp, ri: bit | wi <> s} (
     pf_fs: !fourslot_v (l, n, a, true),
-    pfr: !ws1_read_v (R, rstep, rp),
     pfs: ws2_slot_v (s, rp, ri) |
     fs: ptr l, wp: bit wp, wi: bit wi
   ): (ws4_fresh_v wp | void) = "mac#_write_slot_c"
@@ -84,7 +83,7 @@ implement{a} fourslot_write (pf_fs | fs, item) = () where {
 
   val _ = write_data<a> (pf_fs, pfr, pfs | fs, wp, wi, item)
 
-  val (pff | _) = save_write_slot_index (pf_fs, pfr, pfs | fs, wp, wi)
+  val (pff | _) = save_write_slot_index (pf_fs, pfs | fs, wp, wi)
 
   val _ = save_latest_state (pf_fs, pfr, pff | fs, wp)
 }

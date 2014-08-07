@@ -61,6 +61,17 @@ mapping_t _mappings[] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
+u8 *_irq_status_table = 0;      /* FIXME: must be initialized, until I
+                                 * figure out what to do about ELF
+                                 * "Common" symbols. */
+
+volatile u32 irq_state = 0;     /* IRQ state avoids race condition
+                                 * between saving previous context and
+                                 * loading interrupt context. */
+
+u32 saved_context[18] = {0};
+u32 *_kernel_saved_context = NULL;
+
 /* ************************************************** */
 
 void *atspre_null_ptr = 0;      //FIXME
@@ -71,6 +82,7 @@ ats_bool_type atspre_pgt(const ats_ptr_type p1, const ats_ptr_type p2) {
 
 ipcmapping_t _ipcmappings[] = {
   { IPC_SEEK, "uart", IPC_WRITE, "fourslot2w", 1, NULL },
+  { IPC_OFFER, "ehci_info", IPC_WRITE, "multislot", 1, NULL },
   {0}
 };
 
@@ -104,6 +116,13 @@ static inline u32 memcpy(void *dest, void *src, u32 count)
 }
 #endif
 
+static inline u8 *svc1(void)
+{
+  register u8 *r0 asm("r0");
+  asm volatile("SVC #1":"=r" (r0));
+  return r0;
+}
+
 static inline void svc3(char *ptr, u32 len, u32 noprefix)
 {
   register char *r0 asm("r0") = ptr;
@@ -115,7 +134,7 @@ static inline void svc3(char *ptr, u32 len, u32 noprefix)
 void debuglog(u32 noprefix, u32 lvl, const char *fmt, ...)
 {
 #define DLOG_BUFLEN 256
-  static char buffer[DLOG_BUFLEN];
+  char buffer[DLOG_BUFLEN];
   va_list args;
   va_start(args, fmt);
 
@@ -408,6 +427,7 @@ void dump_usb_cfg_desc(usb_cfg_desc_t *d)
   DLOG(1, "USB_CFG_DESC:\n");
   DLOG_NO_PREFIX(1, "  bLength=%d bDescriptorType=%d wTotalLength=%d\n",
                  d->bLength, d->bDescriptorType, d->wTotalLength);
+
   DLOG_NO_PREFIX(1, "  bNumInterfaces=%d bConfigurationValue=%#x iConfiguration=%d\n",
                  d->bNumInterfaces, d->bConfigurationValue, d->iConfiguration);
   DLOG_NO_PREFIX(1, "  bmAttributes=%#x %s%sbMaxPower=%dmA\n",
@@ -572,7 +592,7 @@ struct _ehci_td {
 typedef struct _ehci_td ehci_td_t;
 
 /* memory pool of TDs for dynamic alloc */
-DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 8, 64);
+DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 16, 64);
 
 /* ************************************************** */
 
@@ -1019,9 +1039,16 @@ void usb_device_request(usb_dev_req_t *req, u32 bmrt, u32 br, u32 wv, u32 wi, u3
   req->wLength = l;
 }
 
-void ehci_irq_handler(u32 v)
+void NAKED ehci_irq_handler(u32 v)
 {
-  DLOG(1, "IRQ\n");
+  DLOG(1, "ehci_irq_handler: IRQ\n");
+  irq_state = 3;                /* Once IRQ state is 3, any interrupt
+                                 * will cause the process of context
+                                 * restoration to take place,
+                                 * returning us to our previous place
+                                 * in the program. */
+
+  ASM("B restore_saved_context");
 }
 
 /* macros to help use proper device memory for TDs */
@@ -1461,7 +1488,9 @@ void ehci_enumerate(usb_port_t *p, usb_device_t *usbd)
 void hsusbhc_init()
 {
   int i;
-  DLOG(1, "hsusbhc_init\n");
+  _irq_status_table = svc1();
+  DLOG(1, "hsusbhc_init _irq_status_table=%#x _kernel_saved_context=%#x\n", _irq_status_table, _kernel_saved_context);
+  DLOG(1, "irq_state=%d\n", irq_state);
   for(i=0; i<sizeof(_mappings)/sizeof(mapping_t) && _mappings[i].pstart; i++)
     DLOG(1, "mapping: %#x => %#x desc=\"%s\"\n", _mappings[i].pstart, _mappings[i].vstart, _mappings[i].desc);
 
@@ -1679,6 +1708,8 @@ void hsusbhc_init()
   //ehci_enumerate(&rootport[1].port, &qh1);
   //ehci_enumerate(&rootport[2].port, &qh1);
 
+  DLOG(1, "_irq_status_table[77] = %#x\n", _irq_status_table[77]);
+  DLOG(1, "irq_state=%d\n", irq_state);
   DLOG(1, "initialization complete\n");
   ehci_microframewait(1000 << 3); /* 1000 ms */
 }
@@ -1687,6 +1718,7 @@ void hsusbhc_init()
 #error "High Speed USB Host Controller not implemented"
 #endif
 
+#undef R
 
 /*
  * Local Variables:

@@ -93,6 +93,17 @@ u32 num_cpus;
 status smp_init_per_cpu_spaces(void);
 status smp_init_invoke_percpu_constructors(void);
 
+void smp_dump_coherency_processors(void)
+{
+  u32 scucfg = SCU->configuration;
+  DLOG(1, "SCU control=%#x config=%#x num_cpus=%d\n", SCU->control, scucfg, num_cpus);
+  DLOG(1, "Taking part in SMP and coherency: %s%s%s%s\n",
+       GETBITS(scucfg, 4, 1) ? "cpu0 " : "",
+       GETBITS(scucfg, 5, 1) ? "cpu1 " : "",
+       GETBITS(scucfg, 6, 1) ? "cpu2 " : "",
+       GETBITS(scucfg, 7, 1) ? "cpu3 " : "");
+}
+
 #ifndef NO_SMP
 static void *alloc_stack(void)
 {
@@ -130,6 +141,7 @@ static inline void smp_dump_coherency_state(void)
 DEFSEMAPHORE(scheduling_enabled_sem);
 DEF_PER_CPU_EXTERN(process_t *, cpu_idle_process);
 DEF_PER_CPU_EXTERN(u32 *, cpu_svc_stack_top);
+DEF_PER_CPU_EXTERN(u32 *, cpu_abt_stack_top);
 
 #if SCHED==rms || SCHED==rms_sched
 #ifdef OMAP4460
@@ -255,6 +267,7 @@ static void NAKED NO_RETURN smp_aux_entry_point(void)
 
   /* set per-cpu variable holding SVC stack for convenience */
   cpu_write(u32 *, cpu_svc_stack_top, &newstack[4][1024]);
+  cpu_write(u32 *, cpu_abt_stack_top, &newstack[3][1024]);
 
   /* jump into idle process */
   register process_t *p = cpu_read(process_t *, cpu_idle_process);
@@ -310,6 +323,7 @@ status smp_init(void)
 
   /* write CPU0 copy of per-cpu svc_stack_top variable */
   extern u32 svc_stack_top; cpu_write(u32 *, cpu_svc_stack_top, &svc_stack_top);
+  extern u32 abt_stack_top; cpu_write(u32 *, cpu_abt_stack_top, &abt_stack_top);
 
 #ifndef NO_SMP
   SCU->invalidate_all_registers_in_secure_state = ~0; /* invalidate tag RAM */

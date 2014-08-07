@@ -11,6 +11,9 @@ staload "fourslot2w.sats"
 staload _ = "fourslot.dats"
 staload _ = "fourslot2w.dats"
 
+staload "multislot.sats"
+staload _ = "multislot.dats"
+
 extern fun hsusbhc_init(): void = "mac#hsusbhc_init"
 
 extern fun atsmain (): int = "ext#atsmain"
@@ -62,9 +65,40 @@ in
   utoken := uart_token_vt_of_int counter'
 end // end [write_num_uart]
 
-implement atsmain () = let
-  fun do_nothing ():void = do_nothing ()
+fun do_nothing (): void = do_nothing ()
 
+fun test_multislot (): int = let
+  var pages: int?
+  val (opt_pf | ms) = ipcmem_get_view (1, pages)
+in
+  if ms > 0 then let
+      prval Some_v pf_ipcmem = opt_pf
+      val (e_pf | s) = multislot_initialize_writer<int> (pf_ipcmem | ms, pages)
+    in
+      if s = 0 then 0 where {
+        prval Right_v (@(pf_ms, pf_ws3)) = e_pf
+
+        // begin test write
+        val _ = multislot_write<int> (pf_ms, pf_ws3 | ms, 42)
+        // end test write
+
+        val _ = do_nothing ()
+        prval pf_ipcmem = multislot_release pf_ms
+        prval _         = multislot_release_ws3_v pf_ws3
+        prval _         = ipcmem_put_view pf_ipcmem
+      } else 1 where {
+        prval Left_v pf_ipcmem = e_pf
+        prval _                = ipcmem_put_view pf_ipcmem
+        val _                  = do_nothing ()
+      }
+    end else 1 where {
+      // failed to acquire ipcmem
+      prval None_v () = opt_pf
+      val _           = do_nothing ()
+    }
+end
+
+implement atsmain () = let
   var pages: int?
   val (opt_pf | uart) = ipcmem_get_view (0, pages)
 in
@@ -73,7 +107,7 @@ in
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, A)
     in
-      if s = 0 then 0 where {
+      if s = 0 then test_multislot () where {
         prval Right_v pf_uart = pf_ipcmem
 
         (* ... *)
@@ -86,7 +120,7 @@ in
         val _ = write_string_uart (pf_uart | utoken, uart, "c")
 
         val _ = put_uart_token_vt utoken
-        val _ = do_nothing ()
+        // val _ = do_nothing ()
 
 
         prval pf_ipcmem = fourslot2w_ipc_free pf_uart

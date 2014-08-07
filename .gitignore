@@ -11,3 +11,11 @@ bb_nandflash_ecc
 TAGS
 tags
 cscope.files
+*_dats.c
+*.aux
+*.dvi
+*.log
+*.pdf
+progs/*/program
+*.a
+*.bin.gz

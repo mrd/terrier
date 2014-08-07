@@ -11,10 +11,12 @@
 #define CACHE_LINE_SIZE_LOG2 6
 #define CACHE_LINE_SIZE (1<<CACHE_LINE_SIZE_LOG2)
 
+#ifndef atspre_neg_bool1
 #define atspre_neg_bool1 atspre_neg_bool
 static inline ats_bool_type atspre_neg_bool(ats_bool_type b) {
   return (b ? ats_false_bool : ats_true_bool) ;
 } // end of [atspre_neg_bool]
+#endif
 
 #define _fourslot_ipc_reader_init_c(p,pages) OK
 

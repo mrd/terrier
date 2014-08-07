@@ -1,7 +1,7 @@
-NAME = uart
+NAME = test
 C_FILES =
 S_FILES =
-DATS_FILES = uart.dats
+DATS_FILES = test.dats
 
 include ../../config.mk
 LDSCRIPT = ../../ldscripts/program.ld

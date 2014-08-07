@@ -334,7 +334,7 @@ u32 vmm_find_mapping_entry(pagetable_list_t *ptl, void *addr)
 #endif
 
 /* Regions can be used with physical addresses */
-POOL_DEFN(region_list,region_list_t,16,4);
+POOL_DEFN(region_list,region_list_t,32,4);
 
 void vmm_dump_region(region_t *r)
 {

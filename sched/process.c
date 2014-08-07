@@ -1018,7 +1018,7 @@ status program_load(void *pstart, process_t **return_p)
         db->elt.m = *m;         /* copy mapping */
         db->elt.p = p;
         db->elt.p_m = m;        /* save userspace pointer */
-        db->elt.frame = 0;
+        db->elt.frame = 0;      /* zero out frame when unallocated */
         /* adjust internal pointers to point at kernel copy of data, not userspace addresses */
         db->elt.m.name = (pstart + data->sh_offset + (((u32) m->name) - data->sh_addr));
         db->elt.m.proto = (pstart + data->sh_offset + (((u32) m->proto) - data->sh_addr));
@@ -1092,16 +1092,25 @@ void interpret_ipcmappings(void)
     DLOG(1,"db->name=%s db->proto=%s\n", db->elt.m.name, db->elt.m.proto);
     if(db->elt.frame == 0) {
       if(db->elt.m.type == IPC_SEEK) {
+        /* They call me the seeker... */
         ipcmdb_list_t *other = find_ipcmdb(IPC_OFFER, db->elt.m.name, db->elt.m.proto);
         if(other != NULL) {
           physaddr frame;
-          if(physical_alloc_pages(db->elt.m.pages, 1, &frame) != OK) {
-            DLOG(1, "interpret_ipcmappings: unable to allocate physical memory\n");
+          /* first see if a frame already exists in the offering process */
+          if(other->elt.frame != 0) {
+            db->elt.frame = other->elt.frame;
+            DLOG(1, "interpret_ipcmappings: processes %d and %d now sharing existing frame %#x for ('%s', '%s')\n",
+                 db->elt.p->pid, other->elt.p->pid, db->elt.frame, db->elt.m.name, db->elt.m.proto);
           } else {
-            DLOG(1, "interpret_ipcmappings: processes %d and %d now sharing frame %#x for ('%s', '%s')\n",
-                 db->elt.p->pid, other->elt.p->pid, frame, db->elt.m.name, db->elt.m.proto);
-            db->elt.frame = frame;
-            other->elt.frame = frame;
+            /* otherwise try to allocate one */
+            if(physical_alloc_pages(db->elt.m.pages, 1, &frame) != OK) {
+              DLOG(1, "interpret_ipcmappings: unable to allocate physical memory\n");
+            } else {
+              DLOG(1, "interpret_ipcmappings: processes %d and %d now sharing frame %#x for ('%s', '%s')\n",
+                   db->elt.p->pid, other->elt.p->pid, frame, db->elt.m.name, db->elt.m.proto);
+              db->elt.frame = frame;
+              other->elt.frame = frame;
+            }
           }
         }
       }
@@ -1179,6 +1188,7 @@ status programs_init(void)
       DLOG(1, "program_load failed\n");
       return EINVALID;
     }
+    DLOG(1, "programs_init: loaded PID=%d\n", p->pid);
     sched_wakeup(p);
   }
 

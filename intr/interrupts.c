@@ -309,6 +309,9 @@ void intr_init(void)
   /* set up vector table base address */
   arm_set_vector_base_address((u32) &_vector_table);
   intc_init();
+
+  /* FIXME: testing */
+  intc_unmask_irq(77);
 }
 
 status intc_set_intid_handler(u32 intid, void (*handler)(u32))
@@ -588,6 +591,10 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   cpu_write(context_t *, _next_context, &cpu_read(process_t *, current)->ctxt);
   lr -= 4;                      /* the SWI is the previous instruction */
 #if 0
+  u32 r13_usr;
+  ASM("STMDB sp, {r13}^\n\t"    /* write-back to base reg not allowed, so careful use of stack here. */
+      "LDMDB sp, {%0}":"=r" (r13_usr));
+  DLOG(1, "_handle_swi r13_usr=%#x\n", r13_usr);
   DLOG(1, "_handle_swi lr=%#x (%#x), stack=%#x\n",
        lr, *((u32 *) lr), stack);
   DLOG(1, "r0 : %#.08x r1: %#.08x r2 : %#.08x r3 : %#.08x\n", stack[0], stack[1], stack[2], stack[3]);
@@ -600,6 +607,9 @@ void _handle_swi2(u32 lr, u32 *r4_r11)
   switch(instruction & 0xffffff) {
   case 0:                       /* set entry */
     cpu_read(process_t *, current)->entry = (void *) stack[1];
+    return;
+  case 1:
+    stack[0] = (u32) cpu_read(u8 *, irq_status_table); /* set r0 = irq_status_table pointer */
     return;
   case 3: {                        /* DLOG */
     /* r0: string pointer */
@@ -674,7 +684,9 @@ void _handle_irq(void)
   u32 activeirq = IAR - 32;      /* shared peripheral IRQs start at 32 */
   if(IAR >= 32) {
 #endif
-    //DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
+    DLOG(1, "_handle_irq activeirq=%#x\n", activeirq);
+
+    /* mask IRQ until it is handled */
     intc_mask_irq(activeirq);
     if(irq_table[activeirq])
       irq_table[activeirq](activeirq);

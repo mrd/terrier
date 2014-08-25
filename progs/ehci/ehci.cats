@@ -82,7 +82,7 @@ ats_bool_type atspre_pgt(const ats_ptr_type p1, const ats_ptr_type p2) {
 
 ipcmapping_t _ipcmappings[] = {
   { IPC_SEEK, "uart", IPC_WRITE, "fourslot2w", 1, NULL },
-  { IPC_OFFER, "ehci_info", IPC_WRITE, "multislot", 1, NULL },
+  { IPC_OFFER, "ehci_info", IPC_WRITE, "multireader", 1, NULL },
   {0}
 };
 

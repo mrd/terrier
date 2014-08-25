@@ -1,5 +1,5 @@
-#ifndef _MULTISLOT_CATS_
-#define _MULTISLOT_CATS_
+#ifndef _MULTIREADER_CATS_
+#define _MULTIREADER_CATS_
 
 #include "arm/asm.h"
 #include "ats_types.h"
@@ -31,7 +31,7 @@ static inline ats_bool_type atspre_neg_bool(ats_bool_type b) {
 } // end of [atspre_neg_bool]
 #endif
 
-static inline int _multislot_initialize_reader_c(void *p, int pages, int elemsz, int *iref)
+static inline int _multireader_initialize_reader_c(void *p, int pages, int elemsz, int *iref)
 {
   int elemlines, reqbytes;
 
@@ -70,7 +70,7 @@ static inline int _multislot_initialize_reader_c(void *p, int pages, int elemsz,
 // for the time being, single reader layout:
 // ms = [op, ip, r0, r1, w0, w1, data0, data1, data2, data3]
 
-static inline int _multislot_initialize_writer_c(void *p, int pages, int elemsz)
+static inline int _multireader_initialize_writer_c(void *p, int pages, int elemsz)
 {
   // FIXME: this assumes cache-line-size elements but for testing purposes I won't bother with that
   if(elemsz < 1) return EINVALID;
@@ -92,7 +92,7 @@ static inline int _multislot_initialize_writer_c(void *p, int pages, int elemsz)
 
 /* QUESTION: should non-cache-aligned data be an option? */
 
-/* FIXME: initialization for multislot (should it require static number of readers be declared?) */
+/* FIXME: initialization for multireader (should it require static number of readers be declared?) */
 
 /* FIXME: reuse of indices when readers drop out */
 

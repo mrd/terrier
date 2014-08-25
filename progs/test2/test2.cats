@@ -84,7 +84,7 @@ void printbuf(buf_t b)
 }
 
 ipcmapping_t _ipcmappings[] = {
-  { IPC_SEEK, "ehci_info", IPC_READ, "multislot", 1, NULL },
+  { IPC_SEEK, "ehci_info", IPC_READ, "multireader", 1, NULL },
   {0}
 };
 

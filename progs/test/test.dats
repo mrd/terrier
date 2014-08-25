@@ -9,8 +9,8 @@ staload _ = "prelude/DATS/integer.dats"
 
 staload "test.sats"
 staload "ipcmem.sats"
-staload "multislot.sats"
-staload _ = "multislot.dats"
+staload "multireader.sats"
+staload _ = "multireader.dats"
 
 extern fun atsmain (): int = "ext#atsmain"
 extern fun mydelay (): void = "mac#mydelay"
@@ -25,7 +25,7 @@ implement atsmain () = let
         pf_ms: !mslot_v (l, n, ehci_info_t, false, i) |
         ms: ptr l, i: int i
       ): void = let
-    val x = multislot_read (pf_ms | ms, i)
+    val x = multireader_read (pf_ms | ms, i)
   in
     if x > 40 then printnum x else loop (pf_ms | ms, i)
   end // end [loop]
@@ -37,7 +37,7 @@ in
     let
       prval Some_v pf_ipcmem = opt_pf
       var i: int?
-      val (e_pf | s) = multislot_initialize_reader (pf_ipcmem | ms, pages, i)
+      val (e_pf | s) = multireader_initialize_reader (pf_ipcmem | ms, pages, i)
     in
       if s = 0 then 0 where {
         prval Right_v pf_ms = e_pf
@@ -47,7 +47,7 @@ in
         val _ = loop (pf_ms | ms, i)
         val _ = do_nothing ()
 
-        prval pf_ipcmem = multislot_release pf_ms
+        prval pf_ipcmem = multireader_release pf_ms
         prval _ = ipcmem_put_view pf_ipcmem
 
       } else 1 where {

@@ -1,9 +1,9 @@
-// multislot: a 1-way pool-based async communication library with options for multiple readers/writers
+// multireader: a 1-way pool-based async communication library with options for multiple readers/writers
 
 #define ATS_DYNLOADFLAG 0
 
 staload "ipcmem.sats"
-staload "multislot.sats"
+staload "multireader.sats"
 infix ==>
 
 (* ************************************************** *)
@@ -42,20 +42,20 @@ fun{a:t@ype} rs3 {l: addr} {overlap: bool} {OP, IP, Rip, Wip: bit | (OP != IP) |
   val _ = _rs3 (pf_rs2 | ms, i, item, sizeof<a>)
 }
 
-implement{a} multislot_read (pf_ms | ms, i) = let
+implement{a} multireader_read (pf_ms | ms, i) = let
   val (pf_rs1 | _) = rs1 (pf_ms | ms, i)
   val (pf_rs2 | _) = rs2 (pf_ms, pf_rs1 | ms, i)
 in
   rs3<a> (pf_ms, pf_rs2 | ms, i)
 end
 
-extern fun multislot_initialize_reader_c {a: t@ype} {l:addr | l > null} {n: nat} (
+extern fun multireader_initialize_reader_c {a: t@ype} {l:addr | l > null} {n: nat} (
     pf: ipcmem_v (l, n) | p: ptr l, pages: int n, elemsize: size_t (sizeof a), index: &int? >> int i
   ): #[i:nat] [s:int] (either_v (ipcmem_v (l, n), mslot_v (l, n, a, false, i), s == 0) | status s)
-  = "mac#_multislot_initialize_reader_c"
+  = "mac#_multireader_initialize_reader_c"
 
-implement{a} multislot_initialize_reader (pf | p, pages, iref) =
-  multislot_initialize_reader_c (pf | p, pages, sizeof<a>, iref)
+implement{a} multireader_initialize_reader (pf | p, pages, iref) =
+  multireader_initialize_reader_c (pf | p, pages, sizeof<a>, iref)
 
 
 (* ************************************************** *)
@@ -89,23 +89,23 @@ extern fun ws3 {l: addr} {a: t@ype} {n, RS1occ: nat} {overlap: bool} {OP, IP: bi
   ): [Rip, Wip: bit | (RS1occ == 0 && OP == IP) ==> (Rip != Wip)] (ws3_v (OP, IP, Rip, Wip, overlap) | void)
   = "mac#_ws3"
 
-implement{a} multislot_write (pf_ms, pf_ws3 | ms, item) = () where {
+implement{a} multireader_write (pf_ms, pf_ws3 | ms, item) = () where {
   val _ = ws1<a> (pf_ms, pf_ws3 | ms, item)
   val (pf_ws2  | _) = ws2 (pf_ms | ms)
   val (pf_ws3' | _) = ws3 (pf_ms, pf_ws2 | ms)
   prval _ = pf_ws3 := pf_ws3'
 }
 
-extern fun multislot_initialize_writer_c {a: t@ype} {l:addr | l > null} {n: nat} (
+extern fun multireader_initialize_writer_c {a: t@ype} {l:addr | l > null} {n: nat} (
     pf: ipcmem_v (l, n) | p: ptr l, pages: int n, elemsize: size_t (sizeof a)
   ): [s:int]
      [overlap': bool]
      [OP', IP', Rip', Wip': bit | (OP' != IP') || (Rip' != Wip') || (overlap' == false)]
      (either_v (ipcmem_v (l, n), (mslot_v (l, n, a, true, 0), ws3_v (OP', IP', Rip', Wip', overlap')), s == 0) | status s)
-  = "mac#_multislot_initialize_writer_c"
+  = "mac#_multireader_initialize_writer_c"
 
-implement{a} multislot_initialize_writer (pf | p, pages) =
-  multislot_initialize_writer_c (pf | p, pages, sizeof<a>)
+implement{a} multireader_initialize_writer (pf | p, pages) =
+  multireader_initialize_writer_c (pf | p, pages, sizeof<a>)
 
 
 (*

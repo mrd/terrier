@@ -73,6 +73,7 @@ typedef struct {
   char *name;
 #define IPC_READ 1
 #define IPC_WRITE 2
+#define IPC_ALWAYSALLOC 4
   u32 flags;
   char *proto;
   u32 pages;

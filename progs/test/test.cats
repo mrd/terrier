@@ -8,7 +8,7 @@
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */
 unsigned int _scheduler_capacity = 1 << 14;
-unsigned int _scheduler_period = 2 << 14;
+unsigned int _scheduler_period = 4 << 14;
 unsigned int _scheduler_affinity = 2;
 
 typedef struct { char s[124]; } buf_t;

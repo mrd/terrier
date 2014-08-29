@@ -83,6 +83,8 @@ ats_bool_type atspre_pgt(const ats_ptr_type p1, const ats_ptr_type p2) {
 ipcmapping_t _ipcmappings[] = {
   { IPC_SEEK, "uart", IPC_WRITE, "fourslot2w", 1, NULL },
   { IPC_OFFER, "ehci_info", IPC_WRITE, "multireader", 1, NULL },
+  { IPC_OFFER, "ehci_usbdevices", (IPC_READ | IPC_WRITE | IPC_ALWAYSALLOC), "usbdevices", 1, NULL }, /* IPC memory = no cache, no buffer */
+  { IPC_OFFER, "net", IPC_READ, "fourslot", 1, NULL },
   {0}
 };
 
@@ -788,8 +790,8 @@ typedef struct {
   usb_dev_desc_t dev_desc;
 } usb_device_t;
 
-// create a pool for simple dynamic allocation
-DEVICE_POOL_DEFN(usb_device,usb_device_t,8,32);
+// create a pool for simple dynamic allocation using IPC memory
+IPC_POOL_DEFN(usb_device,usb_device_t,8);
 
 void usb_clear_device(usb_device_t *d)
 {
@@ -1497,8 +1499,14 @@ void hsusbhc_init()
   for(i=0; i<sizeof(_ipcmappings)/sizeof(ipcmapping_t) && _ipcmappings[i].type; i++)
     DLOG(1, "ipcmapping: address=%#x desc=\"%s\"\n", _ipcmappings[i].address, _ipcmappings[i].name);
 
-  u32 *ptr = (u32 *)_ipcmappings[0].address;
-  DLOG(1, "ptr[0]=%#x\n", ptr[0]);
+  u32 *ptr = (u32 *)_ipcmappings[2].address;
+  DLOG(1, "_ipcmappings[2].address=%#x\n", ptr);
+
+  if(_ipcmappings[2].address == NULL) {
+    DLOG(1, "USB Device Pool Address is NULL!\n");
+    return;
+  }
+  usb_device_pool_init(_ipcmappings[2].address);
 
   /* initialize base addresses of GPIO interface */
   omap4460_gpio_init();

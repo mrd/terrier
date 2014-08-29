@@ -1089,7 +1089,7 @@ void interpret_ipcmappings(void)
 
   /* connect mappings */
   for(db=ipcmappingdb;db!=NULL;db=db->next) {
-    DLOG(1,"db->name=%s db->proto=%s\n", db->elt.m.name, db->elt.m.proto);
+    DLOG(1,"db->name=%s db->proto=%s db->flags=%#x\n", db->elt.m.name, db->elt.m.proto, db->elt.m.flags);
     if(db->elt.frame == 0) {
       if(db->elt.m.type == IPC_SEEK) {
         /* They call me the seeker... */
@@ -1112,6 +1112,15 @@ void interpret_ipcmappings(void)
               other->elt.frame = frame;
             }
           }
+        }
+      } else if(db->elt.m.flags & IPC_ALWAYSALLOC) {
+        physaddr frame;
+        if(physical_alloc_pages(db->elt.m.pages, 1, &frame) != OK) {
+          DLOG(1, "interpret_ipcmappings: unable to allocate physical memory\n");
+        } else {
+          DLOG(1, "interpret_ipcmappings: process %d gets frame %#x by itself for ('%s', '%s')\n",
+               db->elt.p->pid, frame, db->elt.m.name, db->elt.m.proto);
+          db->elt.frame = frame;
         }
       }
     }
@@ -1138,6 +1147,7 @@ void interpret_ipcmappings(void)
       rl->elt.page_count = db->elt.m.pages;
       rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
 
+      /* No cache, no buffer */
       rl->elt.cache_buf = 0;
       /* Assume Shareability: IPC may be interprocessor */
       /* Not-Global bit is required for process-specific mappings */

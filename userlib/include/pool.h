@@ -46,11 +46,6 @@
 
 #define _POOL_FUNC_DEFN(name,ty,size,align)                             \
   static u32 __##name##_pool_bitmap[(((size) - 1) >> 3) + 1];           \
-  void name##_pool_init(void) {                                         \
-    int i;                                                              \
-    for(i=0;i<(size);i++)                                               \
-      BITMAP_CLR(__##name##_pool_bitmap, i);                            \
-  }                                                                     \
   ty *name##_pool_alloc(void) {                                         \
     int i;                                                              \
     for(i=0;i<(size);i++)                                               \
@@ -69,13 +64,33 @@
       }                                                                 \
   }
 
+#define _POOL_FUNC_INIT_DEFN(name,size)         \
+  void name##_pool_init(void) {                 \
+    int i;                                      \
+    for(i=0;i<(size);i++)                       \
+      BITMAP_CLR(__##name##_pool_bitmap, i);    \
+  }                                             \
+
 #define POOL_DEFN(name,ty,size,align)                           \
   ALIGNED(align,static ty, __##name##_pool_array[size]);        \
-  _POOL_FUNC_DEFN(name,ty,size,align)
+  _POOL_FUNC_DEFN(name,ty,size,align)                           \
+  _POOL_FUNC_INIT_DEFN(name,size)
 
 #define DEVICE_POOL_DEFN(name,ty,size,align)                            \
   static ty __##name##_pool_array[size] __attribute__((aligned(align),section(_DEVICE_SECTION))); \
-  _POOL_FUNC_DEFN(name,ty,size,align)
+  _POOL_FUNC_DEFN(name,ty,size,align)                                   \
+  _POOL_FUNC_INIT_DEFN(name,size)
+
+
+#define IPC_POOL_DEFN(name,ty,size)             \
+  static ty * __##name##_pool_array;            \
+  _POOL_FUNC_DEFN(name,ty,size,1)               \
+  void name##_pool_init(ty *_ptr) {             \
+    int i;                                      \
+    __##name##_pool_array = _ptr;               \
+    for(i=0;i<(size);i++)                       \
+      BITMAP_CLR(__##name##_pool_bitmap, i);    \
+  }                                             \
 
 #endif
 

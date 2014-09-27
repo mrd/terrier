@@ -73,11 +73,21 @@ extern fun wrcount {f: nat} {rc: int -> int} {i: nat} (
       [j: nat | rc' i == j ] int j
   = "mac#_rcount"
 
-extern fun wrtarget {f: nat} (!fixedslot__f f >> fixedslot__t_f (t', f)): #[t': nat | t' == f] int t'
+extern fun wrprevious {p,t,f: nat} {rc: int -> int} (
+    !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
+  ): int p
   = "mac#_rtarget"
 
-extern fun wfilled {f: nat} (!wfixedslot f >> wfixedslot f): int f
+extern fun wrtarget {p,t,f: nat} {rc: int -> int} (
+    !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
+  ): int t
+  = "mac#_rtarget"
+
+extern fun wfilled {p,t,f: nat} {rc: int -> int} (
+    !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
+  ): int f
   = "mac#_wfilled"
+
 extern fun set_wfilled {f, f': nat} (!wfixedslot f >> wfixedslot f', int f'): void
   = "mac#_set_wfilled"
 extern fun write_data {a: t@ype} {p, t, f: nat} {rc: int -> int}
@@ -87,14 +97,46 @@ extern fun write_data {a: t@ype} {p, t, f: nat} {rc: int -> int}
   ): #[p', t': nat] #[rc': int -> int] void
   = "mac#_write_data"
 
-extern fun pick_wi {f: nat} (
-    !fixedslot__f f >> fixedslot_vt (p', t', f, rc')
-  ): #[p', t': nat]
-     #[rc': int -> int]
-     #[wi: nat | rc' wi == 0 && wi <> f && wi <> t']
-     int wi
-// implement pick_wi (fs) = ...
 
+// Possibilities:
+// (p1 == p0 && t1 == t0) ||
+// (p1 == t0 && t1 == t0) ||
+// (p1 == t0 && t1 == f)  ||
+// (p1 == f  && t1 == f)
+
+// ((p1 == p0 && t1 == t0) || (p1 == t0 && t1 == t0) || (p1 == t0 && t1 == f) || (p1 == f && t1 == f))
+
+// why can't this be done in multiple steps?
+extern fun get_triple {p,t,f: nat} {rc: int -> int} (
+    !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
+  ): @(int p, int t, int f)
+
+extern fun pick_wi {p0, t0, f: nat} {rc0: int -> int} (
+    !fixedslot_vt (p0, t0, f, rc0) >> wfixedslot_post (p0, t0, f, rc0)
+  ): #[wi: nat | wi <> p0 && wi <> f && wi <> t0]
+     int wi
+implement pick_wi (fs) = loop (fs, p1, t1, f, 0)
+where {
+
+// val f = wfilled fs
+// val p1 = wrprevious fs
+// val t1 = wrtarget fs
+val (p1, t1, f) = get_triple fs
+
+// alternatively, do this with bits
+
+fun loop {p1, t1, p0, t0, f, i: nat | ((p1 == p0 && t1 == t0) || (p1 == t0 && t1 == t0) || (p1 == t0 && t1 == f) || (p1 == f && t1 == f))}
+         {rc: int -> int} (
+      fs: !fixedslot_vt (p1, t1, f, rc) >> wfixedslot_post (p1, t1, f, rc),
+      p: int p0, t: int t0, f: int f, i: int i
+    ): [wi: nat | wi <> p0 && wi <> f && wi <> t0] int wi =
+  if f <> i then if t <> i then if p <> i then i
+                                else loop (fs, p, t, f, i + 1)
+                 else loop (fs, p, t, f, i + 1)
+  else loop (fs, p, t, f, i + 1)
+
+}
+////
 implement{a} fixedslot_write (fs, item) = let
   val wi = pick_wi (fs)
   // val _  = set_wfilling (fs, wi) // unnecessary to code

@@ -13,82 +13,95 @@ typedef bit (x: bit) = bool x
 
 // --------------------------------------------------
 
-extern fun rcount {rc: int -> int} {i: nat} (!fixedslot, int i): [j: nat | rc i == j] int j = "mac#_rcount"
-extern fun rtarget (!fixedslot): int = "mac#_rtarget"
-extern fun rprevious (!fixedslot): int = "mac#_rprevious"
-extern fun set_rprevious (!fixedslot, int): void = "mac#_set_rprevious"
-extern fun wfilled (!fixedslot): int = "mac#_wfilled"
-extern fun set_wfilled (!fixedslot, int): void = "mac#_set_wfilled"
-// extern fun set_wfilling (!fixedslot, int): void
+extern fun rcount {p, t, i: nat} {rc: int -> int}
+    (!rfixedslot (p, t, rc), int i): [j: nat | rc i == j ] int j
+  = "mac#_rcount"
 
-extern fun pick_ri (!fixedslot): int = "mac#_pick_ri"
-extern fun incr_rcount (!fixedslot, int): void = "mac#_incr_rcount"
-extern fun read_data {a: t@ype} (!fixedslot, int, &a? >> a, size_t (sizeof a)): void = "mac#_read_data"
-extern fun decr_rcount (!fixedslot, int): void = "mac#_decr_rcount"
-// extern fun r5 (!fixedslot): void
+// reader
 
-// extern fun w1 (!fixedslot): int
-// extern fun w2 (!fixedslot, int): void
-extern fun write_data {a: t@ype} (!fixedslot, int, !a, size_t (sizeof a)): void = "mac#_write_data"
-// extern fun w4 (!fixedslot, int): void
+// atomic, so 'f' remains the same before and after:
+extern fun pick_ri {p, t, f: nat} {rc: int -> int} (
+    !fixedslot_vt (p, t, f, rc) >> fixedslot_vt (p, t', f, rc)
+  ): #[t': nat | (p == t) ==> (t' == f)] [ri: int | rc ri >= 0 && ri == t'] int ri
+  = "mac#_pick_ri"
 
+extern fun rtarget {p, t: nat} {rc: int -> int}
+    (!rfixedslot (p, t, rc)): int t
+  = "mac#_rtarget"
 
-dataprop rcount_p (int) =
-  | rcount_base (0) of ()
-  | {n: nat} rcount_ind (n+1) of (rcount_p (n))
+extern fun rprevious {p, t: nat} {rc: int -> int}
+    (!rfixedslot (p, t, rc)): int p
+  = "mac#_rprevious"
 
-// This function works because all ri are equal to p or t.
-// That leaves possibly f, and another empty slot open.
+extern fun set_rprevious {i, p, t: nat} {rc: int -> int}
+    (!rfixedslot (p, t, rc) >> rfixedslot (i, t, rc), int i): void
+  = "mac#_set_rprevious"
 
-// fun pick_wi {x: nat | x < 4} {rc: int -> int | rc x == 0} (fs: !fixedslot): [wi: nat | wi == x] int wi =
-// let
-//   fun loop {i, x: nat | i <= x && x < 4} {rc: int -> int | rc x == 0} (
-//         fs: !fixedslot, f: int, i: int i
-//       ): [wi: nat | rc wi == 0] int wi =
-//     if f <> i
-//       then if rcount {rc} {i} (fs, i) = 0
-//              then i
-//              else loop {i+1,x} {rc} (fs, f, i + 1)
-//       else loop {i+1,x} {rc} (fs, f, i + 1)
-// in
-//   loop {0,x} {rc} (fs, wfilled fs, 0)
-// end
+absview read_data_v (ri: int) // ensure an incremented count is decremented
+extern fun incr_rcount {p, t: nat} {i: int} {rc: int -> int} (
+    !rfixedslot (p, t, rc) >> rfixedslot (p, t, rc'), int i
+  ): #[rc': int -> int | rc' i == rc i + 1 ] (read_data_v i | void)
+  = "mac#_incr_rcount"
 
+extern fun read_data {a: t@ype} {p, t: nat} {rc: int -> int} {ri: nat | rc ri > 0} (
+    !read_data_v ri |
+    !rfixedslot (p, t, rc) >> rfixedslot (p, t, rc), int ri, &a? >> a, size_t (sizeof a)
+  ): void
+  = "mac#_read_data"
 
-fun pick_wi {rc: int -> int} (fs: !fixedslot): [wi: nat | rc wi == 0] int wi =
+extern fun decr_rcount {p, t: nat} {i: int} {rc: int -> int | rc i > 0} (
+    read_data_v i | !rfixedslot (p, t, rc) >> rfixedslot (p, t, rc'), int i
+  ): #[rc': int -> int | rc' i == rc i - 1 ] void
+  = "mac#_decr_rcount"
+
+implement{a} fixedslot_read (fs) = let
+  var buf: a?
+  val ri = pick_ri (fs)
+  val (rd_v | ())  = incr_rcount (fs, ri)
+  val () = read_data (rd_v | fs, ri, buf, sizeof<a>)
+  val () = decr_rcount (rd_v | fs, ri)
+  val () = if rcount (fs, rprevious fs) = 0
+           then set_rprevious (fs, rtarget fs)
+           else ()
+in
+  buf
+end
+
+// writer
+
+extern fun wfilled {f: nat} (!wfixedslot f >> wfixedslot f): int f
+  = "mac#_wfilled"
+extern fun set_wfilled {f, f': nat} (!wfixedslot f >> wfixedslot f', int f'): void
+  = "mac#_set_wfilled"
+extern fun write_data {a: t@ype} {p, t, f: nat} {rc: int -> int} {wi: nat | rc wi == 0} (
+    !fixedslot_vt (p, t, f, rc) >> fixedslot_vt (p', t', f, rc'),
+    int wi, !a, size_t (sizeof a)
+  ): #[p', t': nat] #[rc': int -> int] void
+  = "mac#_write_data"
+
+fun pick_wi {p, t, f: nat} {rc: int -> int}
+    (fs: !fixedslot_vt (p, t, f, rc) >> fixedslot_vt (p', t', f, rc')
+  ): #[p', t': nat] #[rc': int -> int] [wi: nat | rc' wi == 0 && wi <> f] int wi =
 let
-  fun loop {i: nat} (
-        fs: !fixedslot, f: int, i: int i
-      ): [wi: nat | rc wi == 0] int wi =
+  fun loop {p, t, f: nat} {rc: int -> int} {i: nat} (
+        fs: !fixedslot_vt (p, t, f, rc) >> fixedslot_vt (p', t', f, rc'),
+        f: int f, i: int i
+      ): #[p', t': nat] #[rc': int -> int] [wi: nat | rc' wi == 0 && wi <> f] int wi =
     if f <> i
-      then if rcount {rc} {i} (fs, i) = 0
+      then if rcount (fs, i) = 0
              then i
              else loop (fs, f, i + 1)
       else loop (fs, f, i + 1)
 in
   loop (fs, wfilled fs, 0)
 end
-  
+
 implement{a} fixedslot_write (fs, item) = let
   val wi = pick_wi (fs)
-  // val _  = set_wfilling (fs, wi)
-  val _  = write_data (fs, wi, item, sizeof<a>)
-  val _  = set_wfilled (fs, wi)
+  // val _  = set_wfilling (fs, wi) // unnecessary to code
+  val () = write_data (fs, wi, item, sizeof<a>)
+  val () = set_wfilled (fs, wi)
 in () end
-
-////
-implement{a} fixedslot_read (fs) = let
-  var buf: a?
-  val ri = pick_ri (fs)
-  val _  = incr_rcount (fs, ri)
-  val _  = read_data (fs, ri, buf, sizeof<a>)
-  val _  = decr_rcount (fs, ri)
-  val _  = if rcount (fs, rprevious fs) = 0
-           then set_rprevious (fs, rtarget fs)
-           else ()
-in
-  buf
-end
 
 ////
 
@@ -109,6 +122,6 @@ for(i=0;i<4;i++)  // wi <- ~(p,t,f)
   if(i != f && rcount[i] == 0) {
     wi = i; break;
   }
-g <- wi
+// g <- wi // unnecessary in code
 write data[wi]
 f <- wi

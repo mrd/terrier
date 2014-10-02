@@ -14,6 +14,9 @@ staload _ = "fourslot2w.dats"
 staload "multireader.sats"
 staload _ = "multireader.dats"
 
+staload "fixedslot.sats"
+staload _ = "fixedslot.dats"
+
 extern fun hsusbhc_init(): void = "mac#hsusbhc_init"
 
 extern fun atsmain (): int = "ext#atsmain"
@@ -67,6 +70,24 @@ end // end [write_num_uart]
 
 fun do_nothing (): void = do_nothing ()
 
+fun test_fixedslot (): int = let
+  var pages: int?
+  val (opt_pf | ms) = ipcmem_get_view (1, pages)
+in
+  if ms > 0 then let
+      prval Some_v pf_ipcmem = opt_pf
+      val fs = fixedslot_initialize_writer (pf_ipcmem | ms, pages)
+      val _  = fixedslot_write<int> (fs, 42)
+      val _ = do_nothing ()
+      val (pf_ipcmem | ms) = fixedslot_free fs
+      prval _              = ipcmem_put_view pf_ipcmem
+  in 0 end else 1 where {
+      // failed to acquire ipcmem
+      prval None_v () = opt_pf
+      val _           = do_nothing ()
+    }
+end
+
 fun test_multireader (): int = let
   var pages: int?
   val (opt_pf | ms) = ipcmem_get_view (1, pages)
@@ -107,7 +128,7 @@ in
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, A)
     in
-      if s = 0 then test_multireader () where {
+      if s = 0 then test_fixedslot () where {
         prval Right_v pf_uart = pf_ipcmem
 
         (* ... *)

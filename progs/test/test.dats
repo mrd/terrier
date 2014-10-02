@@ -11,6 +11,8 @@ staload "test.sats"
 staload "ipcmem.sats"
 staload "multireader.sats"
 staload _ = "multireader.dats"
+staload "fixedslot.sats"
+staload _ = "fixedslot.dats"
 
 extern fun atsmain (): int = "ext#atsmain"
 extern fun mydelay (): void = "mac#mydelay"
@@ -19,7 +21,37 @@ extern fun printnum (_: int): void = "mac#printnum"
 
 typedef ehci_info_t = int
 
-implement atsmain () = let
+fun test_fixedslot():int = let
+  fun do_nothing (): void = do_nothing ()
+  fun loop (fs: !fixedslot >> _): void = let
+    val x = fixedslot_read<int> fs
+  in
+    if x > 40 then printnum x else loop fs
+  end // end [loop]
+
+  var pages: int?
+  val (opt_pf | ms) = ipcmem_get_view (0, pages)
+in
+  if ms > 0 then
+    let
+      prval Some_v pf_ipcmem = opt_pf
+      // fixedslot version
+      val fs = fixedslot_initialize_reader (pf_ipcmem | ms, pages)
+      val _  = loop fs
+      val (pf_ipcmem | ms) = fixedslot_free fs
+      prval _ = ipcmem_put_view pf_ipcmem
+    in
+      do_nothing (); 0
+    end else 1 where {
+    // failed to acquire ipcmem
+    prval None_v () = opt_pf
+    val _ = do_nothing ()
+  }
+end // [fun test_fixedslot]
+
+implement atsmain () = test_fixedslot ()
+
+fun atsmain2 ():int = let
   fun do_nothing (): void = do_nothing ()
   fun loop {l: addr} {n, i: nat} (
         pf_ms: !mslot_v (l, n, ehci_info_t, false, i) |

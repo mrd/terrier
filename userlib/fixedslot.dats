@@ -24,13 +24,6 @@ extern fun pick_ri {S, p, t, f: nat} {rc: int -> int} (
       [ri: int | rc' ri >= 0 && ri == t'] int ri
   = "mac#_pick_ri"
 
-// extern fun rtarget (!fixedslot >> fixedslot__t t'): #[t': nat] int t'
-//   = "mac#_rtarget"
-// extern fun rprevious (!fixedslot >> fixedslot__p p'): #[p': nat] int p'
-//   = "mac#_rprevious"
-// extern fun set_rprevious {p': nat} (!fixedslot >> fixedslot__p p', int p'): void
-//   = "mac#_set_rprevious"
-
 absview read_data_v (ri: int) // view to ensure an incremented count is decremented
 
 // thanks to S > 0 I don't have to consider that p' might become equal to t or t'
@@ -61,9 +54,6 @@ extern fun decr_rcount {i: int} {rc: int -> int | rc i > 0} (
   ): #[rc': int -> int | rc' i == rc i - 1 ] void
   = "mac#_decr_rcount"
 
-  // val () = if safety fs = 0 && rcount (fs, rprevious fs) = 0
-  //          then set_rprevious (fs, rtarget fs)
-  //          else ()
 extern fun check_previous {S, p, t, f: nat} {rc: int -> int} (
     !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f', rc')
   ): #[S', p', t', f': nat]
@@ -88,28 +78,6 @@ implement{a} fixedslot_read (fs) = buf where {
 
 // --------------------------------------------------
 // writer
-
-// the writer version knows it can preserve 'f'
-// extern fun wrcount {f: nat} {rc: int -> int} {i: nat} (
-//     !fixedslot__f_rc (f, rc) >> fixedslot__f_rc (f, rc'), int i
-//   ): #[rc': int -> int]
-//       [j: nat | rc' i == j ] int j
-//   = "mac#_rcount"
-
-// extern fun wrprevious {p,t,f: nat} {rc: int -> int} (
-//     !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
-//   ): int p
-//   = "mac#_rprevious"
-// 
-// extern fun wrtarget {p,t,f: nat} {rc: int -> int} (
-//     !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
-//   ): int t
-//   = "mac#_rtarget"
-// 
-// extern fun wfilled {p,t,f: nat} {rc: int -> int} (
-//     !fixedslot_vt (p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
-//   ): int f
-//   = "mac#_wfilled"
 
 extern fun set_wfilled {f, f': nat} (!wfixedslot f >> wfixedslot f', int f'): void
   = "mac#_set_wfilled"
@@ -181,75 +149,3 @@ implement{a} fixedslot_write (fs, item) = let
   val () = write_data (fs, wi, item, sizeof<a>)
   val () = set_wfilled (fs, wi)
 in () end
-
-//// //////////////////////////////////////////////
-extern fun pick_wi {p0, t0, f: nat} {rc0: int -> int} (
-    !fixedslot_vt (p0, t0, f, rc0) >> wfixedslot_post (p0, t0, f, rc0)
-  ): #[wi: nat | wi <> p0 && wi <> f && wi <> t0]
-     int wi
-implement pick_wi (fs) = loop (fs, p1, t1, f, 0)
-where {
-
-// val f = wfilled fs
-// val p1 = wrprevious fs
-// val t1 = wrtarget fs
-val (p1, t1, f) = get_triple fs
-
-// alternatively, do this with bits
-
-fun loop {p1, t1, p0, t0, f, i: nat | ((p1 == p0 && t1 == t0) || (p1 == t0 && t1 == t0) || (p1 == t0 && t1 == f) || (p1 == f && t1 == f))}
-         {rc: int -> int} (
-      fs: !fixedslot_vt (p1, t1, f, rc) >> wfixedslot_post (p1, t1, f, rc),
-      p: int p0, t: int t0, f: int f, i: int i
-    ): [wi: nat | wi <> p0 && wi <> f && wi <> t0] int wi =
-  if f <> i then if t <> i then if p <> i then i
-                                else loop (fs, p, t, f, i + 1)
-                 else loop (fs, p, t, f, i + 1)
-  else loop (fs, p, t, f, i + 1)
-
-}
-
-
-////
-
-
-fun pick_wi {p, t, f: nat} {rc: int -> int}
-    (fs: !fixedslot_vt (p, t, f, rc) >> fixedslot_vt (p', t', f, rc')
-  ): #[p', t': nat] #[rc': int -> int] [wi: nat | rc' wi == 0 && wi <> f && wi <> t'] int wi =
-
-  loop (fs, wfilled fs, 0) where {
-
-val t = wrtarget fs
-fun loop {p, t, f: nat} {rc: int -> int} {i: nat} (
-      fs: !fixedslot_vt (p, t, f, rc) >> fixedslot_vt (p', t', f, rc'),
-      f: int f, i: int i
-    ): #[p', t': nat] #[rc': int -> int] [wi: nat | rc' wi == 0 && wi <> f && wi <> t] int wi =
-  if f <> i then if t <> i then if wrcount (fs, i) = 0 then i
-                                else loop (fs, f, i + 1)
-                 else loop (fs, f, i + 1)
-  else loop (fs, f, i + 1)
-
-}
-
-f, g, p, t, S
-data[4]
-rcount[4]
-
-R:
-incr S
-if(p == t) t <- f
-ri <- t
-incr rcount[ri]
-decr S
-read data[ri]
-decr rcount[ri]
-if(S == 0 && rcount[p] == 0) p <- t
-
-W:
-for(i=0;i<4;i++)  // wi <- ~(p,t,f)
-  if(i != f && rcount[i] == 0) {
-    wi = i; break;
-  }
-// g <- wi // unnecessary in code
-write data[wi]
-f <- wi

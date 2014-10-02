@@ -15,22 +15,10 @@ absvtype fixedslot_vt (S: int, p: int, t: int, f: int, rc: int -> int) = ptr
 // Common shortcuts
 vtypedef fixedslot = [S, p, t, f: nat] [rc: int -> int] fixedslot_vt (S, p, t, f, rc)
 
-
-(* vtypedef rfixedslot_post (p: int, t: int, f: int, rc: int -> int) =
- *   [p', t', f': nat | ((p' == p && t' == t) || (p' == t && t' == t) || (p' == t && t' == f') || (p' == f && t' == f'))]
- *   [rc': int -> int]
- *   fixedslot_vt (p', t', f', rc') *)
-
 vtypedef rfixedslot (S: int, p: int, t: int, rc: int -> int) = [f: nat] fixedslot_vt (S, p, t, f, rc)
 
 
 vtypedef wfixedslot (f: int) = [S, p, t: nat] [rc: int -> int] fixedslot_vt (S, p, t, f, rc)
-
-// Possibilities:
-// (p1 == p0 && t1 == t0) ||
-// (p1 == t0 && t1 == t0) ||
-// (p1 == t0 && t1 == f)  ||
-// (p1 == f  && t1 == f)
 
 // Frequently used post-condition for writer steps:
 // ((p1 == p0 && t1 == t0) || (p1 == t0 && t1 == t0) || (p1 == t0 && t1 == f) || (p1 == f && t1 == f))

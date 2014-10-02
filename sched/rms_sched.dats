@@ -199,7 +199,10 @@ in if process_is_idle (p_next) then
                      arm_read_cycle_counter () - cyc_now);
        // eat some of idle time, if enough, to dump out useful statistics
        if STATS_DUMP_THRESHOLD() < ticks then begin
-         $extfcall(void, "DLOG", 1, "idling for ticks=%d\n", int_of_span ticks);
+         // FIXME: DLOG is a macro and something in ATS2 0.1.3 made this stop working
+         // $extfcall(void, "DLOG", 1, "idling for ticks=%d\n", int_of_span ticks);
+         // replacing with function call for now:
+         $extfcall(void, "debuglog", "rms_sched", 1, "idling for ticks=%d\n", int_of_span ticks);
          dump_stats ();
          dump_process_stats ()
       end

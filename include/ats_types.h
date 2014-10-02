@@ -4,6 +4,7 @@
 #include "types.h"
 #include "pats_ccomp_typedefs.h"
 #include "pats_ccomp_instrset.h"
+#include "pats_ccomp_basics.h"
 
 typedef u32 ats_bool_type, ats_uint_type;
 typedef s32 ats_int_type;
@@ -22,7 +23,7 @@ typedef void atsvoid_t0ype;
 
 #define atstyvar_type(a) atstype_var
 
-#define ATSdyncst_extfun(d2c, targs, tres) ATSglobaldec() tres d2c targs
+//#define ATSdyncst_extfun(d2c, targs, tres) ATSglobaldec() tres d2c targs
 #define ATSglobaldec() extern
 #define ATSdyncst_mac(d2c)
 

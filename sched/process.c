@@ -1057,7 +1057,7 @@ void show_program_params(void)
     process_t *p = &process[i];
     if(p->pid != NOPID) {
       u32 u = 100 * p->c / p->t;
-      DLOG(1, "  pid=%d C=%d T=%d U=%d%%\n", p->pid, p->c, p->t, u);
+      DLOG(1, "  pid=%d C=%d T=%d U=%d%% CPU=%#x\n", p->pid, p->c, p->t, u, p->affinity);
     }
   }
 }
@@ -1147,8 +1147,8 @@ void interpret_ipcmappings(void)
       rl->elt.page_count = db->elt.m.pages;
       rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
 
-      /* No cache, no buffer */
-      rl->elt.cache_buf = 0;
+      /* Yes cache, yes buffer */
+      rl->elt.cache_buf = R_C | R_B;
       /* Assume Shareability: IPC may be interprocessor */
       /* Not-Global bit is required for process-specific mappings */
       rl->elt.shared_ng = R_NG | R_S;

@@ -2,6 +2,9 @@
 
 #define ATS_STALOADFLAG 0 // no run-time staloading
 
+staload "ipcmem.sats"
+staload "either_vt.sats"
+
 %{#
 
 #include "usb.cats"
@@ -36,9 +39,37 @@ overload .set_current_td with usb_device_set_current_td
 fun usb_device_set_alt_td (!usb_device, physaddr): void
 overload .set_alt_td with usb_device_set_alt_td
 
+fun usb_device_clear_overlay_status (!usb_device): void
+overload .clear_overlay_status with usb_device_clear_overlay_status
 
+// USB device request
+absvt@ype usb_dev_req_vt = $extype "usb_dev_req_t"
+vtypedef usb_dev_req = usb_dev_req_vt
+vtypedef usb_dev_req_ptr = [v: addr] (usb_dev_req @ v | ptr v)
+vtypedef usb_dev_req_ptr (v: addr) = (usb_dev_req @ v | ptr v)
 
 // TD manip
+absvt@ype ehci_td_vt = $extype "ehci_td_t"
+vtypedef ehci_td = ehci_td_vt
+vtypedef ehci_td_ptr = [v: addr] (ehci_td @ v | ptr v)
+vtypedef ehci_td_ptr (v:addr) = (ehci_td @ v | ptr v)
+
+fun vptr_of_ehci_td (!ehci_td): [v: addr] ptr v
+//
+// linked list of TDs using views ... cons/uncons?
+//
+
+fun _ehci_td_pool_alloc (): [v: addr] (option_vt (ehci_td_ptr v, v > null)) = "mac#ehci_td_pool_alloc"
+fun _ehci_td_pool_free {v: addr} (ehci_td_ptr v): void = "mac#ehci_td_pool_free"
+fun _usb_dev_req_pool_alloc (): [v: addr] (option_vt (usb_dev_req_ptr v, v > null)) = "mac#usb_dev_req_pool_alloc"
+fun _usb_dev_req_pool_free {v: addr} (usb_dev_req_ptr v): void = "mac#usb_dev_req_pool_free"
+
+fun alloc_tds {n: nat} (& usb_dev_req_ptr? >> either_vt(usb_dev_req_ptr?, usb_dev_req_ptr, s==0),
+                        & ehci_td_ptr? >> either_vt(ehci_td_ptr?, ehci_td_ptr, s==0),
+                        int 1
+                       ): #[s: int] status s
+
+fun free_tds {n: nat} (& usb_dev_req >> usb_dev_req?, & @[ehci_td_ptr][n] >> @[ehci_td_ptr][n]?, int n): void
 
 ////
 absviewtype usb_device_vt (l: addr, n: int) = ptr l

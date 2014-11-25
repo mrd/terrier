@@ -153,6 +153,7 @@ _far_call_return:
         asm_cpu_pointer(irq_status_table)
         LDMIA   r12, {r12}^                /* r12_user = *r12, just in case of FIQ mode  */
 
+        CLREX
         MOVS    pc, lr                     /* jump to entry point, load SPSR */
 
 _vector_table_data:

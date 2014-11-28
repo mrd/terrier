@@ -77,7 +77,10 @@ in
   if ms > 0 then let
       prval Some_v pf_ipcmem = opt_pf
       val fs = fixedslot_initialize_writer (pf_ipcmem | ms, pages)
-      val _  = fixedslot_write<int> (fs, 42)
+      fun loop (fs: !fixedslot >> _, n: int): void = if n = 43 then () else loop (fs, n + 1) where {
+        val _  = fixedslot_write<int> (fs, n)
+      }
+      val _ = loop (fs, 0)
       val _ = do_nothing ()
       val (pf_ipcmem | ms) = fixedslot_free fs
       prval _              = ipcmem_put_view pf_ipcmem
@@ -133,12 +136,12 @@ in
 
         (* ... *)
         var utoken = get_uart_token_vt ()
-        val _ = write_string_uart (pf_uart | utoken, uart, "a")
-        val _ = write_string_uart (pf_uart | utoken, uart, "b")
+        //val _ = write_string_uart (pf_uart | utoken, uart, "a")
+        //val _ = write_string_uart (pf_uart | utoken, uart, "b")
 
 
         val _ = hsusbhc_init ()
-        val _ = write_string_uart (pf_uart | utoken, uart, "c")
+        //val _ = write_string_uart (pf_uart | utoken, uart, "c")
 
         val _ = put_uart_token_vt utoken
         // val _ = do_nothing ()

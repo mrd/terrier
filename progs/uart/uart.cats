@@ -7,9 +7,9 @@
 
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */
-unsigned int _scheduler_capacity = 1 << 14;
-unsigned int _scheduler_period = 2 << 14;
-unsigned int _scheduler_affinity = 2;
+unsigned int _scheduler_capacity = 1 << 10;
+unsigned int _scheduler_period = 7 << 10;
+unsigned int _scheduler_affinity = 1;
 
 typedef struct { char s[124]; } buf_t;
 
@@ -85,6 +85,7 @@ void printbuf(buf_t b)
 
 ipcmapping_t _ipcmappings[] = {
   { IPC_OFFER, "uart", IPC_READ, "fourslot2w", 1, NULL },
+  { IPC_SEEK, "ehci_info", IPC_READ, "fixedslot", 1, NULL },
   {0}
 };
 

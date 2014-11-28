@@ -1,5 +1,5 @@
-unsigned int _scheduler_capacity = 2 << 14;
-unsigned int _scheduler_period = 10 << 14;
+unsigned int _scheduler_capacity = 1 << 10;
+unsigned int _scheduler_period = 50 << 10;
 unsigned int _scheduler_affinity = 1;
 unsigned int a = 1;
 

@@ -24,9 +24,9 @@ static inline int _pick_ri (unsigned int *fs)
   register int w, status, fs0 = (int) fs;
   register int t, p, f;
   ASM("1: LDREX %[w], [%[fs]]\n"        /* load link... */
-      "ADD %[w], %[w], #1\n"            /* incr S */
       "AND %[t], %[w], #3 << 18\n"      /* t = w & (3 << 18) */
       "AND %[p], %[w], #3 << 20\n"      /* p = w & (3 << 20) */
+      "ADD %[w], %[w], #1\n"            /* incr S */
       "MOV %[p], %[p], LSR #2\n"        /* p = p >> 2 */
       "CMP %[t], %[p]\n"                /* p == t ? */
 
@@ -136,6 +136,34 @@ static inline int _intset_ffz (int s)
 #define _fixedslot_initialize_reader(x,n) x
 #define _fixedslot_initialize_writer(x,n) x
 #define _fixedslot_free(x) x
+
+#if 0
+static inline void _check_previous (unsigned int *fs)
+{
+  /* if (S == 0 && rcount[p] == 0) p = t; else p = p; */
+
+  register int t, w, status, fs0 = (int) fs;
+
+  /* FIXME: verify this */
+  { u32 w = __atomic_load_n(&fs[0], __ATOMIC_MODEL);
+    u32 p = GETBITS(w,20,2);
+    u32 rc_p = __atomic_load_n (&fs[1 + p], __ATOMIC_MODEL);
+    if (rc_p != 0) return;
+  }
+
+  ASM("1: LDREX %[w], [%[fs]]\n"        /* load link... */
+      "MOVW %[status], #0xFFFF\n"
+      "TST %[w], %[status]\n"   /* S == 0?  */
+      "BICEQ %[w], %[w], #3 << 20\n" /* if (S == 0 && rcount[p] == 0) clear bits 20:21 */
+      "ANDEQ %[t], %[w], #3 << 18\n" /* if (S == 0 && rcount[p] == 0) t = w & (3 << 18) */
+      "ORREQ %[w], %[w], %[t], LSL #2\n" /* if (...) w |= (t << 2) // because (t << 2) overwrites p */
+      "STREX %[status], %[w], [%[fs]]\n" /* ...store conditional */
+      "CMP %[status], #0\nBNE 1b"
+
+      :[w] "=r" (w), [status] "=r" (status), [t] "=r" (t):[fs] "r" (fs0):"cc"
+      );
+}
+#endif
 
 #endif
 

@@ -23,10 +23,14 @@ typedef ehci_info_t = int
 
 fun test_fixedslot():int = let
   fun do_nothing (): void = do_nothing ()
-  fun loop (fs: !fixedslot >> _): void = let
+  fun loop (fs: !fixedslot >> _, p: int): void = let
     val x = fixedslot_read<int> fs
   in
-    if x > 40 then printnum x else loop fs
+    if x > 40 then printnum x else
+      begin
+        (if x = p then () else printnum x);
+        loop (fs, x)
+      end
   end // end [loop]
 
   var pages: int?
@@ -37,7 +41,7 @@ in
       prval Some_v pf_ipcmem = opt_pf
       // fixedslot version
       val fs = fixedslot_initialize_reader (pf_ipcmem | ms, pages)
-      val _  = loop fs
+      val _  = loop (fs, 0)
       val (pf_ipcmem | ms) = fixedslot_free fs
       prval _ = ipcmem_put_view pf_ipcmem
     in

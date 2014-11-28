@@ -9,8 +9,10 @@ staload _ = "prelude/DATS/integer.dats"
 
 staload "uart.sats"
 staload "ipcmem.sats"
+staload "fixedslot.sats"
 staload "fourslot2w.sats"
 staload _ = "fourslot.dats"
+staload _ = "fixedslot.dats"
 staload _ = "fourslot2w.dats"
 
 extern fun atsmain (): int = "ext#atsmain"
@@ -18,10 +20,44 @@ extern fun mydelay (): void = "mac#mydelay"
 
 typedef buf_t = $extype "buf_t"
 extern fun printbuf (_: buf_t): void = "mac#printbuf"
+extern fun printnum (_: int): void = "mac#printnum"
 
 typedef uart_ipc_t = @(int,buf_t)
 
+fun test_fixedslot():int = let
+  fun do_nothing (): void = do_nothing ()
+  fun loop (fs: !fixedslot >> _, p: int): void = let
+    val x = fixedslot_read<int> fs
+  in
+    if x > 40 then printnum x else
+      begin
+        (if x = p then () else printnum x);
+        loop (fs, x)
+      end
+  end // end [loop]
+
+  var pages: int?
+  val (opt_pf | ms) = ipcmem_get_view (1, pages)
+in
+  if ms > 0 then
+    let
+      prval Some_v pf_ipcmem = opt_pf
+      // fixedslot version
+      val fs = fixedslot_initialize_reader (pf_ipcmem | ms, pages)
+      val _  = loop (fs, 0)
+      val (pf_ipcmem | ms) = fixedslot_free fs
+      prval _ = ipcmem_put_view pf_ipcmem
+    in
+      do_nothing (); 0
+    end else 1 where {
+    // failed to acquire ipcmem
+    prval None_v () = opt_pf
+    val _ = do_nothing ()
+  }
+end // [fun test_fixedslot]
+
 implement atsmain () = let
+  val _ = test_fixedslot ()
   fun do_nothing (): void = do_nothing ()
   fun loop {l: addr} {n: nat} (
         pf_uart: !fourslot2w_v (l, n, int, uart_ipc_t, B) |

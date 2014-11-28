@@ -45,8 +45,8 @@
 #include <pool.h>
 #include <user.h>
 
-unsigned int _scheduler_capacity = 4 << 14;
-unsigned int _scheduler_period = 15 << 14;
+unsigned int _scheduler_capacity = 1 << 10;
+unsigned int _scheduler_period = 7 << 10;
 unsigned int _scheduler_affinity = 1;
 
 mapping_t _mappings[] = {
@@ -1043,7 +1043,7 @@ void usb_device_request(usb_dev_req_t *req, u32 bmrt, u32 br, u32 wv, u32 wi, u3
 
 void NAKED ehci_irq_handler(u32 v)
 {
-  DLOG(1, "ehci_irq_handler: IRQ\n");
+  //DLOG(1, "ehci_irq_handler: IRQ\n");
   irq_state = 3;                /* Once IRQ state is 3, any interrupt
                                  * will cause the process of context
                                  * restoration to take place,

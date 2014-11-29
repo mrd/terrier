@@ -46,3 +46,12 @@
 
 %}
 
+abst@ype physaddr_t (p:addr) = int
+typedef physaddr = [p: addr] physaddr_t p
+typedef status (s:int) = int s  (* helper *)
+
+// allocate 'n' contiguous physical pages aligned to 'align' pages
+fun physical_alloc_pages (n: int, align: int, addr: &physaddr? >> physaddr_t p): #[s: int] #[p: addr | s == 0 || p == null] status s
+  = "ext#_ats_physical_alloc_pages"
+
+fun physical_free_page (addr: physaddr): void = "mac#physical_free_page"

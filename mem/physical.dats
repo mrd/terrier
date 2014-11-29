@@ -45,11 +45,9 @@ staload "./physical.sats"
 
 // prototypes for various helper functions, types and values
 
-abst@ype physaddr = int
-abst@ype status = int
-extern val nullphysaddr: physaddr = "mac#nullphysaddr"
-extern val OK: status = "mac#OK"
-extern val ENOSPACE: status = "mac#ENOSPACE"
+extern val nullphysaddr: physaddr_t null = "mac#nullphysaddr"
+extern val OK: status 0 = "mac#OK"
+extern val ENOSPACE: status 3 = "mac#ENOSPACE"
 
 extern val num_bitmaps: int = "ext#num_bitmaps"
 extern fun bitmap_num_bytes (_: int): int = "mac#bitmap_num_bytes"
@@ -110,9 +108,6 @@ in
 end // end [fun mark]
 
 (* ************************************************** *)
-
-// allocate 'n' contiguous physical pages aligned to 'align' pages
-extern fun physical_alloc_pages (n: int, align: int, addr: &physaddr? >> physaddr): status = "ext#_ats_physical_alloc_pages"
 
 implement physical_alloc_pages(n, align, addr) = let
   val (n', saved) = search (n, align, n, @(0, 0, 0), @(~1, 0, 0))

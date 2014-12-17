@@ -112,7 +112,12 @@ typedef struct {
   usb_dev_desc_t dev_desc;
 } usb_device_t;
 
+#define usb_device_clr_next_td(x) (x)->qh.next_td = EHCI_QH_PTR_T
 #define usb_device_set_next_td(x,y) (x)->qh.next_td = (y)
+
+#define usb_device_clr_current_td(x) (x)->qh.current_td = EHCI_QH_PTR_T
+
+#define usb_device_clr_alt_td(x) (x)->qh.alt_td = EHCI_QH_PTR_T
 
 
 #endif

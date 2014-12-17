@@ -7,14 +7,10 @@ staload "ipcmem.sats"
 staload "either_vt.sats"
 #include "atspre_staload.hats"
 
-
-fun ehci_detach_td(usbd: !usb_device): void =
-let
-  val td = _ehci_td_null_ptr ()
-in
-  usb_device_set_current_td (usbd, EHCI_QH_PTR_T);
-  usb_device_set_next_td (td | usbd, EHCI_QH_PTR_T);
-  usb_device_set_alt_td (usbd, EHCI_QH_PTR_T)
+fun ehci_detach_td (usbd: !usb_device): void = begin
+  usb_device_clr_current_td usbd;
+  usb_device_clr_next_td usbd;
+  usb_device_clr_alt_td usbd
 end
 
 fun ehci_attach_td {l: agz} (
@@ -27,7 +23,11 @@ let
   var paddr: physaddr
   val s = vmm_get_phys_addr (ptrcast td, paddr)
 in
-  if s = 0 then begin usb_device_set_next_td (td | usbd, paddr); td := _ehci_td_null_ptr (); 0 end else 1
+  if s = 0 then begin
+    usb_device_set_next_td (td | usbd, paddr);
+    td := _ehci_td_null_ptr ();
+    0
+  end else 1
 end
 
 implement alloc_tds (devr, tds, n (* n = 1 for the time being *) ) =

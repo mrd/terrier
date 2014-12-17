@@ -52,7 +52,7 @@ overload ptrcast with ehci_td_ptr2ptr
 castfn ehci_td_fold {l: agz} (ehci_td @ l | ptr l): ehci_td_ptr l
 castfn ehci_td_unfold {l: agz} (ehci_td_ptr l):<> (ehci_td @ l | ptr l)
 
-fun ehci_td_set_next_td (!ehci_td, physaddr): void
+fun ehci_td_set_next_td {v: agz} (ehci_td_ptr v | !ehci_td, physaddr_t v): void
 overload .set_next_td with ehci_td_set_next_td
 
 //
@@ -76,12 +76,15 @@ prfun _ehci_td_pool_free_null (ehci_td_ptr null): void = "mac#ehci_td_pool_free"
 // QH manip
 macdef EHCI_QH_PTR_T = $extval(physaddr_t null, "EHCI_QH_PTR_T")
 
-fun usb_device_set_next_td {v: agez} (ehci_td_ptr v | !usb_device, physaddr_t v): void = "mac#usb_device_set_next_td"
+fun usb_device_clr_next_td (!usb_device): void = "mac#usb_device_clr_next_td"
+fun usb_device_set_next_td {v: agz} (ehci_td_ptr v | !usb_device, physaddr_t v): void = "mac#usb_device_set_next_td"
 overload .set_next_td with usb_device_set_next_td //dev.set_next_td(paddr)
 
+fun usb_device_clr_current_td (!usb_device): void = "mac#usb_device_clr_current_td"
 fun usb_device_set_current_td (!usb_device, physaddr): void
 overload .set_current_td with usb_device_set_current_td
 
+fun usb_device_clr_alt_td (!usb_device): void = "mac#usb_device_clr_alt_td"
 fun usb_device_set_alt_td (!usb_device, physaddr): void
 overload .set_alt_td with usb_device_set_alt_td
 

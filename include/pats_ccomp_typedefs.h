@@ -1,29 +1,29 @@
-/***********************************************************************/
+/* ******************************************************************* */
 /*                                                                     */
 /*                         Applied Type System                         */
 /*                                                                     */
-/***********************************************************************/
+/* ******************************************************************* */
 
-/* (*
+/*
 ** ATS/Postiats - Unleashing the Potential of Types!
-** Copyright (C) 2011-2012 Hongwei Xi, ATS Trustful Software, Inc.
+** Copyright (C) 2011-20?? Hongwei Xi, ATS Trustful Software, Inc.
 ** All rights reserved
 **
 ** ATS is free software;  you can  redistribute it and/or modify it under
-** the terms of the GNU LESSER GENERAL PUBLIC LICENSE as published by the
-** Free Software Foundation; either version 2.1, or (at your option)  any
+** the terms of  the GNU GENERAL PUBLIC LICENSE (GPL) as published by the
+** Free Software Foundation; either version 3, or (at  your  option)  any
 ** later version.
-**
+** 
 ** ATS is distributed in the hope that it will be useful, but WITHOUT ANY
 ** WARRANTY; without  even  the  implied  warranty  of MERCHANTABILITY or
 ** FITNESS FOR A PARTICULAR PURPOSE.  See the  GNU General Public License
 ** for more details.
-**
+** 
 ** You  should  have  received  a  copy of the GNU General Public License
 ** along  with  ATS;  see the  file COPYING.  If not, please write to the
 ** Free Software Foundation,  51 Franklin Street, Fifth Floor, Boston, MA
 ** 02110-1301, USA.
-*) */
+*/
 
 /* ****** ****** */
 
@@ -119,16 +119,18 @@ typedef void* atstype_datcontyp ;
 
 /* ****** ****** */
 
-#ifndef _ATS_EXCEPTION_NONE
+#ifndef _ATS_CCOMP_EXCEPTION_NONE
 //
 typedef
 struct
 {
   int exntag ; char *exnmsg ;
 } atstype_exncon ;
-typedef atstype_exncon *atstype_exnconptr ;
 //
-#endif // end of [_ATS_EXCEPTION_NONE]
+typedef
+atstype_exncon *atstype_exnconptr ;
+//
+#endif // end of [_ATS_CCOMP_EXCEPTION_NONE]
 
 /* ****** ****** */
 /*
@@ -154,13 +156,47 @@ typedef void* atstype_cloptr ;
 #define atstkind_t0ype(tk) tk
 
 /* ****** ****** */
+//
+// HX-2014-09-16:
+// making it unusable unless
+// _ATS_ARRAY_FIELD is defined
+//
+#ifdef _ATS_ARRAY_FIELD
+#define atstyarr_field(fname) fname[]
+#else
+#define atstyarr_field(fname) atstyarr_field_undef(fname)
+#endif // end of [_ATS_ARRAY_FIELD]
+//
+/* ****** ****** */
+//
+// HX-2014-05:
+// making it not usable!!!
+//
+#ifdef _ATSTYPE_VAR_SIZE
+// HX: it is set by the user
+#else
+#define _ATSTYPE_VAR_SIZE 0X10000
+#endif // end of [#ifdef]
+//
+// HX-2014-05:
+// for 8-bit or 16-bit march,
+// _ATSTYPE_VAR_SIZE can be set to 0x100
+//
+typedef
+struct{char _[_ATSTYPE_VAR_SIZE];} atstype_var[0] ;
+//
+/* ****** ****** */
 
-typedef struct{} atstype_var ;
 #define atstyvar_type(a) atstype_var
 
 /* ****** ****** */
 
 #define atstybox_type(hit) atstype_boxed
+
+/* ****** ****** */
+
+#define atstyclo_top struct{ void *cfun; }
+#define atstyclo_type(flab) flab##__closure_t0ype
 
 /* ****** ****** */
 

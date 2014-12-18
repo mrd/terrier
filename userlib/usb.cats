@@ -119,6 +119,7 @@ typedef struct {
 
 #define usb_device_clr_alt_td(x) (x)->qh.alt_td = EHCI_QH_PTR_T
 
+#define ehci_td_set_next_td(td,vaddr,paddr) do { (td).next = (paddr); (td).nextv = (vaddr); } while (0)
 
 #endif
 

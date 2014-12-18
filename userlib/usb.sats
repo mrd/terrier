@@ -52,7 +52,7 @@ overload ptrcast with ehci_td_ptr2ptr
 castfn ehci_td_fold {l: agz} (ehci_td @ l | ptr l): ehci_td_ptr l
 castfn ehci_td_unfold {l: agz} (ehci_td_ptr l):<> (ehci_td @ l | ptr l)
 
-fun ehci_td_set_next_td {v: agz} (ehci_td_ptr v | !ehci_td, physaddr_t v): void
+fun ehci_td_set_next_td {v: agz} (!ehci_td, ehci_td_ptr v, physaddr_t v): void = "mac#ehci_td_set_next_td"
 overload .set_next_td with ehci_td_set_next_td
 
 //
@@ -92,10 +92,17 @@ fun usb_device_clear_overlay_status (!usb_device): void
 overload .clear_overlay_status with usb_device_clear_overlay_status
 
 
-fun alloc_tds {n: nat} (& usb_dev_req_ptr0 ? >> usb_dev_req_ptr l1,
-                        & ehci_td_ptr0 ? >> ehci_td_ptr l2,
-                        int 1
-                       ): #[s: int] #[l1, l2: agez | s <> 0 || (l1 > null && l2 > null)] status s
+dataprop td_chain_len (v: addr, n: int) =
+  | td_chain_fail (v, 0)
+  | td_chain_base (v, 1)
+  | {v': addr} td_chain_cons (v, n + 1) of td_chain_len (v', n)
+
+fun alloc_tds {n: nat | n > 1} (
+    & usb_dev_req_ptr0 ? >> usb_dev_req_ptr l1,
+    & ehci_td_ptr0 ? >> ehci_td_ptr l2,
+    int n
+  ): #[s, n': int] #[l1, l2: agez | s <> 0 || (l1 > null && l2 > null && n' == n)] (td_chain_len (l2, n') | status s)
+
 
 // fun free_tds {n: nat} (& usb_dev_req >> usb_dev_req?, & @[ehci_td_ptr][n] >> @[ehci_td_ptr][n]?, int n): void
 

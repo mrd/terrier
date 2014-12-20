@@ -43,6 +43,37 @@ PACKED_STRUCT(_usb_dev_req) {
 typedef struct _usb_dev_req usb_dev_req_t;
 DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 4, 64);
 
+#define USB_TYPE_DEV_DESC      0x01
+#define USB_TYPE_CFG_DESC      0x02
+#define USB_TYPE_STR_DESC      0x03
+#define USB_TYPE_IF_DESC       0x04
+#define USB_TYPE_EPT_DESC      0x05
+#define USB_TYPE_QUA_DESC      0x06
+#define USB_TYPE_SPD_CFG_DESC  0x07
+#define USB_TYPE_IF_PWR_DESC   0x08
+
+#define USB_REQ_HOST_TO_DEVICE 0
+#define USB_REQ_DEVICE_TO_HOST BIT(7)
+#define USB_REQ_TYPE_STANDARD  0
+#define USB_REQ_TYPE_CLASS     BIT(5)
+#define USB_REQ_TYPE_VENDOR    BIT(6)
+#define USB_REQ_RECIP_DEVICE   0
+#define USB_REQ_RECIP_IFACE    BIT(0)
+#define USB_REQ_RECIP_ENDPT    BIT(1)
+#define USB_REQ_RECIP_OTHER    (BIT(0) | BIT(1))
+
+#define USB_GET_STATUS           0x00
+#define USB_CLEAR_FEATURE        0x01
+#define USB_SET_FEATURE          0x03
+#define USB_SET_ADDRESS          0x05
+#define USB_GET_DESCRIPTOR       0x06
+#define USB_SET_DESCRIPTOR       0x07
+#define USB_GET_CONFIGURATION    0x08
+#define USB_SET_CONFIGURATION    0x09
+#define USB_GET_INTERFACE        0x0A
+#define USB_SET_INTERFACE        0x0B
+#define USB_SYNCH_FRAME          0x0C
+
 /*
  * USB_DEV_DESC : Standard Device Descriptor
  *
@@ -74,6 +105,10 @@ typedef struct _usb_dev_desc usb_dev_desc_t;
 #define EHCI_TD_PTR_T BIT(0)
 #define EHCI_TD_TOKEN_A BIT(7)
 #define EHCI_TD_TOKEN_H BIT(6)
+
+#define EHCI_PIDCODE_OUT   0
+#define EHCI_PIDCODE_IN    1
+#define EHCI_PIDCODE_SETUP 2
 
 /* Transfer Descriptor (section 3.5) */
 struct _ehci_td {
@@ -120,6 +155,15 @@ typedef struct {
 #define usb_device_clr_alt_td(x) (x)->qh.alt_td = EHCI_QH_PTR_T
 
 #define ehci_td_set_next_td(td,vaddr,paddr) do { (td).next = (paddr); (td).nextv = (vaddr); } while (0)
+
+static inline void _usb_device_request_fill(usb_dev_req_t *req, u32 bmrt, u32 br, u32 wv, u32 wi, u32 l)
+{
+  req->bmRequestType = bmrt;
+  req->bRequest = br;
+  req->wValue = wv;
+  req->wIndex = wi;
+  req->wLength = l;
+}
 
 #endif
 

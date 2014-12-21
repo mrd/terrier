@@ -134,6 +134,30 @@ macdef EDATA = $extval(status 5, "EDATA")
 // value (by ref) from this function, unlike C version, because otherwise
 // where does resource go?:
 
+extern castfn size_of_int {i:nat} (x: int i):<> size_t (i)
+extern castfn int_of_size {i:nat} (x: size_t i):<> int (i)
+
+macdef sizeof_usb_dev_req_vt = $extval([i: nat] int i, "sizeof(usb_dev_req_t)")
+
+fun data_stage {lstart: agz} {len: nat} {ldata: agez | len == 0 || ldata > null} {p: pidcode} (
+    fill_v: !ehci_td_filling_v (lstart, 0) >> ehci_td_filling_v (lstart, s) |
+    startTD: !ehci_td_ptr lstart,
+    curTD: &ehci_td_ptr1 >> ehci_td_optr s,
+    pid: pidcode_t p,
+    data: &ptr ldata >> ptr ldata',
+    len: &int len >> int len'
+  ): #[s: int]
+     #[ldata': agez | ldata' >= ldata]
+     #[len': nat | len' <= len]
+     status s =
+let
+  val s = ehci_td_step_fill (fill_v | startTD, curTD, pid, data, len)
+in
+  if s != OK then s
+  else if len > 0 then data_stage (fill_v | startTD, curTD, pid, data, len)
+  else s
+end
+
 implement usb_begin_control_read (usbd, devr, bmRequestType, bRequest, wValue, wIndex, wLength, data) =
 let
   var startTD: ehci_td_ptr0?
@@ -143,18 +167,33 @@ in
   if s != OK then begin
     _ehci_td_pool_free_null startTD;
     (usb_transfer_aborted | s)
-  end else let
-    var pdata: physaddr?
-    val s = vmm_get_phys_addr (data, pdata)
-  in if s != OK then begin
-    _usb_dev_req_pool_free devr;
-    devr := _usb_dev_req_null_ptr;
-    _ehci_td_pool_free startTD;
-    (usb_transfer_aborted | s)
-  end else let
+  end else let // REQUEST
+    var p1: ptr = ptrcast devr
+    var p1len: int = sizeof_usb_dev_req_vt
     var curTD: ehci_td_ptr0?
-    var remaining = wLength
-    val (fill_v | s) = ehci_td_start_fill (startTD, curTD, EHCI_PIDSetup, pdata, remaining) // FIXME supposed to be devr
+    val (fill_v | s) = ehci_td_start_fill (startTD, curTD, EHCI_PIDSetup, p1, p1len)
+  in if s != OK then begin
+    ehci_td_abort_fill (fill_v | startTD);
+    _usb_dev_req_pool_free devr;
+    devr := _usb_dev_req_null_ptr;
+    _ehci_td_pool_free startTD;
+    _ehci_td_pool_free_null curTD;
+    (usb_transfer_aborted | s)
+  end else let // DATA
+    var p2: ptr = data
+    var p2len: int = wLength
+    val s = data_stage (fill_v | startTD, curTD, EHCI_PIDIn, p2, p2len)
+  in if s != OK then begin
+    ehci_td_abort_fill (fill_v | startTD);
+    _usb_dev_req_pool_free devr;
+    devr := _usb_dev_req_null_ptr;
+    _ehci_td_pool_free startTD;
+    _ehci_td_pool_free_null curTD;
+    (usb_transfer_aborted | s)
+  end else let // STATUS
+    var p3: ptr = the_null_ptr
+    var p3len: int = 0
+    val s = ehci_td_step_fill (fill_v | startTD, curTD, EHCI_PIDIn, p3, p3len)
   in if s != OK then begin
     ehci_td_abort_fill (fill_v | startTD);
     _usb_dev_req_pool_free devr;
@@ -163,15 +202,6 @@ in
     _ehci_td_pool_free_null curTD;
     (usb_transfer_aborted | s)
   end else let
-    val s = ehci_td_step_fill (fill_v | startTD, curTD, EHCI_PIDIn, pdata, remaining)
-  in if s != OK then begin
-    ehci_td_abort_fill (fill_v | startTD);
-    _usb_dev_req_pool_free devr;
-    devr := _usb_dev_req_null_ptr;
-    _ehci_td_pool_free startTD;
-    _ehci_td_pool_free_null curTD;
-    (usb_transfer_aborted | s)
-  end else let // FIXME how to handle STATUS stage?
     val (filled_v | ()) = ehci_td_complete_fill (fill_v | startTD, curTD)
     val (xfer_v | ()) = usb_device_attach (chain_p, filled_v | usbd, startTD)
   in

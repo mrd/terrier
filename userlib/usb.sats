@@ -203,23 +203,21 @@ absview ehci_td_filling_v (lstart: addr, status: int)
 
 // begin process of filling TDs
 fun ehci_td_start_fill {lstart, ldata: agz} {p: pidcode} {len: nat} (
-    !ehci_td_ptr lstart, &ehci_td_ptr0? >> ehci_td_optr s, pidcode_t p, &physaddr_t ldata >> physaddr_t ldata', &int len >> int len'
+    !ehci_td_ptr lstart, &ehci_td_ptr0? >> ehci_td_optr s, pidcode_t p, &ptr ldata >> ptr ldata', &int len >> int len'
   ): #[s: int]
      #[len': nat]
      #[ldata': agz | ldata' >= ldata]
       //[p': pidcode | (p == PIDSetup && (p' == PIDOut || p' == PIDIn)) || (p == PIDIn && p' == PIDOut) || (p == PIDOut && p' == PIDIn) ]
-      [p': pidcode]
       (ehci_td_filling_v (lstart, s) | status s)
 
 // another step in the filling process
-fun ehci_td_step_fill {lstart, lcur, ldata: agz} {p: pidcode} {len: nat} (
+fun ehci_td_step_fill {lstart, lcur: agz} {p: pidcode} {len: nat} {ldata: agez | len == 0 || ldata > null} (
     !ehci_td_filling_v (lstart, 0) >> ehci_td_filling_v (lstart, s) |
-    !ehci_td_ptr lstart, &ehci_td_ptr lcur >> ehci_td_optr s, pidcode_t p, &physaddr_t ldata >> physaddr_t ldata', &int len >> int len'
+    !ehci_td_ptr lstart, &ehci_td_ptr lcur >> ehci_td_optr s, pidcode_t p, &ptr ldata >> ptr ldata', &int len >> int len'
   ): #[s: int]
-     #[len': nat]
-     #[ldata': agz | ldata' >= ldata]
+     #[len': nat | len' <= len]
+     #[ldata': agez | ldata' >= ldata]
      //#[p': pidcode | (p == PIDIn && p' == PIDOut) || (p == PIDOut && p' == PIDIn) ]
-     #[p': pidcode]
      status s
 
 // successful completion of fill

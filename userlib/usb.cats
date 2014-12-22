@@ -2,7 +2,6 @@
 #define _USERLIB_USB_CATS_
 
 #include "ats_types.h"
-//#include "ats_basics.h"
 #include "pats_ccomp_basics.h"
 #include "pats_ccomp_typedefs.h"
 #include "types.h"
@@ -115,6 +114,15 @@ typedef struct _ehci_td ehci_td_t;
 /* memory pool of TDs for dynamic alloc */
 DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 16, 64);
 
+static inline void ehci_td_chain_free(ehci_td_t *td)
+{
+  while(td != NULL) {
+    ehci_td_t *next = td->nextv;
+    ehci_td_pool_free(td);
+    td = next;
+  }
+}
+
 #define EHCI_QH_PTR_MASK (~BITMASK(5, 0))
 #define EHCI_QH_PTR_T BIT(0)
 
@@ -134,16 +142,44 @@ typedef struct _ehci_qh ehci_qh_t;
 
 typedef struct {
   ehci_qh_t qh;
+  ehci_td_t *attached;          /* currently attached TD chain if exists */
   u32 address;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
 
-#define usb_device_clr_next_td(x) (x)->qh.next_td = EHCI_QH_PTR_T
-#define usb_device_set_next_td(x,y) (x)->qh.next_td = (y)
+static inline void *usb_acquire_device(int i)
+{
+  usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
+  usbd->qh.current_td = EHCI_QH_PTR_T;
+  usbd->qh.next_td = EHCI_QH_PTR_T;
+  usbd->qh.alt_td = EHCI_QH_PTR_T;
+  return (void *) usbd;
+}
 
+#define usb_release_device(usbd)
+
+static inline void *usb_device_clr_next_td(void *_usbd)
+{
+  usb_device_t *usbd = (usb_device_t *) _usbd;
+  (usbd)->qh.next_td = EHCI_QH_PTR_T;
+  return (void *) usbd->attached;
+}
+#define usb_device_set_next_td(usbd,virt,phys) do { (usbd)->qh.next_td = (phys); (usbd)->attached = (virt); } while (0)
 #define usb_device_clr_current_td(x) (x)->qh.current_td = EHCI_QH_PTR_T
-
+#define usb_device_clr_overlay_status(x) (x)->qh.overlay[0] = 0
 #define usb_device_clr_alt_td(x) (x)->qh.alt_td = EHCI_QH_PTR_T
+
+static inline ehci_td_t *usb_device_detach(usb_device_t *usbd)
+{
+  usbd->qh.current_td = EHCI_QH_PTR_T;
+  usbd->qh.next_td = EHCI_QH_PTR_T;
+  usbd->qh.alt_td = EHCI_QH_PTR_T;
+  ehci_td_t *td = usbd->attached;
+  usbd->attached = NULL;
+  return td;
+}
+
+/* ************************************************** */
 
 #define ehci_td_set_next_td(td,vaddr,paddr) do { (td).next = (paddr); (td).nextv = (vaddr); } while (0)
 
@@ -155,6 +191,48 @@ static inline void _usb_device_request_fill(usb_dev_req_t *req, u32 bmrt, u32 br
   req->wIndex = wi;
   req->wLength = l;
 }
+
+#define _set_td_buf(td,i,paddr) ((ehci_td_t *) td)->buf[(i)] = (paddr)
+
+static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
+{
+  u32 addr = *((u32 *) _addr);
+  s32 len =  *((s32 *) _len);
+  u32 next = (addr & (~(PAGE_SIZE - 1))) + PAGE_SIZE;
+  len -= next - addr;
+  addr = next;
+  *((u32 *) _addr) = addr;
+  *((u32 *) _len) = (len < 0 ? 0 : len);
+}
+
+#define _clear_td(td) do { memset((td), 0, 1<<5); (td)->next = EHCI_TD_PTR_T; (td)->nextv = NULL; } while (0)
+#define _setup_td(td,bytes,ioc,cpage,errcnt,pid,active) do {    \
+    ((ehci_td_t *)(td))->alt_next = EHCI_TD_PTR_T;              \
+    ((ehci_td_t *)(td))->token =                                \
+      /* total bytes to transfer */                             \
+      SETBITS((bytes), 16, 15) |                                \
+      /* interrupt-on-complete */                               \
+      ((ioc) ? BIT(15) : 0) |                                   \
+      /* current page */                                        \
+      SETBITS((cpage), 12, 3) |                                 \
+      /* error counter */                                       \
+      SETBITS((errcnt), 10, 2) |                                \
+      /* token: PID code: 0=OUT 1=IN 2=SETUP */                 \
+      SETBITS((pid), 8, 2) |                                    \
+      /* status: active */                                      \
+      ((active) ? BIT(7) : 0) |                                 \
+      0;                                                        \
+  } while(0)
+
+/* ************************************************** */
+/* EHCI TD traversals */
+
+#define ehci_td_traversal_null0(td) NULL
+#define ehci_td_traversal_null1(td, trav) NULL
+#define ehci_td_traversal_start(td) td
+#define ehci_td_traversal_next(trav,td) do { (*((ehci_td_t **)trav))->nextv = (td); (*((ehci_td_t **)trav)) = (td); } while (0)
+
+/* ************************************************** */
 
 #endif
 

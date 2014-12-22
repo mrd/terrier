@@ -10,19 +10,10 @@
 #include <pool.h>
 #include "mem/virtual.h"
 #include "integer.cats"
+#include "pointer.cats"
 
 #define atsrefarg0_type(hit) hit
 #define atsrefarg1_type(hit) atstype_ref
-
-ATSinline()
-atstype_bool
-atspre_gt_ptr_intz
-  (atstype_ptr p, atstype_int _)
-{
-  return (p > 0 ? atsbool_true : atsbool_false) ;
-} // end of [atspre_gt_ptr_intz]
-#define atspre_gt_ptr0_intz atspre_gt_ptr_intz
-#define atspre_gt_ptr1_intz atspre_gt_ptr_intz
 
 extern ipcmapping_t _ipcmappings[];
 

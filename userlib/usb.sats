@@ -4,6 +4,7 @@
 
 staload "ipcmem.sats"
 staload "either_vt.sats"
+staload "prelude/SATS/status.sats"
 
 %{#
 

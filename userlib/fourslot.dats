@@ -3,6 +3,7 @@
 #define ATS_DYNLOADFLAG 0
 
 staload "ipcmem.sats"
+staload "prelude/SATS/status.sats"
 staload "fourslot.sats"
 
 // implication

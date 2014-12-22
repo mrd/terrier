@@ -4,7 +4,8 @@
 
 staload "usb.sats"
 staload "ipcmem.sats"
-staload "either_vt.sats"
+staload "prelude/SATS/status.sats"
+staload UN = "prelude/SATS/unsafe.sats"
 #include "atspre_staload.hats"
 
 fun ehci_detach_td (usbd: !usb_device): void = begin

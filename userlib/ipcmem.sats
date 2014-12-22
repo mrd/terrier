@@ -12,8 +12,6 @@
 dataview either_view_bool_view (a:view+, b:view+, bool) = Left_v (a, b, false) of a | Right_v (a, b, true) of b
 stadef either_v = either_view_bool_view
 
-typedef status (s:int) = int s  (* helper *)
-
 absview ipcmem_v (l: addr, pages: int)
 
 fun ipcmem_get_view (id: int, pages: &int? >> int pages): #[pages:nat] [l:addr] (option_v (ipcmem_v (l, pages), l > null) | ptr l)

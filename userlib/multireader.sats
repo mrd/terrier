@@ -13,6 +13,7 @@
 
 
 staload "ipcmem.sats"
+staload "prelude/SATS/status.sats"
 
 // implication
 infix ==>

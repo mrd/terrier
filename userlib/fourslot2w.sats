@@ -11,6 +11,7 @@
 %}
 
 staload "ipcmem.sats"
+staload "prelude/SATS/status.sats"
 
 // define "A" and "B" 'sides' to every fourslot2w
 sortdef fourslot2w_side = int

@@ -11,6 +11,7 @@
 %}
 
 staload "ipcmem.sats"
+staload "prelude/SATS/status.sats"
 
 absview fourslot_v (l: addr, n: int, a: t@ype, w: bool)
 prfun fourslot_ipc_free {l:addr} {pages:nat} {a:t@ype} {w:bool} (_: fourslot_v (l, pages, a, w)): ipcmem_v (l, pages)

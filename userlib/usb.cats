@@ -7,7 +7,7 @@
 #include "types.h"
 #include <user.h>
 #include <pool.h>
-#include "mem/virtual.h"
+#include "virtual.h"
 #include "integer.cats"
 #include "pointer.cats"
 

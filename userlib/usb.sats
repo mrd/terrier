@@ -3,7 +3,6 @@
 #define ATS_STALOADFLAG 0 // no run-time staloading
 
 staload "ipcmem.sats"
-staload "either_vt.sats"
 staload "prelude/SATS/status.sats"
 
 %{#

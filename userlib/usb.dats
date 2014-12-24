@@ -8,6 +8,13 @@ staload "prelude/SATS/status.sats"
 staload UN = "prelude/SATS/unsafe.sats"
 #include "atspre_staload.hats"
 
+%{^
+
+#include "usb-internals.cats"
+
+%}
+
+
 // Attach and activate a TD chain
 implement usb_device_attach (filled_v | usbd, td, paddr) =
 begin
@@ -163,7 +170,7 @@ let
 in
   // flattened if-then-else statements to avoid nesting
   if s != OK then begin
-    ehci_td_free_null startTD;
+    let prval _ = ehci_td_free_null startTD in end;
     (usb_transfer_aborted | s)
   end else let // REQUEST
     var p1: ptr = ptrcast devr
@@ -171,33 +178,33 @@ in
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
   in if s != OK then begin
-    ehci_td_abort_fill (fill_v, startTD);
+    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
     usb_dev_req_pool_free devr;
     devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    ehci_td_traversal_free_null trav;
+    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // DATA
     var p2: ptr = data
     var p2len: int = wLength
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDIn, p2, p2len)
   in if s != OK then begin
-    ehci_td_abort_fill (fill_v, startTD);
+    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
     usb_dev_req_pool_free devr;
     devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    ehci_td_traversal_free_null trav;
+    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // STATUS
     var p3: ptr = the_null_ptr
     var p3len: int = 0
     val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDIn, p3, p3len)
   in if s != OK then begin
-    ehci_td_abort_fill (fill_v, startTD);
+    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
     usb_dev_req_pool_free devr;
     devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    ehci_td_traversal_free_null trav;
+    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)

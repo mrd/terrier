@@ -40,8 +40,9 @@ overload ptrcast with usb_dev_req_ptr2ptr
 
 fun usb_dev_req_pool_alloc (): usb_dev_req_ptr0 = "mac#usb_dev_req_pool_alloc"
 fun usb_dev_req_pool_free (usb_dev_req_ptr1): void = "mac#usb_dev_req_pool_free"
+fun usb_dev_req_pool_free_ref (!usb_dev_req_ptr1 >> usb_dev_req_ptr1?): void = "mac#usb_dev_req_pool_free"
 macdef usb_dev_req_null_ptr = $extval(usb_dev_req_ptr null, "NULL")
-prfun usb_dev_req_pool_free_null (usb_dev_req_ptr null): void = "mac#usb_dev_req_pool_free"
+prfun usb_dev_req_pool_free_null (usb_dev_req_ptr null): void
 
 
 // EHCI TD viewtype
@@ -129,13 +130,13 @@ fun usb_device_request_allocate (
 datatype usb_RequestType_dir = HostToDevice | DeviceToHost
 datatype usb_RequestType_type = Standard | Class | Vendor
 datatype usb_RequestType_receipt = Device | Iface | Endpoint | Other
-fun make_RequestType (usb_RequestType_dir, usb_RequestType_type, usb_RequestType_receipt): usb_RequestType_t
+fun make_RequestType (usb_RequestType_dir, usb_RequestType_type, usb_RequestType_receipt): usb_RequestType_t = "mac#make_RequestType"
 
 datatype usb_Request =
   GetStatus | ClearFeature | _Invalid_bRequest1 | SetFeature | _Invalid_bRequest2 |
   SetAddress | GetDescriptor | SetDescriptor | GetConfiguration | SetConfiguration |
   GetInterface | SetInterface | SynchFrame
-fun make_Request (usb_Request): usb_Request_t
+fun make_Request (usb_Request): usb_Request_t = "mac#make_Request"
 
 // second byte in wValue specifies descriptor type for GetDescriptor
 macdef USB_TYPE_DEV_DESC = 1

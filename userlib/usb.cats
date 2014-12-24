@@ -31,7 +31,7 @@ PACKED_STRUCT(_usb_dev_req) {
   PACKED_FIELD(u16, wLength);
 } PACKED_END;
 typedef struct _usb_dev_req usb_dev_req_t;
-DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 4, 64);
+POOL_PROTO(usb_dev_req, usb_dev_req_t);
 
 #define USB_TYPE_DEV_DESC      0x01
 #define USB_TYPE_CFG_DESC      0x02
@@ -64,6 +64,11 @@ DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 4, 64);
 #define USB_SET_INTERFACE        0x0B
 #define USB_SYNCH_FRAME          0x0C
 
+#define make_Request(x) ((u32) (x))
+
+#define make_RequestType(x,y,z) (SETBITS(((u32) (x)),7,1) | SETBITS(((u32) (y)),5,2) | SETBITS(((u32) (z)),0,5))
+
+#if 0
 /*
  * USB_DEV_DESC : Standard Device Descriptor
  *
@@ -89,7 +94,7 @@ PACKED_STRUCT(_usb_dev_desc)
   PACKED_FIELD(u8  ,bNumConfigurations);
 } PACKED_END;
 typedef struct _usb_dev_desc usb_dev_desc_t;
-
+#endif
 
 #define EHCI_TD_PTR_MASK (~BITMASK(5, 0))
 #define EHCI_TD_PTR_T BIT(0)
@@ -110,9 +115,7 @@ struct _ehci_td {
   struct _ehci_td *nextv;
 } __attribute__((aligned (32)));
 typedef struct _ehci_td ehci_td_t;
-
-/* memory pool of TDs for dynamic alloc */
-DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 16, 64);
+POOL_PROTO (ehci_td, ehci_td_t);
 
 static inline void ehci_td_chain_free(ehci_td_t *td)
 {
@@ -149,11 +152,12 @@ typedef struct {
 
 static inline void *usb_acquire_device(int i)
 {
+  /* FIXME: more comprehensive way of picking ipc mappings */
   usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
-  usbd->qh.current_td = EHCI_QH_PTR_T;
-  usbd->qh.next_td = EHCI_QH_PTR_T;
-  usbd->qh.alt_td = EHCI_QH_PTR_T;
-  return (void *) usbd;
+  usbd[i].qh.current_td = EHCI_QH_PTR_T;
+  usbd[i].qh.next_td = EHCI_QH_PTR_T;
+  usbd[i].qh.alt_td = EHCI_QH_PTR_T;
+  return (void *) &usbd[i];
 }
 
 #define usb_release_device(usbd)

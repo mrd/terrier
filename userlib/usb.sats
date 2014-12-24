@@ -172,7 +172,7 @@ macdef EHCI_PIDOut   = $extval(pidcode_t PIDOut,   "EHCI_PIDCODE_OUT")
 
 // tracking process of filling TDs
 dataview ehci_td_filling_v (lstart: addr, status: int, nTDs: int) =
-  | {s: int | s != 0} ehci_td_filling_abort (lstart, s, nTDs) of ehci_td_filling_v (lstart, status, nTDs)
+  | {s: int} ehci_td_filling_abort (lstart, status, nTDs) of ehci_td_filling_v (lstart, s, nTDs)
   | ehci_td_filling_start (lstart, 0, 1)
   | {n: nat} ehci_td_filling_step (lstart, 0, n + 1) of ehci_td_filling_v (lstart, 0, n)
 
@@ -207,8 +207,8 @@ fun ehci_td_step_fill {lstart: agz} {p: pidcode} {nTDs, len: nat} {ldata: agez |
     pidcode_t p,
     &ptr ldata >> ptr ldata',
     &int len >> int len'
-  ): //#[s, step: int | (s <> 0 || step == 1) && (s == 0 || step == 0)]
-     #[s, nTDs': int | nTDs' >= nTDs]
+  ): #[s: int]
+     #[nTDs': int | (s <> 0 || nTDs' == nTDs + 1) && (s == 0 || nTDs' == nTDs)]
      #[len': nat | len' <= len]
      #[ldata': agez | ldata' >= ldata]
      status s
@@ -226,17 +226,17 @@ prfun ehci_td_abort_fill {lstart: agz} {nTDs: nat} {s: int | s <> 0} (
     ehci_td_filling_v (lstart, s, nTDs), !ehci_td_ptr lstart
   ): void
 
-// USB operations (FIXME: to be impl)
-fun usb_transfer_completed {i, nTDs: nat} (usb_transfer_status i | !usb_device_vt (i, nTDs, false)): void
+// USB operations
+fun usb_transfer_completed {i, nTDs: nat} (usb_transfer_status i | !usb_device_vt (i, nTDs, false)): void = "mac#usb_transfer_completed"
 
-fun usb_transfer_chain_active {i, nTDs: nat} (
+fun usb_transfer_chain_active {i, nTDs: nat | nTDs > 0} (
     !usb_transfer_status i |
     !usb_device_vt (i, nTDs, true) >> usb_device_vt (i, nTDs, active)
-  ): #[s: int] #[active: bool | (s == 0) <> active] status s
+  ): #[s: int] #[active: bool | (s == 0) <> active] status s = "mac#usb_transfer_chain_active"
 
-fun usb_transfer_status {i, nTDs: nat} (
+fun usb_transfer_status {i, nTDs: nat | nTDs > 0} (
     !usb_device_vt (i, nTDs, false)
-  ): [s: int] status s
+  ): [s: int] status s = "mac#usb_transfer_status"
 
 // USB control operations
 // control read

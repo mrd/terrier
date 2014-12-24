@@ -233,6 +233,42 @@ static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
 #define ehci_td_traversal_next(trav,td) do { (*((ehci_td_t **)trav))->nextv = (td); (*((ehci_td_t **)trav)) = (td); } while (0)
 
 /* ************************************************** */
+/* USB transfer */
+
+#define usb_transfer_completed(d)
+
+static inline status usb_transfer_chain_active(usb_device_t *usbd)
+{
+  ehci_td_t *td = usbd->attached;
+  while(td != NULL) {
+    if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
+      return EINVALID;          /* not active */
+    if((td->token & EHCI_TD_TOKEN_H) != 0)
+      return EINVALID;          /* halted */
+
+    if((td->next & EHCI_TD_PTR_T) == 1)
+      break;                    /* done */
+    td = (ehci_td_t *) td->nextv;
+  }
+  return OK;
+}
+
+static inline status usb_transfer_status(usb_device_t *usbd)
+{
+  ehci_td_t *td = usbd->attached;
+  while(td != NULL) {
+    if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
+      return OK;                /* not active */
+    if((td->token & EHCI_TD_TOKEN_H) != 0)
+      return EDATA;             /* halted */
+
+    if((td->next & EHCI_TD_PTR_T) == 1)
+      break;                    /* done */
+    td = (ehci_td_t *) td->nextv;
+  }
+  return EINCOMPLETE;
+}
+
 
 #endif
 

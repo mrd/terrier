@@ -92,7 +92,7 @@ fun usb_device_set_next_td {v: agz} {i, n: nat | n > 0} (
     physaddr_t v
   ): (usb_transfer_status i | void)
   = "mac#usb_device_set_next_td"
-overload .set_next_td with usb_device_set_next_td //dev.set_next_td(paddr)
+overload .set_next_td with usb_device_set_next_td
 
 fun usb_device_clr_current_td (!usb_device): void = "mac#usb_device_clr_current_td"
 overload .clr_current_td with usb_device_clr_current_td
@@ -233,7 +233,7 @@ fun usb_transfer_completed {i, nTDs: nat} (usb_transfer_status i | !usb_device_v
 fun usb_transfer_chain_active {i, nTDs: nat | nTDs > 0} (
     !usb_transfer_status i |
     !usb_device_vt (i, nTDs, true) >> usb_device_vt (i, nTDs, active)
-  ): #[s: int] #[active: bool | (s == 0) <> active] status s = "mac#usb_transfer_chain_active"
+  ): #[s: int] #[active: bool | (s == 0) == active] status s = "mac#usb_transfer_chain_active"
 
 fun usb_transfer_status {i, nTDs: nat | nTDs > 0} (
     !usb_device_vt (i, nTDs, false)

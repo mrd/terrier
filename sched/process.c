@@ -1147,8 +1147,11 @@ void interpret_ipcmappings(void)
       rl->elt.page_count = db->elt.m.pages;
       rl->elt.page_size_log2 = PAGE_SIZE_LOG2;
 
-      /* Yes cache, yes buffer */
-      rl->elt.cache_buf = R_C | R_B;
+      if(db->elt.m.flags & IPC_DEVICEMEM) /* Device memory = nocache (atomic ops might not work) */
+        rl->elt.cache_buf = R_B;
+      else                      /* regular IPC memory = cache/buffer for atomic ops */
+        rl->elt.cache_buf = R_C | R_B;
+
       /* Assume Shareability: IPC may be interprocessor */
       /* Not-Global bit is required for process-specific mappings */
       rl->elt.shared_ng = R_NG | R_S;

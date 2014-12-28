@@ -83,7 +83,8 @@ ats_bool_type atspre_pgt(const ats_ptr_type p1, const ats_ptr_type p2) {
 ipcmapping_t _ipcmappings[] = {
   { IPC_SEEK, "uart", IPC_WRITE, "fourslot2w", 1, NULL },
   { IPC_OFFER, "ehci_info", IPC_WRITE, "fixedslot", 1, NULL },
-  { IPC_OFFER, "ehci_usbdevices", (IPC_READ | IPC_WRITE | IPC_ALWAYSALLOC), "usbdevices", 1, NULL }, /* IPC memory = no cache, no buffer */
+  /* IPC_DEVICEMEM flag = no cache, no buffer */
+  { IPC_OFFER, "ehci_usbdevices", (IPC_READ | IPC_WRITE | IPC_ALWAYSALLOC | IPC_DEVICEMEM), "usbdevices", 1, NULL },
   { IPC_OFFER, "net", IPC_READ, "fourslot", 1, NULL },
   {0}
 };

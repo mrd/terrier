@@ -74,6 +74,7 @@ typedef struct {
 #define IPC_READ 1
 #define IPC_WRITE 2
 #define IPC_ALWAYSALLOC 4
+#define IPC_DEVICEMEM 8
   u32 flags;
   char *proto;
   u32 pages;

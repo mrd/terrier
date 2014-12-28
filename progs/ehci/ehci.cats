@@ -787,7 +787,8 @@ static status usb_root_port_enabled(usb_port_t *p)
 
 typedef struct {
   ehci_qh_t qh;
-  u32 address;
+  ehci_td_t *attached;          /* currently attached TD chain if exists */
+  u32 address, flags;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
 
@@ -796,7 +797,8 @@ IPC_POOL_DEFN(usb_device,usb_device_t,8);
 
 void usb_clear_device(usb_device_t *d)
 {
-  d->address = 0;
+  d->address = d->flags = 0;
+  d->attached = NULL;
   d->dev_desc.bMaxPacketSize0 = 8; /* default */
 }
 
@@ -1457,7 +1459,12 @@ status ehci_setup_new_device(usb_device_t *usbd)
   dump_usb_dev_desc(&usbd->dev_desc);
 
   /* FIXME: for now */
-  return probe_hub(usbd);
+  status s = probe_hub(usbd);
+  if(s == OK) return s;
+
+  DLOG(1, "ehci_setup_new_device: addr=%d is unknown device ready to be used\n", new_addr);
+  usbd->flags |= 1;        /* ready */
+  return OK;
 }
 
 /* use queue head to enumerate a USB device available on port */

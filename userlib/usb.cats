@@ -68,7 +68,6 @@ POOL_PROTO(usb_dev_req, usb_dev_req_t);
 
 #define make_RequestType(x,y,z) (SETBITS(((u32) (x)),7,1) | SETBITS(((u32) (y)),5,2) | SETBITS(((u32) (z)),0,5))
 
-#if 0
 /*
  * USB_DEV_DESC : Standard Device Descriptor
  *
@@ -94,7 +93,6 @@ PACKED_STRUCT(_usb_dev_desc)
   PACKED_FIELD(u8  ,bNumConfigurations);
 } PACKED_END;
 typedef struct _usb_dev_desc usb_dev_desc_t;
-#endif
 
 #define EHCI_TD_PTR_MASK (~BITMASK(5, 0))
 #define EHCI_TD_PTR_T BIT(0)
@@ -143,12 +141,14 @@ typedef struct _ehci_qh ehci_qh_t;
 
 /* ************************************************** */
 
+/* same as in ehci.cats */
 typedef struct {
   ehci_qh_t qh;
   ehci_td_t *attached;          /* currently attached TD chain if exists */
-  u32 address;
+  u32 address, flags;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
+
 
 static inline void *usb_acquire_device(int i)
 {

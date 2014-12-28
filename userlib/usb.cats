@@ -168,10 +168,10 @@ static inline void *usb_device_clr_next_td(void *_usbd)
   (usbd)->qh.next_td = EHCI_QH_PTR_T;
   return (void *) usbd->attached;
 }
-#define usb_device_set_next_td(usbd,virt,phys) do { (usbd)->qh.next_td = (phys); (usbd)->attached = (virt); } while (0)
 #define usb_device_clr_current_td(x) (x)->qh.current_td = EHCI_QH_PTR_T
 #define usb_device_clr_overlay_status(x) (x)->qh.overlay[0] = 0
 #define usb_device_clr_alt_td(x) (x)->qh.alt_td = EHCI_QH_PTR_T
+#define usb_device_set_next_td(usbd,virt,phys) do { (usbd)->qh.next_td = (phys); (usbd)->attached = (virt); } while (0)
 
 static inline ehci_td_t *usb_device_detach(usb_device_t *usbd)
 {
@@ -234,7 +234,11 @@ static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
 #define ehci_td_traversal_null0(td) NULL
 #define ehci_td_traversal_null1(td, trav) NULL
 #define ehci_td_traversal_start(td) td
-#define ehci_td_traversal_next(trav,td) do { (*((ehci_td_t **)trav))->nextv = (td); (*((ehci_td_t **)trav)) = (td); } while (0)
+#define ehci_td_traversal_next(trav,td,phys) do {       \
+    (*((ehci_td_t **)(trav)))->nextv = (td);            \
+    (*((ehci_td_t **)(trav)))->next = (phys);           \
+    (*((ehci_td_t **)(trav))) = (td);                   \
+  } while (0)
 
 /* ************************************************** */
 /* USB transfer */
@@ -272,6 +276,7 @@ static inline status usb_transfer_status(usb_device_t *usbd)
   }
   return EINCOMPLETE;
 }
+
 
 
 #endif

@@ -118,8 +118,8 @@ in
     end
   else let
     val len0 = len
-    val () = clear_td startTD
-    val s = setup_td_buffers (startTD, 0, data, len)
+    val () = clear_td td
+    val s = setup_td_buffers (td, 0, data, len)
     val bytes = len0 - len
   in
     if s != OK then begin // setup td buffers failed
@@ -127,11 +127,21 @@ in
       trav := ehci_td_traversal_null1 (startTD, trav);
       fill_v := ehci_td_filling_abort fill_v;
       s
-    end else begin
-      setup_td (startTD, bytes, true, 0, 3, pid, true);
-      ehci_td_traversal_next (trav, td);
-      fill_v := ehci_td_filling_step fill_v;
-      OK
+    end else let
+      var paddr: physaddr
+      val s = vmm_get_phys_addr (ptrcast td, paddr)
+    in
+      if s != OK then begin // vmm_get_phys_addr failed
+        ehci_td_chain_free td;
+        trav := ehci_td_traversal_null1 (startTD, trav);
+        fill_v := ehci_td_filling_abort fill_v;
+        s
+      end else begin // success
+        setup_td (td, bytes, true, 0, 3, pid, true);
+        ehci_td_traversal_next (trav, td, paddr);
+        fill_v := ehci_td_filling_step fill_v;
+        OK
+      end
     end
   end
 end
@@ -198,7 +208,7 @@ in
   end else let // STATUS
     var p3: ptr = the_null_ptr
     var p3len: int = 0
-    val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDIn, p3, p3len)
+    val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDOut, p3, p3len)
   in if s != OK then begin
     let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
     usb_dev_req_pool_free devr;
@@ -211,7 +221,7 @@ in
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
   in if s != OK then begin // failed phys addr lookup
-    ehci_td_flush_fill (filled_v);
+    let prval _ = ehci_td_flush_fill (filled_v) in end;
     usb_dev_req_pool_free devr;
     devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;

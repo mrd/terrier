@@ -15,6 +15,8 @@ staload "prelude/SATS/status.sats"
 // USB device
 absvtype usb_device_vt (i: int, nTDs: int, active: bool) = $extype "usb_device_t *"
 vtypedef usb_device = [i, nTDs: int] [active: bool] usb_device_vt (i, nTDs, active)
+castfn usb_dev_req_ptr2ptr (!usb_device):<> ptr
+overload ptrcast with usb_dev_req_ptr2ptr
 fun usb_acquire_device {i: nat} (int i): usb_device_vt (i, 0, false) = "mac#usb_acquire_device"
 fun usb_release_device (usb_device): void = "mac#usb_release_device"
 
@@ -182,13 +184,19 @@ absvtype ehci_td_traversal_vt (lstart: addr, lcur: addr) = ptr lcur
 vtypedef ehci_td_traversal_optr (lstart: addr, s: int) =
   [l: agez | (~(s == 0) || l > null) && (~(s != 0) || l == null)] ehci_td_traversal_vt (lstart, l)
 vtypedef ehci_td_traversal1 (lstart: addr) = [l: agz] ehci_td_traversal_vt (lstart, l)
+castfn ehci_td_traversal_ptr2ptr {l1,l2:addr} (!ehci_td_traversal_vt (l1,l2)):<> ptr l2
+overload ptrcast with ehci_td_traversal_ptr2ptr
 fun ehci_td_traversal_null0 {l: agz} (!ehci_td_ptr l): (ehci_td_traversal_vt (l, null))
   = "mac#ehci_td_traversal_null0"
 fun ehci_td_traversal_null1 {l: agz} (!ehci_td_ptr l, ehci_td_traversal1 l): (ehci_td_traversal_vt (l, null))
   = "mac#ehci_td_traversal_null1"
 fun ehci_td_traversal_start {lstart: agz} (!ehci_td_ptr lstart): ehci_td_traversal_vt (lstart, lstart)
   = "mac#ehci_td_traversal_start"
-fun ehci_td_traversal_next {lstart, lcur: agz} (&ehci_td_traversal1 lstart >> ehci_td_traversal_vt (lstart, lcur), ehci_td_ptr lcur): void
+fun ehci_td_traversal_next {lstart, lcur: agz} (
+    &ehci_td_traversal1 lstart >> ehci_td_traversal_vt (lstart, lcur),
+    ehci_td_ptr lcur,
+    physaddr_t lcur
+  ): void
   = "mac#ehci_td_traversal_next"
 prfun ehci_td_traversal_free_null {lstart: agz} (ehci_td_traversal_vt (lstart, null)): void
 

@@ -130,7 +130,7 @@ program-map.ld: buildprograms
 buildprograms: userlib
 	for p in $(PROGS); do make -C $$p USE_VMM=$(USE_VMM); done
 userlib:
-	make -C userlib
+	make -C userlib USE_VMM=$(USE_VMM)
 
 %.o: %.S
 	$(CC) $(SFLAGS) -c $< -o $@

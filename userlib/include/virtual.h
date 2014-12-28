@@ -63,7 +63,7 @@ static inline status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
 
 #else  /* USE_VMM disabled */
 
-status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
+static inline status vmm_get_phys_addr(void *vaddr, physaddr *paddr)
 {
   *paddr = (u32) vaddr;
   return OK;

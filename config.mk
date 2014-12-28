@@ -32,7 +32,9 @@ USER_ATSCFLAGS += -D_ATS_EXCEPTION_NONE -D_ATS_CCOMP_PRELUDE_NONE -D_ATS_CCOMP_H
 USER_LDFLAGS = -L../../userlib
 USER_LIBS = `$(CC) -print-libgcc-file-name`
 USER_STARTOBJ = ../../userlib/start.o
+
 ifeq ($(USE_VMM),1)
 USER_CFLAGS += -DUSE_VMM
+USER_ATSCFLAGS += -DUSE_VMM
 USER_SFLAGS += -DUSE_VMM
 endif

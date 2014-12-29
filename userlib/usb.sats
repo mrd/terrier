@@ -154,11 +154,17 @@ macdef USB_TYPE_IF_PWR_DESC = 8
 fun usb_device_request_fill (!usb_dev_req_ptr1, usb_RequestType_t, usb_Request_t, int, int, int): void
   = "mac#_usb_device_request_fill"
 
-// detach, attach, filling TDs
+// detach TDs from USB device, returning them
 fun usb_device_detach {i, nTDs: nat} (
     ! usb_device_vt (i, nTDs, false) >> usb_device_vt (i, 0, false)
   ): ehci_td_ptr1 = "mac#usb_device_detach"
 
+// detach TDs from USB device and free them in one step
+fun usb_device_detach_and_free  {i, nTDs: nat} (
+    ! usb_device_vt (i, nTDs, false) >> usb_device_vt (i, 0, false)
+  ): void
+
+// attach a chain of TDs to the QH within the USB device
 fun usb_device_attach {i, nTDs: nat | nTDs > 0} {l: agz} (
     ehci_td_chain_filled (l, nTDs) |
     ! usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, true),

@@ -23,6 +23,13 @@ begin
   usbd.set_next_td (filled_v | td, paddr)
 end
 
+implement usb_device_detach_and_free (usbd) =
+let
+  val tds = usb_device_detach usbd
+in
+  ehci_td_chain_free tds
+end
+
 // Allocate a device request and a starting TDs. Returns OK if success, ENOSPACE otherwise, and cleans up.
 implement usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength) =
 let

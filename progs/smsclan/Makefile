@@ -28,22 +28,22 @@ OBJS = $(C_OBJS) $(S_OBJS) $(DATS_OBJS) $(USER_STARTOBJ)
 DFILES = $(patsubst %.c,%.d,$(C_FILES)) $(patsubst %.S,%.d,$(S_FILES)) $(patsubst %.dats,%_dats.d,$(DATS_FILES))
 
 program: $(NAME).elf
-        $(LD) -r -b binary $< -o $@
+	$(LD) -r -b binary $< -o $@
 
 $(NAME).elf: $(OBJS)
-        $(LD) $(LDFLAGS) -T $(LDSCRIPT) $(OBJS) -o $@ $(LIBS) $(USER_LIBS) $(LIBS)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) $(OBJS) -o $@ $(LIBS) $(USER_LIBS) $(LIBS)
 
 %.o: %.S
-        $(CC) $(SFLAGS) -c $< -o $@
+	$(CC) $(SFLAGS) -c $< -o $@
 
 %_dats.o: %.dats
-        $(ATSOPT) $(ATSFLAGS) --output $(patsubst %.dats,%_dats.c,$<) --dynamic $<
-        $(CC) $(ATSCFLAGS) $(CFLAGS) -o $@ -c $(patsubst %.dats,%_dats.c,$<)
+	$(ATSOPT) $(ATSFLAGS) --output $(patsubst %.dats,%_dats.c,$<) --dynamic $<
+	$(CC) $(ATSCFLAGS) $(CFLAGS) -o $@ -c $(patsubst %.dats,%_dats.c,$<)
 
 .PHONY: clean distclean
 clean:
-        rm -f $(OBJS) $(DFILES) $(ATSCTEMPS) program $(NAME).elf
+	rm -f $(OBJS) $(DFILES) $(ATSCTEMPS) program $(NAME).elf
 distclean: clean
-        rm -f $(DFILES)
+	rm -f $(DFILES)
 
 -include $(DFILES)

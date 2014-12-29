@@ -1,5 +1,7 @@
 #define ATS_STALOADFLAG 0 // no run-time staloading
 
+staload "usb.sats"
+
 %{#
 
 #include "smsclan.cats"

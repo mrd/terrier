@@ -269,3 +269,14 @@ fun usb_begin_control_read {i, len: nat} {buf: agz} (
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
+
+
+// USB specification defined data structures
+abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"
+fun usb_device_num_configurations (!usb_device): int = "mac#usb_device_num_configurations"
+overload .num_configurations with usb_device_num_configurations
+
+abst@ype usb_cfg_desc_t = $extype "usb_cfg_desc_t"
+abst@ype usb_if_desc_t  = $extype "usb_if_desc_t"
+abst@ype usb_ept_desc_t = $extype "usb_ept_desc_t"
+abst@ype usb_str_desc_t = $extype "usb_str_desc_t"

@@ -16,6 +16,8 @@
 
 extern ipcmapping_t _ipcmappings[];
 
+/* ************************************************** */
+
 /*
  * USB_DEV_REQ : USB Device Request
  *
@@ -94,6 +96,83 @@ PACKED_STRUCT(_usb_dev_desc)
 } PACKED_END;
 typedef struct _usb_dev_desc usb_dev_desc_t;
 
+/*
+ * USB_CFG_DESC : Standard Configuration Descriptor
+ *
+ * Reference :
+ *     Universal Serial Bus Specification
+ *     Revision 1.1, Page 199
+ */
+PACKED_STRUCT(_usb_cfg_desc)
+{
+  PACKED_FIELD(u8, bLength);
+  PACKED_FIELD(u8, bDescriptorType);
+  PACKED_FIELD(u16, wTotalLength);
+  PACKED_FIELD(u8, bNumInterfaces);
+  PACKED_FIELD(u8, bConfigurationValue);
+  PACKED_FIELD(u8, iConfiguration);
+  PACKED_FIELD(u8, bmAttributes);
+  PACKED_FIELD(u8, bMaxPower);
+} PACKED_END;
+typedef struct _usb_cfg_desc usb_cfg_desc_t;
+
+/*
+ * USB_IF_DESC : Standard Interface Descriptor
+ *
+ * Reference :
+ *     Universal Serial Bus Specification
+ *     Revision 1.1, Page 202
+ */
+PACKED_STRUCT(_usb_if_desc)
+{
+  PACKED_FIELD(u8, bLength);
+  PACKED_FIELD(u8, bDescriptorType);
+  PACKED_FIELD(u8, bInterfaceNumber);
+  PACKED_FIELD(u8, bAlternateSetting);
+  PACKED_FIELD(u8, bNumEndpoints);
+  PACKED_FIELD(u8, bInterfaceClass);
+  PACKED_FIELD(u8, bInterfaceSubClass);
+  PACKED_FIELD(u8, bInterfaceProtocol);
+  PACKED_FIELD(u8, iInterface);
+} PACKED_END;
+typedef struct _usb_if_desc usb_if_desc_t;
+
+/*
+ * USB_EPT_DESC : Standard Endpoint Descriptor
+ *
+ * Reference :
+ *     Universal Serial Bus Specification
+ *     Revision 1.1, Page 203
+ */
+PACKED_STRUCT(_usb_ept_desc)
+{
+  PACKED_FIELD(u8, bLength);
+  PACKED_FIELD(u8, bDescriptorType);
+  PACKED_FIELD(u8, bEndpointAddress);
+  PACKED_FIELD(u8, bmAttributes);
+  PACKED_FIELD(u16, wMaxPacketSize);
+  PACKED_FIELD(u8, bInterval);
+} PACKED_END;
+typedef struct _usb_ept_desc usb_ept_desc_t;
+
+/*
+ * USB_STR_DESC: Standard String Descriptor
+ *
+ * Reference :
+ *     Universal Serial Bus Specification
+ *     Revision 1.1, Page 205
+ */
+
+PACKED_STRUCT(_usb_str_desc)
+{
+  PACKED_FIELD(u8, bLength);
+  PACKED_FIELD(u8, bDescriptorType);
+  PACKED_FIELD(u8, bString[]);
+} PACKED_END;
+typedef struct _usb_str_desc usb_str_desc_t;
+
+/* ************************************************** */
+
 #define EHCI_TD_PTR_MASK (~BITMASK(5, 0))
 #define EHCI_TD_PTR_T BIT(0)
 #define EHCI_TD_TOKEN_A BIT(7)
@@ -149,6 +228,11 @@ typedef struct {
   usb_dev_desc_t dev_desc;
 } usb_device_t;
 
+/* ************************************************** */
+
+#define usb_device_num_configurations(d) (d)->dev_desc.bNumConfigurations;
+
+/* ************************************************** */
 
 static inline void *usb_acquire_device(int i)
 {
@@ -276,8 +360,6 @@ static inline status usb_transfer_status(usb_device_t *usbd)
   }
   return EINCOMPLETE;
 }
-
-
 
 #endif
 

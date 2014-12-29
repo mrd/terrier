@@ -137,6 +137,66 @@ static inline void dump_usb_dev_desc(usb_dev_desc_t *d)
   DLOG_NO_PREFIX(1, "  bNumConfigurations=%d\n", d->bNumConfigurations);
 }
 
+void dump_usb_ept_desc(usb_ept_desc_t *d)
+{
+  char *tt, *st = "", *ut = "";
+  u32 ttn = GETBITS(d->bmAttributes, 0, 2);
+  if(ttn == 1) {
+    tt = "(isochronous) ";
+    u32 stn = GETBITS(d->bmAttributes, 2, 2);
+    u32 utn = GETBITS(d->bmAttributes, 4, 2);
+
+    if(stn == 0) st = "(no-sync) ";
+    else if(stn == 1) st = "(async) ";
+    else if(stn == 2) st = "(adaptive) ";
+    else st = "(sync) ";
+
+    if(utn == 0) ut = "(data) ";
+    else if(utn == 1) ut = "(feedback) ";
+    else if(utn == 2) ut = "(implicit-feedback-data) ";
+    else ut = "(reserved) ";
+  } else if(ttn == 0)
+    tt = "(control) ";
+  else if(ttn == 2)
+    tt = "(bulk) ";
+  else
+    tt = "(interrupt) ";
+
+  DLOG(1, "USB_EPT_DESC:\n");
+  DLOG_NO_PREFIX(1, "  bLength=%d bDescriptorType=%d bEndpointAddress=%d (%s)\n",
+                 d->bLength, d->bDescriptorType, GETBITS(d->bEndpointAddress, 0, 4),
+                 (d->bEndpointAddress & BIT(7)) ? "IN" : "OUT");
+  DLOG_NO_PREFIX(1, "  bmAttributes=%#x wMaxPacketSize=%#x bInterval=%d\n",
+                 d->bmAttributes, d->wMaxPacketSize, d->bInterval);
+  DLOG_NO_PREFIX(1, "  %s%s%s\n", tt, st, ut);
+}
+
+void dump_usb_if_desc(usb_if_desc_t *d)
+{
+  DLOG(1, "USB_IF_DESC:\n");
+  DLOG_NO_PREFIX(1, "  bLength=%d bDescriptorType=%d bInterfaceNumber=%d\n",
+                 d->bLength, d->bDescriptorType, d->bInterfaceNumber);
+  DLOG_NO_PREFIX(1, "  bAlternateSetting=%#x bNumEndpoints=%d iInterface=%d\n",
+                 d->bAlternateSetting, d->bNumEndpoints, d->iInterface);
+  DLOG_NO_PREFIX(1, "  bInterfaceClass=%#x bInterfaceSubClass=%#x bInterfaceProtocol=%d\n",
+                 d->bInterfaceClass, d->bInterfaceSubClass, d->bInterfaceProtocol);
+}
+
+void dump_usb_cfg_desc(usb_cfg_desc_t *d)
+{
+  DLOG(1, "USB_CFG_DESC:\n");
+  DLOG_NO_PREFIX(1, "  bLength=%d bDescriptorType=%d wTotalLength=%d\n",
+                 d->bLength, d->bDescriptorType, d->wTotalLength);
+
+  DLOG_NO_PREFIX(1, "  bNumInterfaces=%d bConfigurationValue=%#x iConfiguration=%d\n",
+                 d->bNumInterfaces, d->bConfigurationValue, d->iConfiguration);
+  DLOG_NO_PREFIX(1, "  bmAttributes=%#x %s%sbMaxPower=%dmA\n",
+                 d->bmAttributes,
+                 (d->bmAttributes & BIT(6)) ? "(self-powered) " : "",
+                 (d->bmAttributes & BIT(5)) ? "(remote-wakeup) " : "",
+                 d->bMaxPower*2);
+}
+
 static inline int get_usb_dev_desc_vendor(usb_dev_desc_t *d) { return d->idVendor; }
 
 void printnum(int i)

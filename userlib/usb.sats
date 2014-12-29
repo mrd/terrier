@@ -18,7 +18,7 @@ vtypedef usb_device = [i, nTDs: int] [active: bool] usb_device_vt (i, nTDs, acti
 castfn usb_dev_req_ptr2ptr (!usb_device):<> ptr
 overload ptrcast with usb_dev_req_ptr2ptr
 fun usb_acquire_device {i: nat} (int i): usb_device_vt (i, 0, false) = "mac#usb_acquire_device"
-fun usb_release_device (usb_device): void = "mac#usb_release_device"
+fun usb_release_device {i: nat} (usb_device_vt (i, 0, false)): void = "mac#usb_release_device"
 
 // phys addresses
 abst@ype physaddr_t (v: addr) = $extype "physaddr" // (v = associated virtual address). (could be invalidated).

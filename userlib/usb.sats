@@ -2,8 +2,8 @@
 
 #define ATS_STALOADFLAG 0 // no run-time staloading
 
-staload "ipcmem.sats"
 staload "prelude/SATS/status.sats"
+staload "ipcmem.sats"
 
 %{#
 
@@ -253,7 +253,21 @@ fun usb_transfer_status {i, nTDs: nat | nTDs > 0} (
     !usb_device_vt (i, nTDs, false)
   ): [s: int] status s = "mac#usb_transfer_status"
 
-// USB control operations
+// ** USB control operations
+// control nodata
+fun usb_begin_control_nodata {i: nat} (
+    !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
+    &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
+    usb_RequestType_t,
+    usb_Request_t,
+    int, // wValue
+    int  // wIndex
+  ): #[s: int]
+     #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
+     #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
+     #[active: bool | (s == 0) == active]
+     (usb_transfer_status i | status s)
+
 // control read
 fun usb_begin_control_read {i, len: nat} {buf: agz} (
     !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
@@ -270,6 +284,12 @@ fun usb_begin_control_read {i, len: nat} {buf: agz} (
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
 
+// USB helper control operations
+fun usb_wait_while_active {i, nTDs: nat | nTDs > 0} (
+    xfer_v: !usb_transfer_status i |
+    usbd: !usb_device_vt (i, nTDs, true) >> usb_device_vt (i, nTDs, false)
+  ): void
+fun usb_set_configuration {i: nat} (!usb_device_vt (i, 0, false), int): [s: int] status s
 
 // USB specification defined data structures
 abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"

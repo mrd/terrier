@@ -241,6 +241,85 @@ in
   end end end end end // flattened
 end
 
+implement usb_begin_control_nodata (usbd, devr, bmRequestType, bRequest, wValue, wIndex) =
+let
+  var startTD: ehci_td_ptr0?
+  val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, 0)
+in
+  // flattened if-then-else statements to avoid nesting
+  if s != OK then begin
+    let prval _ = ehci_td_free_null startTD in end;
+    (usb_transfer_aborted | s)
+  end else let // REQUEST
+    var p1: ptr = ptrcast devr
+    var p1len: int = $UN.cast{intGte(0)}(g1ofg0(sizeof<usb_dev_req_vt>)) // assert that size >= 0
+    var trav: ptr?
+    val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
+  in if s != OK then begin
+    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+    usb_dev_req_pool_free devr;
+    devr := usb_dev_req_null_ptr;
+    ehci_td_chain_free startTD;
+    let prval _ = ehci_td_traversal_free_null trav in end;
+    (usb_transfer_aborted | s)
+  end else let // STATUS
+    var p3: ptr = the_null_ptr
+    var p3len: int = 0
+    val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDIn, p3, p3len)
+  in if s != OK then begin
+    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+    usb_dev_req_pool_free devr;
+    devr := usb_dev_req_null_ptr;
+    ehci_td_chain_free startTD;
+    let prval _ = ehci_td_traversal_free_null trav in end;
+    (usb_transfer_aborted | s)
+  end else let
+    prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
+    var paddr: physaddr
+    val s = vmm_get_phys_addr (ptrcast startTD, paddr)
+  in if s != OK then begin // failed phys addr lookup
+    let prval _ = ehci_td_flush_fill (filled_v) in end;
+    usb_dev_req_pool_free devr;
+    devr := usb_dev_req_null_ptr;
+    ehci_td_chain_free startTD;
+    (usb_transfer_aborted | s)
+  end else let
+    // OK and ready-to-go
+    val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
+  in
+    (xfer_v | OK)
+  end end end end // flattened
+end
+
+implement usb_wait_while_active (xfer_v | usbd) =
+let val s = usb_transfer_chain_active (xfer_v | usbd) in
+    if s = OK then usb_wait_while_active (xfer_v | usbd) else ()
+end // [usb_wait_while_active]
+
+implement usb_set_configuration (usbd, cfgval) =
+let
+  var devr: usb_dev_req_ptr0?
+  val (xfer_v | s) =
+    usb_begin_control_nodata (usbd, devr,
+                              make_RequestType (HostToDevice, Standard, Device),
+                              make_Request SetConfiguration,
+                              cfgval, 0)
+in
+  if s = OK then begin
+    usb_wait_while_active (xfer_v | usbd);
+    usb_transfer_completed (xfer_v | usbd);
+    usb_dev_req_pool_free_ref devr;
+    usb_device_detach_and_free usbd;
+    OK
+  end else begin
+    usb_transfer_completed (xfer_v | usbd);
+    let prval _ = usb_dev_req_pool_free_null devr in end;
+    usb_device_detach_and_free usbd;
+    s
+  end
+end // [usb_set_configuration]
+
+
 (*
  * Local Variables:
  * indent-tabs-mode: nil

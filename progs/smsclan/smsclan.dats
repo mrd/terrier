@@ -122,14 +122,75 @@ in
   end
 end // [print_cfg_desc]
 
+(*
+/* USB Vendor Requests */
+#define USB_VENDOR_REQUEST_WRITE_REGISTER       0xA0
+#define USB_VENDOR_REQUEST_READ_REGISTER        0xA1
+#define USB_VENDOR_REQUEST_GET_STATS            0xA2
+
+
+/* SCSRs */
+#define ID_REV                          (0x00)
+#define ID_REV_CHIP_ID_MASK_            (0xFFFF0000)
+#define ID_REV_CHIP_REV_MASK_           (0x0000FFFF)
+#define ID_REV_CHIP_ID_9500_            (0x9500)
+#define ID_REV_CHIP_ID_9500A_           (0x9E00)
+#define ID_REV_CHIP_ID_9512_            (0xEC00)
+#define ID_REV_CHIP_ID_9530_            (0x9530)
+#define ID_REV_CHIP_ID_89530_           (0x9E08)
+#define ID_REV_CHIP_ID_9730_            (0x9730)
+
+*)
+
+extern fun make_VendorRequest (i:int): usb_Request_t = "mac#make_VendorRequest"
+
+fun smsclan_read_reg {i: nat} (usbd: !usb_device_vt (i, 0, false), idx: int, value: &int? >> int): [s: int] status s =
+let
+  var devr: usb_dev_req_ptr0?
+  var buf: int = 0
+  val (xfer_v | s) =
+    usb_begin_control_read (usbd, devr, make_RequestType (DeviceToHost, Vendor, Device), make_VendorRequest 161,
+                            0, idx, 4, addr@ buf)
+in
+  if s = OK then begin
+    usb_wait_while_active (xfer_v | usbd);
+    usb_transfer_completed (xfer_v | usbd);
+    usb_dev_req_pool_free_ref devr;
+    usb_device_detach_and_free usbd;
+    value := buf;
+    OK
+  end else begin
+    usb_transfer_completed (xfer_v | usbd);
+    let prval _ = usb_dev_req_pool_free_null devr in end;
+    usb_device_detach_and_free usbd;
+    value := 0;
+    s
+  end
+end // [smsclan_read_reg]
+
+fun smsclan_get_all_regs {i: nat} (usbd: !usb_device_vt (i, 0, false), idx: int): [s: int] status s =
+if idx < 305 then let
+  var reg: int
+  val s = smsclan_read_reg (usbd, idx, reg)
+in
+  if s = OK then begin
+    $extfcall (void, "debuglog", 0, 1, "SMSC[%#x]=%#x\n", idx, reg);
+    smsclan_get_all_regs (usbd, idx + 4)
+  end else s
+end else OK
+
 implement test_usb () =
 let
   val usbd = usb_acquire_device 1
+  val () = print_dev_desc usbd
+  val () = print_cfg_desc (usbd, 0)
+  val s = usb_set_configuration (usbd, 1)
+  val () = $extfcall (void, "debuglog", 0, 1, "usb_set_configuration returned %d\n", s)
+//  var idrev: int
+//  val s = smsclan_read_reg (usbd, 0, idrev)
+//  val () = $extfcall (void, "debuglog", 0, 1, "smsclan_read_reg returned (%d, %#x)\n", s, idrev)
+  val s = smsclan_get_all_regs (usbd, 0)
 in
-
-  print_dev_desc usbd;
-  print_cfg_desc (usbd, 0);
-
   usb_release_device usbd
 end // [test_usb]
 

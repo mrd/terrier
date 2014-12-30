@@ -536,6 +536,8 @@ void test(void)
 
 #endif  /* 0 */
 
+#define make_VendorRequest(x) x
+
 
 /*
  * Local Variables:

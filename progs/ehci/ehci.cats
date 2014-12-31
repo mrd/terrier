@@ -47,7 +47,7 @@
 
 unsigned int _scheduler_capacity = 1 << 10;
 unsigned int _scheduler_period = 7 << 10;
-unsigned int _scheduler_affinity = 1;
+unsigned int _scheduler_affinity = 2;
 
 mapping_t _mappings[] = {
   { 0x48050000, NULL, 10, 12, 0, 0, R_RW, "needed for GPIO" },
@@ -363,7 +363,7 @@ PACKED_STRUCT(_usb_dev_req) {
 } PACKED_END;
 typedef struct _usb_dev_req usb_dev_req_t;
 
-DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 4, 64);
+DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 8, 64);
 
 /*
  * USB_DEV_DESC : Standard Device Descriptor
@@ -1447,10 +1447,13 @@ status ehci_setup_new_device(usb_device_t *usbd)
   /* get it again, but with correct max packet size */
   ehci_set_qh_max_packet_size(&usbd->qh, usbd->dev_desc.bMaxPacketSize0);
 
+  DLOG(1, "ehci_setup_new_device usbd->dev_desc.bMaxPacketSize0=%d\n", usbd->dev_desc.bMaxPacketSize0);
+
   /* get_descriptor: device descriptor */
   if(usb_control_read(usbd, USB_REQ_DEVICE_TO_HOST, USB_GET_DESCRIPTOR,
                       USB_TYPE_DEV_DESC << 8, 0, sizeof(usb_dev_desc_t), &usbd->dev_desc) != OK) {
     DLOG(1, "ehci_setup_new_device: Unable to read device descriptor\n");
+    dump_usb_dev_desc(&usbd->dev_desc);
     /* FIXME: should I reuse address? */
     return EINVALID;
   }
@@ -1477,6 +1480,7 @@ void ehci_enumerate(usb_port_t *p, usb_device_t *usbd)
     if(linestatus == 1) {
       /* 1: K-state */
       DLOG(1, "usb_port <%#x>: low speed device (skipping).\n", p);
+      /* see page 56 of EHCI standard */
       return;
     } else {
       /* 0: SE0 */
@@ -1491,6 +1495,7 @@ void ehci_enumerate(usb_port_t *p, usb_device_t *usbd)
         return;                    /* not enabled = no attached high speed device */
     }
 
+    //    ehci_microframewait(100 << 3);
     ehci_setup_new_device(usbd);
   }
 }

@@ -46,6 +46,7 @@
 #define ENOSPACE 3
 #define EINCOMPLETE 4
 #define EDATA 5
+#define ETIMEOUT 6
 
 #endif
 

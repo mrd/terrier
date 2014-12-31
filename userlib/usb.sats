@@ -284,6 +284,22 @@ fun usb_begin_control_read {i, len: nat} {buf: agz} (
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
 
+// control write
+fun usb_begin_control_write {i, len: nat} {buf: agz} (
+    !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
+    &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
+    usb_RequestType_t,
+    usb_Request_t,
+    int, // wValue
+    int, // wIndex
+    int len, // wLength
+    ptr buf // data
+  ): #[s: int]
+     #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
+     #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
+     #[active: bool | (s == 0) == active]
+     (usb_transfer_status i | status s)
+
 // USB helper control operations
 fun usb_wait_while_active {i, nTDs: nat | nTDs > 0} (
     xfer_v: !usb_transfer_status i |

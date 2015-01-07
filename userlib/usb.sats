@@ -255,15 +255,13 @@ fun usb_transfer_status {i, nTDs: nat | nTDs > 0} (
 
 // ** USB control operations
 // control nodata
-fun usb_begin_control_nodata {i: nat} (
+fun{} usb_begin_control_nodata {i: nat} (
     !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
-    &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
     int  // wIndex
   ): #[s: int]
-     #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
@@ -272,7 +270,6 @@ fun usb_begin_control_nodata {i: nat} (
 fun{a:t@ype} usb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
     !(@[a][n]) @ l |
     !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
-    &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
@@ -280,7 +277,6 @@ fun{a:t@ype} usb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
     int len, // number of elements
     ptr l // data
   ): #[s: int]
-     #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
@@ -289,7 +285,6 @@ fun{a:t@ype} usb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
 fun{a:t@ype} usb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
     !(@[a][n]) @ l |
     !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
-    &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
@@ -297,7 +292,6 @@ fun{a:t@ype} usb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
     int len, // number of elements
     ptr l // data
   ): #[s: int]
-     #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)

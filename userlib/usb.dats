@@ -182,176 +182,188 @@ end
 
 fun{a:vt0p} sizeofGEZ (): [s: nat] int s = $UN.cast{intGte(0)}(g1ofg0 (sizeof<a>))
 
-implement{a} usb_begin_control_read (pf | usbd, devr, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
+implement{a} usb_begin_control_read (pf | usbd, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
 let
   var startTD: ehci_td_ptr0?
+  var devr: usb_dev_req_ptr0?
   val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength)
 in
   // flattened if-then-else statements to avoid nesting
-  if s != OK then begin
-    let prval _ = ehci_td_free_null startTD in end;
+  if s != OK then let
+    prval _ = ehci_td_free_null startTD
+    prval _ = usb_dev_req_pool_free_null devr
+  in
     (usb_transfer_aborted | s)
   end else let // REQUEST
     var p1: ptr = ptrcast devr
     var p1len: int = sizeofGEZ<usb_dev_req_vt>() // assert that size >= 0
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // DATA
     var p2: ptr = data
     var p2len: int = wLength
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDIn, p2, p2len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // STATUS
     var p3: ptr = the_null_ptr
     var p3len: int = 0
     val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDOut, p3, p3len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
-  in if s != OK then begin // failed phys addr lookup
-    let prval _ = ehci_td_flush_fill (filled_v) in end;
+  in if s != OK then let // failed phys addr lookup
+    prval _ = ehci_td_flush_fill (filled_v)
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
     // OK and ready-to-go
     val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
   in
+    usb_dev_req_pool_free devr;
     (xfer_v | OK)
   end end end end end // flattened
 end
 
-implement{a} usb_begin_control_write (pf | usbd, devr, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
+implement{a} usb_begin_control_write (pf | usbd, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
 let
   var startTD: ehci_td_ptr0?
+  var devr: usb_dev_req_ptr0?
   val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // FIXME: why is the cast necessary?
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength)
 in
   // flattened if-then-else statements to avoid nesting
-  if s != OK then begin
-    let prval _ = ehci_td_free_null startTD in end;
+  if s != OK then let
+    prval _ = ehci_td_free_null startTD
+    prval _ = usb_dev_req_pool_free_null devr
+  in
     (usb_transfer_aborted | s)
   end else let // REQUEST
     var p1: ptr = ptrcast devr
-    var p1len: int = $UN.cast{intGte(0)}(g1ofg0(sizeof<usb_dev_req_vt>)) // assert that size >= 0
+    var p1len: int = sizeofGEZ<usb_dev_req_vt>()
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // DATA
     var p2: ptr = data
     var p2len: int = wLength
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDOut, p2, p2len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // STATUS
     var p3: ptr = the_null_ptr
     var p3len: int = 0
     val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDIn, p3, p3len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
-  in if s != OK then begin // failed phys addr lookup
-    let prval _ = ehci_td_flush_fill (filled_v) in end;
+  in if s != OK then let // failed phys addr lookup
+    prval _ = ehci_td_flush_fill (filled_v)
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
     // OK and ready-to-go
     val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
   in
+    usb_dev_req_pool_free devr;
     (xfer_v | OK)
   end end end end end // flattened
 end
 
-implement usb_begin_control_nodata (usbd, devr, bmRequestType, bRequest, wValue, wIndex) =
+implement{} usb_begin_control_nodata (usbd, bmRequestType, bRequest, wValue, wIndex) =
 let
   var startTD: ehci_td_ptr0?
+  var devr: usb_dev_req_ptr0?
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, 0)
 in
   // flattened if-then-else statements to avoid nesting
-  if s != OK then begin
-    let prval _ = ehci_td_free_null startTD in end;
+  if s != OK then let
+    prval _ = ehci_td_free_null startTD
+    prval _ = usb_dev_req_pool_free_null devr
+  in
     (usb_transfer_aborted | s)
   end else let // REQUEST
     var p1: ptr = ptrcast devr
-    var p1len: int = $UN.cast{intGte(0)}(g1ofg0(sizeof<usb_dev_req_vt>)) // assert that size >= 0
+    var p1len: int = sizeofGEZ<usb_dev_req_vt>()
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let // STATUS
     var p3: ptr = the_null_ptr
     var p3len: int = 0
     val s = ehci_td_step_fill (fill_v | startTD, trav, EHCI_PIDIn, p3, p3len)
-  in if s != OK then begin
-    let prval _ = ehci_td_abort_fill (fill_v, startTD) in end;
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
-    let prval _ = ehci_td_traversal_free_null trav in end;
     (usb_transfer_aborted | s)
   end else let
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
-  in if s != OK then begin // failed phys addr lookup
-    let prval _ = ehci_td_flush_fill (filled_v) in end;
+  in if s != OK then let // failed phys addr lookup
+    prval _ = ehci_td_flush_fill (filled_v)
+  in
     usb_dev_req_pool_free devr;
-    devr := usb_dev_req_null_ptr;
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
     // OK and ready-to-go
     val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
   in
+    usb_dev_req_pool_free devr;
     (xfer_v | OK)
   end end end end // flattened
 end
@@ -363,22 +375,18 @@ end // [usb_wait_while_active]
 
 implement usb_set_configuration (usbd, cfgval) =
 let
-  var devr: usb_dev_req_ptr0?
   val (xfer_v | s) =
-    usb_begin_control_nodata (usbd, devr,
-                              make_RequestType (HostToDevice, Standard, Device),
+    usb_begin_control_nodata (usbd, make_RequestType (HostToDevice, Standard, Device),
                               make_Request SetConfiguration,
                               cfgval, 0)
 in
   if s = OK then begin
     usb_wait_while_active (xfer_v | usbd);
     usb_transfer_completed (xfer_v | usbd);
-    usb_dev_req_pool_free_ref devr;
     usb_device_detach_and_free usbd;
     OK
   end else begin
     usb_transfer_completed (xfer_v | usbd);
-    let prval _ = usb_dev_req_pool_free_null devr in end;
     usb_device_detach_and_free usbd;
     s
   end

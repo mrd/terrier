@@ -117,7 +117,7 @@ macdef EHCI_QH_PTR_T = $extval(physaddr_t null, "EHCI_QH_PTR_T")
 abst@ype usb_RequestType_t = int
 abst@ype usb_Request_t = int
 
-fun usb_device_request_allocate (
+fun{} usb_device_request_allocate (
     & usb_dev_req_ptr0 ? >> usb_dev_req_optr s,
     & ehci_td_ptr0 ? >> ehci_td_ptr l2,
     usb_RequestType_t,
@@ -269,15 +269,16 @@ fun usb_begin_control_nodata {i: nat} (
      (usb_transfer_status i | status s)
 
 // control read
-fun usb_begin_control_read {i, len: nat} {buf: agz} (
+fun{a:t@ype} usb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
+    !(@[a][n]) @ l |
     !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
     &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
     int, // wIndex
-    int len, // wLength
-    ptr buf // data
+    int len, // number of elements
+    ptr l // data
   ): #[s: int]
      #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
@@ -285,15 +286,16 @@ fun usb_begin_control_read {i, len: nat} {buf: agz} (
      (usb_transfer_status i | status s)
 
 // control write
-fun usb_begin_control_write {i, len: nat} {buf: agz} (
+fun{a:t@ype} usb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
+    !(@[a][n]) @ l |
     !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
     &usb_dev_req_ptr0? >> usb_dev_req_ptr ldevr,
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
     int, // wIndex
-    int len, // wLength
-    ptr buf // data
+    int len, // number of elements
+    ptr l // data
   ): #[s: int]
      #[ldevr: agez | (s <> 0 || ldevr > null) && (s == 0 || ldevr == null)]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
@@ -309,10 +311,13 @@ fun usb_set_configuration {i: nat} (!usb_device_vt (i, 0, false), int): [s: int]
 
 // USB specification defined data structures
 abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"
+macdef usb_dev_desc_empty = $extval (usb_dev_desc_t, "((usb_dev_desc_t) {0})")
 fun usb_device_num_configurations (!usb_device): int = "mac#usb_device_num_configurations"
 overload .num_configurations with usb_device_num_configurations
 
 abst@ype usb_cfg_desc_t = $extype "usb_cfg_desc_t"
+macdef usb_cfg_desc_empty = $extval (usb_cfg_desc_t, "((usb_cfg_desc_t) {0})")
+
 abst@ype usb_if_desc_t  = $extype "usb_if_desc_t"
 abst@ype usb_ept_desc_t = $extype "usb_ept_desc_t"
 abst@ype usb_str_desc_t = $extype "usb_str_desc_t"

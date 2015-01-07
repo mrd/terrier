@@ -31,7 +31,7 @@ in
 end
 
 // Allocate a device request and a starting TDs. Returns OK if success, ENOSPACE otherwise, and cleans up.
-implement usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength) =
+implement{} usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength) =
 let
   val devr0 = usb_dev_req_pool_alloc ()
 in
@@ -155,7 +155,7 @@ end
 // end [ehci_td_step_fill]
 
 // iteratively fills TDs from a given buffer of data
-fun data_stage {lstart: agz} {nTDs, len: nat} {ldata: agez | len == 0 || ldata > null} {p: pidcode} (
+fun{} data_stage {lstart: agz} {nTDs, len: nat} {ldata: agez | len == 0 || ldata > null} {p: pidcode} (
     fill_v: !ehci_td_filling_v (lstart, 0, nTDs) >> ehci_td_filling_v (lstart, s, nTDs') |
     startTD: !ehci_td_ptr lstart,
     trav: &ehci_td_traversal1 lstart >> ehci_td_traversal_optr (lstart, s),
@@ -180,9 +180,12 @@ end
 // value (by ref) from this function, unlike C version, because otherwise
 // where does resource go?:
 
-implement usb_begin_control_read (usbd, devr, bmRequestType, bRequest, wValue, wIndex, wLength, data) =
+fun{a:vt0p} sizeofGEZ (): [s: nat] int s = $UN.cast{intGte(0)}(g1ofg0 (sizeof<a>))
+
+implement{a} usb_begin_control_read (pf | usbd, devr, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
 let
   var startTD: ehci_td_ptr0?
+  val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength)
 in
   // flattened if-then-else statements to avoid nesting
@@ -191,7 +194,7 @@ in
     (usb_transfer_aborted | s)
   end else let // REQUEST
     var p1: ptr = ptrcast devr
-    var p1len: int = $UN.cast{intGte(0)}(g1ofg0(sizeof<usb_dev_req_vt>)) // assert that size >= 0
+    var p1len: int = sizeofGEZ<usb_dev_req_vt>() // assert that size >= 0
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
   in if s != OK then begin
@@ -241,9 +244,10 @@ in
   end end end end end // flattened
 end
 
-implement usb_begin_control_write (usbd, devr, bmRequestType, bRequest, wValue, wIndex, wLength, data) =
+implement{a} usb_begin_control_write (pf | usbd, devr, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
 let
   var startTD: ehci_td_ptr0?
+  val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // FIXME: why is the cast necessary?
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength)
 in
   // flattened if-then-else statements to avoid nesting

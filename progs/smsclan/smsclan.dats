@@ -17,6 +17,7 @@ staload _ = "fixedslot.dats"
 staload "prelude/SATS/status.sats"
 staload "prelude/SATS/bits.sats"
 staload "usb.sats"
+staload _ = "usb.dats"
 staload "smsclan.sats"
 #include "atspre_staload.hats"
 
@@ -67,7 +68,6 @@ implement atsmain () = let
 in 0
 end // end [atsmain]
 
-abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"
 extern fun dump_usb_dev_desc (&usb_dev_desc_t): void = "mac#dump_usb_dev_desc"
 extern fun dump_usb_cfg_desc (&usb_cfg_desc_t): void = "mac#dump_usb_cfg_desc"
 extern fun get_usb_dev_desc_vendor(&usb_dev_desc_t): int = "mac#get_usb_dev_desc_vendor"
@@ -85,21 +85,23 @@ end // [wait_loop]
 fun print_dev_desc {i: nat} (usbd: !usb_device_vt (i, 0, false)): void =
 let
   var devr: usb_dev_req_ptr0?
-  var devdesc: usb_dev_desc_t
+  var devdesc = @[usb_dev_desc_t][1](usb_dev_desc_empty)
   val (xfer_v | s) =
-    usb_begin_control_read (usbd, devr, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
-                            USB_TYPE_DEV_DESC * 256, 0,
-                            $UN.cast{intGte(0)}(g1ofg0 (sizeof<usb_dev_desc_t>)), addr@ devdesc)
+    usb_begin_control_read (view@ devdesc |
+                            usbd, devr,
+                            make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
+                            USB_TYPE_DEV_DESC << 8, 0,
+                            1, addr@ devdesc)
 in
   if s = OK then begin
     wait_loop (xfer_v | usbd);
     usb_transfer_completed (xfer_v | usbd);
     usb_dev_req_pool_free_ref devr;
-    let var dd = ($UN.cast{usb_dev_desc_t}(devdesc)) in dump_usb_dev_desc dd end;
+    let var dd = array_get_at (devdesc, 0) in dump_usb_dev_desc dd end;
     usb_device_detach_and_free usbd
   end else begin
     usb_transfer_completed (xfer_v | usbd);
-    let prval _ = usb_dev_req_pool_free_null devr in end;
+    () where { prval _ = usb_dev_req_pool_free_null devr };
     usb_device_detach_and_free usbd
   end
 end // [print_dev_desc]
@@ -107,17 +109,18 @@ end // [print_dev_desc]
 fun print_cfg_desc {i: nat} (usbd: !usb_device_vt (i, 0, false), cfgidx: int): void =
 let
   var devr: usb_dev_req_ptr0?
-  var cfgdesc: usb_cfg_desc_t
+  var cfgdesc = @[usb_cfg_desc_t][1](usb_cfg_desc_empty)
   val (xfer_v | s) =
-    usb_begin_control_read (usbd, devr, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
+    usb_begin_control_read (view@ cfgdesc |
+                            usbd, devr, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
                             USB_TYPE_CFG_DESC * 256 + cfgidx, 0,
-                            $UN.cast{intGte(0)}(g1ofg0 (sizeof<usb_cfg_desc_t>)), addr@ cfgdesc)
+                            1, addr@ cfgdesc)
 in
   if s = OK then begin
     wait_loop (xfer_v | usbd);
     usb_transfer_completed (xfer_v | usbd);
     usb_dev_req_pool_free_ref devr;
-    let var d = ($UN.cast{usb_cfg_desc_t}(cfgdesc)) in dump_usb_cfg_desc d end;
+    let var d = array_get_at (cfgdesc, 0) in dump_usb_cfg_desc d end;
     usb_device_detach_and_free usbd
   end else begin
     usb_transfer_completed (xfer_v | usbd);
@@ -151,18 +154,18 @@ extern fun make_VendorRequest (i:uint): usb_Request_t = "mac#make_VendorRequest"
 fun smsclan_read_reg {i: nat} (usbd: !usb_device_vt (i, 0, false), idx: uint, value: &uint? >> uint): [s: int] status s =
 let
   var devr: usb_dev_req_ptr0?
-  var buf: uint = g1int2uint 0
+  var buf = @[uint][1](g1int2uint 0)
   val (xfer_v | s) =
-    usb_begin_control_read (usbd, devr, make_RequestType (DeviceToHost, Vendor, Device),
+    usb_begin_control_read (view@ buf | usbd, devr, make_RequestType (DeviceToHost, Vendor, Device),
                             make_VendorRequest USB_VENDOR_REQUEST_READ_REGISTER,
-                            0, g0uint2int idx, 4, addr@ buf)
+                            0, g0uint2int idx, 1, addr@ buf)
 in
   if s = OK then begin
     usb_wait_while_active (xfer_v | usbd);
     usb_transfer_completed (xfer_v | usbd);
     usb_dev_req_pool_free_ref devr;
     usb_device_detach_and_free usbd;
-    value := buf;
+    value := array_get_at (buf, 0);
     OK
   end else begin
     usb_transfer_completed (xfer_v | usbd);
@@ -176,11 +179,11 @@ end // [smsclan_read_reg]
 fun smsclan_write_reg {i: nat} (usbd: !usb_device_vt (i, 0, false), idx: uint, value: uint): [s: int] status s =
 let
   var devr: usb_dev_req_ptr0?
-  var buf: uint = value
+  var buf = @[uint][1](value)
   val (xfer_v | s) =
-    usb_begin_control_write (usbd, devr, make_RequestType (HostToDevice, Vendor, Device),
+    usb_begin_control_write (view@ buf | usbd, devr, make_RequestType (HostToDevice, Vendor, Device),
                              make_VendorRequest USB_VENDOR_REQUEST_WRITE_REGISTER,
-                             0, g0uint2int idx, 4, addr@ buf)
+                             0, g0uint2int idx, 1, addr@ buf)
 in
   if s = OK then begin
     usb_wait_while_active (xfer_v | usbd);

@@ -1,0 +1,76 @@
+enum { SaveStage, LoadIRQStage, CSwitchStage, RestoreStage };
+var IRQstate = SaveStage; // Automata state variable
+
+var irq; // IRQ triggered
+
+var r13; // value of r13
+#define r13address 1000; // arbitrary choice to test arithmetic
+
+// what context is stored in r13
+enum { NoCtxt, KernelCtxt, IRQCtxt, SavedCtxt };
+var ctxt = NoCtxt;
+
+var finish = 0; // reached finish
+
+// tracking steps
+var RSCstep = 0;
+var CSstep = 0;
+var LICstep = 0;
+var SCstep = 0;
+
+// Model
+
+InitEntry = ((firstTime { r13 = 0; ctxt = KernelCtxt; IRQstate = CSwitchStage; CSstep = 4; } -> Finish) <>
+              normal { ctxt = KernelCtxt; } -> IRQ)
+
+IRQ = ((irqOff { irq = 0; } -> Start) <> (irqOn { irq = 1; } -> Start) <> (irqFinished { irq = 0; IRQstate = RestoreStage; } -> Start);
+
+Start = regularStart { r13 = r13address; } -> Start1;
+Start1 = if (IRQstate == RestoreStage) { RestoreSavedContext1 <> Start } else { Start2 <> Start };
+Start2 = if (irq == 0) { ContextSwitch1 <> Start } else { Start3 <> Start };
+Start3 = if (IRQstate == SaveStage) { SaveContext1 <> Start } else { Start4 <> Start };
+Start4 = if (IRQstate == LoadIRQStage) { LoadIRQContext1 <> Start } else { ContextSwitch1 <> Start };
+
+SaveContext1 = sc1 { SCstep = 1; } -> (SaveContext2 <> Start);
+SaveContext2 = sc2 { r13 = r13 + 36; SCstep = 2; } -> (SaveContext3 <> Start);
+SaveContext3 = sc3 { SCstep = 3; } -> (SaveContext4 <> Start);
+SaveContext4 = sc4 { r13 = r13 + 36; SCstep = 4; } -> (SaveContext5 <> Start);
+SaveContext5 = sc5 { SCstep = 5; } -> (SaveContext6 <> Start);
+SaveContext6 = sc6 { r13 = r13 - 72; SCstep = 6; } -> (SaveContext7 <> Start);
+SaveContext7 = scDone { IRQstate = LoadIRQStage; } -> (LoadIRQContext1 <> Start);
+
+LoadIRQContext1 = lic1 { LICstep = 1; } -> (LoadIRQContext2 <> Start);
+LoadIRQContext2 = lic2 { LICstep = 2; } -> (LoadIRQContext3 <> Start);
+LoadIRQContext3 = lic3 { LICstep = 3; } -> (LoadIRQContext4 <> Start);
+LoadIRQContext4 = lic4 { LICstep = 4; } -> (LoadIRQContext5 <> Start);
+LoadIRQContext5 = lic5 { LICstep = 5; } -> (LoadIRQContext6 <> Start);
+LoadIRQContext6 = lic6 { LICstep = 6; } -> (LoadIRQContext7 <> Start);
+LoadIRQContext7 = licDone { ctxt = IRQCtxt; IRQstate = CSwitchStage; } -> (ContextSwitch1 <> Start);
+
+RestoreSavedContext1 = rsc1 { RSCstep = 1; } -> (RestoreSavedContext2 <> Start);
+RestoreSavedContext2 = rsc2 { r13 = r13 + 36; RSCstep = 2; } -> (RestoreSavedContext3 <> Start);
+RestoreSavedContext3 = rsc3 { RSCstep = 3; } -> (RestoreSavedContext4 <> Start);
+RestoreSavedContext4 = rsc4 { r13 = r13 + 36; RSCstep = 4; } -> (RestoreSavedContext5 <> Start);
+RestoreSavedContext5 = rsc5 { RSCstep = 5; } -> (RestoreSavedContext6 <> Start);
+RestoreSavedContext6 = rsc6 { r13 = r13 - 72; RSCstep = 6; } -> (RestoreSavedContext7 <> Start);
+RestoreSavedContext7 = rscDone { irq = 0; ctxt = SavedCtxt; IRQstate = CSwitchStage; } -> (ContextSwitch1 <> Start);
+
+ContextSwitch1 = cs1 { CSstep = 1; } -> (ContextSwitch2 <> Start);
+ContextSwitch2 = cs2 { CSstep = 2; } -> (ContextSwitch3 <> Start);
+ContextSwitch3 = cs3 { CSstep = 3; } -> (ContextSwitch4 <> Start);
+ContextSwitch4 = cs4 { CSstep = 4; } -> Finish;
+
+Finish = f {finish = 1;} -> Skip;
+
+#define cond finish == 1;
+#define goal (r13 == 0 || r13 == r13address) &&
+             (CSstep == 4) &&
+             (!(LICstep == 0 && RSCstep == 0 && SCstep == 0) || ctxt == KernelCtxt) &&
+             (LICstep == 0 || (LICstep == 6 && ctxt == IRQCtxt)) &&
+             (RSCstep == 0 || (RSCstep == 6 && ctxt == SavedCtxt)) &&
+             (SCstep == 0 || (SCstep == 6 && ctxt == IRQCtxt)) &&
+             (IRQstate == CSwitchStage || irq == 0)
+;
+
+#assert InitEntry |= [] (cond -> goal);
+

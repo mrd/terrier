@@ -59,6 +59,7 @@ _start: CMP     r13, #0         /* r13==0 iff initial entry */
 
         MOV     r0, #0
         STR     r0, [r11]       /* set IRQ state to 0 */
+                                /* assume IRQ was cleared by IRQ handler */
 
         /* fall-thru to normal context loading */
 2:

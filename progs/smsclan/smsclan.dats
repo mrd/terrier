@@ -92,9 +92,9 @@ let
                             1, addr@ devdesc)
 in
   if s = OK then begin
-    wait_loop (xfer_v | usbd);
+    usb_wait_while_active (xfer_v | usbd);
     usb_transfer_completed (xfer_v | usbd);
-    let var dd = array_get_at (devdesc, 0) in dump_usb_dev_desc dd end;
+    dump_usb_dev_desc dd where { var dd = array_get_at (devdesc, 0) };
     usb_device_detach_and_free usbd
   end else begin
     usb_transfer_completed (xfer_v | usbd);
@@ -108,13 +108,13 @@ let
   val (xfer_v | s) =
     usb_begin_control_read (view@ cfgdesc |
                             usbd, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
-                            USB_TYPE_CFG_DESC * 256 + cfgidx, 0,
+                            (USB_TYPE_CFG_DESC << 8) + cfgidx, 0,
                             1, addr@ cfgdesc)
 in
   if s = OK then begin
-    wait_loop (xfer_v | usbd);
+    usb_wait_while_active (xfer_v | usbd);
     usb_transfer_completed (xfer_v | usbd);
-    let var d = array_get_at (cfgdesc, 0) in dump_usb_cfg_desc d end;
+    dump_usb_cfg_desc d where { var d = array_get_at (cfgdesc, 0) };
     usb_device_detach_and_free usbd
   end else begin
     usb_transfer_completed (xfer_v | usbd);

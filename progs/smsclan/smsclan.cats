@@ -1,6 +1,7 @@
 #include "ats_types.h"
 //#include "ats_basics.h"
 #include "pats_ccomp_basics.h"
+#include "pats_ccomp_typedefs.h"
 #include<user.h>
 //#include<pool.h>
 #include "pointer.cats"
@@ -38,7 +39,7 @@ void mydelay(void)
   for(i=0;i<100000000;i++) asm volatile("mov r0,r0");
 }
 
-void debuglog(u32 noprefix, u32 lvl, const char *fmt, ...)
+void debuglog(const u32 noprefix, u32 lvl, const char *fmt, ...)
 {
 #define DLOG_BUFLEN 256
   static char buffer[DLOG_BUFLEN];
@@ -63,29 +64,6 @@ void dump_indent(indent)
 {
   u32 i;
   for(i=0;i<indent;i++) DLOG_NO_PREFIX(1, " ");
-}
-
-void dump_td(ehci_td_t *td, u32 indent)
-{
-#ifdef USE_VMM
-  /* FIXME: physical->virtual */
-  dump_indent(indent);
-  DLOG_NO_PREFIX(1, "TD: %#x %#x %#x (%s) [%#x %#x %#x %#x %#x]\n",
-                 td->next, td->alt_next, td->token,
-                 td->token & EHCI_TD_TOKEN_A ? "A" : "a", /* active? */
-                 td->buf[0], td->buf[1], td->buf[2],
-                 td->buf[3], td->buf[4]);
-  /* FIXME: use nextv */
-#else
-  dump_indent(indent);
-  DLOG_NO_PREFIX(1, "TD: %#x %#x %#x (%s) [%#x %#x %#x %#x %#x]\n",
-                 td->next, td->alt_next, td->token,
-                 td->token & EHCI_TD_TOKEN_A ? "A" : "a", /* active? */
-                 td->buf[0], td->buf[1], td->buf[2],
-                 td->buf[3], td->buf[4]);
-  if(!(td->next & EHCI_TD_PTR_T))
-    dump_td((ehci_td_t *) (td->next & EHCI_TD_PTR_MASK), indent);
-#endif
 }
 
 void dump_qh(ehci_qh_t *qh, u32 indent)
@@ -121,6 +99,11 @@ void dump_qh(ehci_qh_t *qh, u32 indent)
   //if(!(qh->next & EHCI_QH_PTR_T))
   //  dump_qh((ehci_qh_t *) (qh->next & EHCI_QH_PTR_MASK), indent);
 #endif
+}
+
+static inline void dump_usb_dev_qh(usb_device_t *usbd)
+{
+  dump_qh(&usbd->qh, 0);
 }
 
 static inline void dump_usb_dev_desc(usb_dev_desc_t *d)
@@ -537,7 +520,34 @@ void test(void)
 #endif  /* 0 */
 
 #define make_VendorRequest(x) x
+static inline u32 swap_endian32(u32 x)
+{
+  u8 *data = (u8 *) &x;
+  u32 result = ((u32) (data[3]<<0)) | ((u32) (data[2]<<8)) | ((u32) (data[1]<<16)) | ((u32) (data[0]<<24));
+  return result;
+}
 
+static inline u32 get4bytes_le(u8 *data)
+{
+  u32 result = ((u32) (data[0]<<0)) | ((u32) (data[1]<<8)) | ((u32) (data[2]<<16)) | ((u32) (data[3]<<24));
+  return result;
+}
+
+static inline void dump_buf(u8 *buf, int n)
+{
+  int i,j;
+  DLOG(1, "dump_buf (%#.8x, %d):\n", buf, n);
+  for(i=0;;i++) {
+    for(j=0;j<8;j++) {
+      if(8*i+j >= n) { DLOG_NO_PREFIX(1, "\n"); return; }
+      DLOG_NO_PREFIX(1, " %.2x", buf[8*i+j]);
+    }
+    DLOG_NO_PREFIX(1, "\n");
+  }
+}
+
+// FIXME: figure out why this is needed:
+#define smsclan_write_wait() do { int _ww; for(_ww=0;_ww<3000000;_ww++) { ASM("NOP"); } } while (0)
 
 /*
  * Local Variables:

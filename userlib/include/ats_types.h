@@ -3,6 +3,7 @@
 
 #include "../../include/types.h"
 
+typedef u8 atstype_uint8;
 typedef u32 ats_bool_type, ats_uint_type;
 typedef s32 ats_int_type;
 typedef void ats_void_type;

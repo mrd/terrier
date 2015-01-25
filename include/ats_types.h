@@ -14,6 +14,8 @@ struct ats_struct_type; /* of indefinite size */
 typedef struct ats_struct_type ats_abs_type;
 typedef struct { int tag ; } ats_sum_type ;
 typedef ats_sum_type *ats_sum_ptr_type ;
+typedef u8 atstype_uint8;
+
 
 #define ats_false_bool 0
 #define ats_true_bool 1

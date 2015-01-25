@@ -19,6 +19,9 @@ castfn usb_dev_req_ptr2ptr (!usb_device):<> ptr
 overload ptrcast with usb_dev_req_ptr2ptr
 fun usb_acquire_device {i: nat} (int i): usb_device_vt (i, 0, false) = "mac#usb_acquire_device"
 fun usb_release_device {i: nat} (usb_device_vt (i, 0, false)): void = "mac#usb_release_device"
+fun usb_reprogram_qh {i, endpt, maxpkt: nat | endpt < 16 && maxpkt < 2048} (
+    !usb_device_vt (i, 0, false), int endpt, int maxpkt
+  ): void = "mac#usb_reprogram_qh"
 
 // phys addresses
 abst@ype physaddr_t (v: addr) = $extype "physaddr" // (v = associated virtual address). (could be invalidated).
@@ -160,7 +163,12 @@ fun usb_device_detach {i, nTDs: nat} (
   ): ehci_td_ptr1 = "mac#usb_device_detach"
 
 // detach TDs from USB device and free them in one step
-fun usb_device_detach_and_free  {i, nTDs: nat} (
+// also return result status of transfer
+fun usb_device_detach_and_free {i, nTDs: nat | nTDs > 0} (
+    ! usb_device_vt (i, nTDs, false) >> usb_device_vt (i, 0, false)
+  ): [s: int] status s
+// version that does not return status
+fun usb_device_detach_and_free_  {i, nTDs: nat} (
     ! usb_device_vt (i, nTDs, false) >> usb_device_vt (i, 0, false)
   ): void
 
@@ -205,6 +213,7 @@ fun ehci_td_traversal_next {lstart, lcur: agz} (
   ): void
   = "mac#ehci_td_traversal_next"
 prfun ehci_td_traversal_free_null {lstart: agz} (ehci_td_traversal_vt (lstart, null)): void
+fun ehci_td_traversal_set_toggle {l: addr} (&ehci_td_traversal1 l): void = "mac#ehci_td_traversal_set_toggle"
 
 // begin process of filling TDs
 fun ehci_td_start_fill {lstart, ldata: agz} {p: pidcode} {len: nat} (
@@ -249,9 +258,9 @@ fun usb_transfer_chain_active {i, nTDs: nat | nTDs > 0} (
     !usb_device_vt (i, nTDs, true) >> usb_device_vt (i, nTDs, active)
   ): #[s: int] #[active: bool | (s == 0) == active] status s = "mac#usb_transfer_chain_active"
 
-fun usb_transfer_status {i, nTDs: nat | nTDs > 0} (
+fun usb_transfer_result_status {i, nTDs: nat | nTDs > 0} (
     !usb_device_vt (i, nTDs, false)
-  ): [s: int] status s = "mac#usb_transfer_status"
+  ): [s: int] status s = "mac#usb_transfer_result_status"
 
 // ** USB control operations
 // control nodata
@@ -302,6 +311,30 @@ fun usb_wait_while_active {i, nTDs: nat | nTDs > 0} (
     usbd: !usb_device_vt (i, nTDs, true) >> usb_device_vt (i, nTDs, false)
   ): void
 fun usb_set_configuration {i: nat} (!usb_device_vt (i, 0, false), int): [s: int] status s
+fun usb_get_configuration {i: nat} (!usb_device_vt (i, 0, false), &uint8? >> uint8): [s: int] status s
+
+// ** USB bulk operations
+// bulk read
+fun{a:t@ype} usb_begin_bulk_read {i, n, len: nat | len <= n} {l: agz} (
+    !(@[a][n]) @ l |
+    !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
+    int len, // number of elements
+    ptr l // data
+  ): #[s: int]
+     #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
+     #[active: bool | (s == 0) == active]
+     (usb_transfer_status i | status s)
+
+// bulk write
+fun{a:t@ype} usb_begin_bulk_write {i, n, len: nat | len <= n} {l: agz} (
+    !(@[a][n]) @ l |
+    !usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, active),
+    int len, // number of elements
+    ptr l // data
+  ): #[s: int]
+     #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
+     #[active: bool | (s == 0) == active]
+     (usb_transfer_status i | status s)
 
 // USB specification defined data structures
 abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"

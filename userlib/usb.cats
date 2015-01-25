@@ -230,6 +230,66 @@ typedef struct {
 
 /* ************************************************** */
 
+void debuglog(u32 noprefix, u32 lvl, const char *fmt, ...);
+#define debuglog_no_prefix(lvl,fmt,...) debuglog(1,lvl,fmt,##__VA_ARGS__)
+
+static void dump_usb_dev_req(usb_dev_req_t *d)
+{
+  debuglog(0, 1, "smsclan USB_DEV_REQ:\n");
+  debuglog_no_prefix(1, "  bmRequestType=%#.2x bRequest=%#.2x wValue=%#.4x wIndex=%#.4x wLength=%d\n",
+                 d->bmRequestType, d->bRequest, d->wValue, d->wIndex, d->wLength);
+}
+
+static void dump_td(ehci_td_t *td, u32 indent)
+{
+  u32 i;
+  for(i=0;i<indent;i++) debuglog_no_prefix(1, " ");
+
+#ifdef USE_VMM
+  /* FIXME: physical->virtual */
+
+  int pid = GETBITS(td->token, 8, 2);
+  char *pidcode = (pid == 0 ? "OUT" : (pid == 1 ? "IN" : (pid == 2 ? "SETUP" : "reserved")));
+  debuglog_no_prefix(1, "TD: %#.8x %#.8x %#.8x (%s%s%s%s%s%s%s%s) (CERR=%d) %s [%#x %#x %#x %#x %#x]\n",
+                 td->next, td->alt_next, td->token,
+                 td->token & EHCI_TD_TOKEN_A ? "A" : "", /* active? */
+                 td->token & EHCI_TD_TOKEN_H ? "H" : "", /* halted? */
+                 td->token & BIT(5)          ? "D" : "", /* data buffer error */
+                 td->token & BIT(4)          ? "B" : "", /* babble */
+                 td->token & BIT(3)          ? "X" : "", /* transaction error */
+                 td->token & BIT(2)          ? "M" : "", /* missed microframe error */
+                 td->token & BIT(1)          ? "S" : "", /* split transaction state */
+                 td->token & BIT(0)          ? "P" : "", /* ping state/ERR */
+                 GETBITS(td->token, 10, 2),
+                 pidcode,
+                 td->buf[0], td->buf[1], td->buf[2],
+                 td->buf[3], td->buf[4]);
+  /* FIXME: use nextv */
+#else
+
+  int pid = GETBITS(td->token, 8, 2);
+  char *pidcode = (pid == 0 ? "OUT" : (pid == 1 ? "IN" : (pid == 2 ? "SETUP" : "reserved")));
+  debuglog_no_prefix(1, "TD: %#.8x %#.8x %#.8x (%s%s%s%s%s%s%s%s) (CERR=%d) %s [%#x %#x %#x %#x %#x]\n",
+                 td->next, td->alt_next, td->token,
+                 td->token & EHCI_TD_TOKEN_A ? "A" : "", /* active? */
+                 td->token & EHCI_TD_TOKEN_H ? "H" : "", /* halted? */
+                 td->token & BIT(5)          ? "D" : "", /* data buffer error */
+                 td->token & BIT(4)          ? "B" : "", /* babble */
+                 td->token & BIT(3)          ? "X" : "", /* transaction error */
+                 td->token & BIT(2)          ? "M" : "", /* missed microframe error */
+                 td->token & BIT(1)          ? "S" : "", /* split transaction state */
+                 td->token & BIT(0)          ? "P" : "", /* ping state/ERR */
+                 GETBITS(td->token, 10, 2),
+                 pidcode,
+                 td->buf[0], td->buf[1], td->buf[2],
+                 td->buf[3], td->buf[4]);
+  if(!(td->next & EHCI_TD_PTR_T))
+    dump_td((ehci_td_t *) (td->next & EHCI_TD_PTR_MASK), indent);
+#endif
+}
+
+/* ************************************************** */
+
 #define usb_device_num_configurations(d) (d)->dev_desc.bNumConfigurations;
 
 /* ************************************************** */
@@ -324,10 +384,11 @@ static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
     (*((ehci_td_t **)(trav))) = (td);                   \
   } while (0)
 
+#define ehci_td_traversal_set_toggle(trav) (*((ehci_td_t **)(trav)))->token |= BIT(31)
+
 /* ************************************************** */
 /* USB transfer */
-
-#define usb_transfer_completed(d)
+#define usb_transfer_completed(d) //dump_td(d->attached, 8)
 
 static inline status usb_transfer_chain_active(usb_device_t *usbd)
 {
@@ -345,10 +406,11 @@ static inline status usb_transfer_chain_active(usb_device_t *usbd)
   return OK;
 }
 
-static inline status usb_transfer_status(usb_device_t *usbd)
+static inline status usb_transfer_result_status(usb_device_t *usbd)
 {
   ehci_td_t *td = usbd->attached;
   while(td != NULL) {
+    //    if((td->token & (0xF << 2)) != 0) return EDATA;
     if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
       return OK;                /* not active */
     if((td->token & EHCI_TD_TOKEN_H) != 0)
@@ -359,6 +421,29 @@ static inline status usb_transfer_status(usb_device_t *usbd)
     td = (ehci_td_t *) td->nextv;
   }
   return EINCOMPLETE;
+}
+
+static inline void usb_reprogram_qh(usb_device_t *d, u32 endpt, u32 maxpkt)
+{
+  ehci_qh_t *qh = &d->qh;
+  qh->characteristics =
+    /* Max Packet Size */
+    SETBITS(maxpkt, 16, 11) |
+    /* Data toggle control (0=Use HC; 1=use TD) */
+    // BIT(14) |
+    /* endpoint speed: high */
+    SETBITS(2, 12, 2) |
+    /* endpoint number */
+    SETBITS(endpt, 8, 4) |
+    /* device address */
+    SETBITS(d->address, 0, 7) |
+    0;
+  qh->capabilities =
+    /* Mult */
+    SETBITS(3, 30, 2) |
+    /* S-mask: 0 for async */
+    SETBITS(0, 0, 8) |
+    0;
 }
 
 #endif

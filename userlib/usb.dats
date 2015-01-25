@@ -24,15 +24,15 @@ staload _ = "prelude/DATS/integer_fixed.dats"
 // Attach and activate a TD chain
 implement usb_device_attach (filled_v | usbd, td, paddr) =
 begin
-  usbd.clr_current_td ();
-  usbd.clr_overlay_status ();
+  usbd.clr_current_td (0);
+  usbd.clr_overlay_status (0);
   usbd.set_next_td (filled_v | td, paddr)
 end
 
 implement usb_device_detach_and_free (usbd) =
 let
-  val s = usb_transfer_result_status usbd
-  val tds = usb_device_detach usbd
+  val s = usb_transfer_result_status (usbd)
+  val tds = usb_device_detach (usbd)
 in
   ehci_td_chain_free tds; s
 end

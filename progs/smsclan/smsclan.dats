@@ -663,7 +663,7 @@ int main(void)
   DLOG(1, "smsclan ****************** &usbdevices[0]=%#x\n", &usbd[0]);
   //while(*((volatile u32 *) (&usbd[1].flags)) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
   while(__atomic_load_n(&usbd[1].flags, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
-  DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", usbd->qh.capabilities);
+  DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", QH( *usbd,0).capabilities);
   DLOG(1, "smsclan ****************** invoking test_usb\n");
   //test(); // Test USB
   test_usb (); // Test ATS version of USB code

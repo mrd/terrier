@@ -221,12 +221,18 @@ typedef struct _ehci_qh ehci_qh_t;
 /* ************************************************** */
 
 /* same as in ehci.cats */
+#define USB_DEVICE_NUM_QH 4
 typedef struct {
-  ehci_qh_t qh;
-  ehci_td_t *attached;          /* currently attached TD chain if exists */
-  u32 address, flags;
+  ehci_qh_t qh[USB_DEVICE_NUM_QH];
+  ehci_td_t *attached[USB_DEVICE_NUM_QH]; /* currently attached TD chain if exists */
+  u32 address, flags, num_qh;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
+#define QH(usbd,i) ((usbd).qh[(i)])
+#define FOR_QH(var,usbd) do { ehci_qh_t *var; \
+  for(var = &(usbd).qh[0]; var < &(usbd).qh[(usbd).num_qh]; var++)
+#define END_FOR_QH } while (0)
+#define ATTACHED(usbd,i) ((usbd).attached[(i)])
 
 /* ************************************************** */
 
@@ -298,32 +304,34 @@ static inline void *usb_acquire_device(int i)
 {
   /* FIXME: more comprehensive way of picking ipc mappings */
   usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
-  usbd[i].qh.current_td = EHCI_QH_PTR_T;
-  usbd[i].qh.next_td = EHCI_QH_PTR_T;
-  usbd[i].qh.alt_td = EHCI_QH_PTR_T;
+  FOR_QH(q,usbd[i]) {
+    q->current_td = EHCI_QH_PTR_T;
+    q->next_td = EHCI_QH_PTR_T;
+    q->alt_td = EHCI_QH_PTR_T;
+  } END_FOR_QH;
   return (void *) &usbd[i];
 }
 
 #define usb_release_device(usbd)
 
-static inline void *usb_device_clr_next_td(void *_usbd)
+static inline void *usb_device_clr_next_td(void *_usbd, int qi)
 {
   usb_device_t *usbd = (usb_device_t *) _usbd;
-  (usbd)->qh.next_td = EHCI_QH_PTR_T;
-  return (void *) usbd->attached;
+  QH(*usbd,qi).next_td = EHCI_QH_PTR_T;
+  return (void *) ATTACHED(*usbd,qi);
 }
-#define usb_device_clr_current_td(x) (x)->qh.current_td = EHCI_QH_PTR_T
-#define usb_device_clr_overlay_status(x) (x)->qh.overlay[0] = 0
-#define usb_device_clr_alt_td(x) (x)->qh.alt_td = EHCI_QH_PTR_T
-#define usb_device_set_next_td(usbd,virt,phys) do { (usbd)->qh.next_td = (phys); (usbd)->attached = (virt); } while (0)
+#define usb_device_clr_current_td(x,qi) QH(*(x),qi).current_td = EHCI_QH_PTR_T
+#define usb_device_clr_overlay_status(x,qi) QH(*(x),qi).overlay[0] = 0
+#define usb_device_clr_alt_td(x,qi) QH(*(x),qi).alt_td = EHCI_QH_PTR_T
+#define usb_device_set_next_td(usbd,virt,phys) do { QH(*(usbd),0).next_td = (phys); ATTACHED(*(usbd),0) = (virt); } while (0)
 
 static inline ehci_td_t *usb_device_detach(usb_device_t *usbd)
 {
-  usbd->qh.current_td = EHCI_QH_PTR_T;
-  usbd->qh.next_td = EHCI_QH_PTR_T;
-  usbd->qh.alt_td = EHCI_QH_PTR_T;
-  ehci_td_t *td = usbd->attached;
-  usbd->attached = NULL;
+  QH(*(usbd),0).current_td = EHCI_QH_PTR_T;
+  QH(*(usbd),0).next_td = EHCI_QH_PTR_T;
+  QH(*(usbd),0).alt_td = EHCI_QH_PTR_T;
+  ehci_td_t *td = ATTACHED(*usbd,0);
+  ATTACHED(*usbd,0) = NULL;
   return td;
 }
 
@@ -392,7 +400,7 @@ static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
 
 static inline status usb_transfer_chain_active(usb_device_t *usbd)
 {
-  ehci_td_t *td = usbd->attached;
+  ehci_td_t *td = ATTACHED(*(usbd),0);
   while(td != NULL) {
     if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
       return EINVALID;          /* not active */
@@ -408,7 +416,7 @@ static inline status usb_transfer_chain_active(usb_device_t *usbd)
 
 static inline status usb_transfer_result_status(usb_device_t *usbd)
 {
-  ehci_td_t *td = usbd->attached;
+  ehci_td_t *td = ATTACHED(*(usbd),0);
   while(td != NULL) {
     //    if((td->token & (0xF << 2)) != 0) return EDATA;
     if((td->token & EHCI_TD_TOKEN_A) == 0 && (td->next & EHCI_TD_PTR_T) == 1)
@@ -425,7 +433,7 @@ static inline status usb_transfer_result_status(usb_device_t *usbd)
 
 static inline void usb_reprogram_qh(usb_device_t *d, u32 endpt, u32 maxpkt)
 {
-  ehci_qh_t *qh = &d->qh;
+  ehci_qh_t *qh = &QH(*(d),0);
   qh->characteristics =
     /* Max Packet Size */
     SETBITS(maxpkt, 16, 11) |

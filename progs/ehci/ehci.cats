@@ -785,42 +785,49 @@ static status usb_root_port_enabled(usb_port_t *p)
 
 /* ************************************************** */
 
+/* same as in usb.cats */
+#define USB_DEVICE_NUM_QH 4
 typedef struct {
-  ehci_qh_t qh;
-  ehci_td_t *attached;          /* currently attached TD chain if exists */
-  u32 address, flags;
+  ehci_qh_t qh[USB_DEVICE_NUM_QH];
+  ehci_td_t *attached[USB_DEVICE_NUM_QH]; /* currently attached TD chain if exists */
+  u32 address, flags, num_qh;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
+#define QH(usbd,i) ((usbd).qh[(i)])
+#define FOR_QH(var,usbd) do { ehci_qh_t *var; \
+  for(var = &(usbd).qh[0]; var < &(usbd).qh[(usbd).num_qh]; var++)
+#define END_FOR_QH } while (0)
+#define ATTACHED(usbd,i) ((usbd).attached[(i)])
 
 // create a pool for simple dynamic allocation using IPC memory
 IPC_POOL_DEFN(usb_device,usb_device_t,8);
 
 void usb_clear_device(usb_device_t *d)
 {
+  int i;
   d->address = d->flags = 0;
-  d->attached = NULL;
+  for(i=0;i<d->num_qh;i++) { d->attached[i] = NULL; }
   d->dev_desc.bMaxPacketSize0 = 8; /* default */
 }
 
 typedef u8 scratch_buf_t[128];
 DEVICE_POOL_DEFN(scratch_buf,scratch_buf_t,4,4);
 
-void ehci_init_bulk_qh(usb_device_t *d, u32 endpt)
+void ehci_init_bulk_qh(ehci_qh_t *qh, u32 endpt, u8 addr, u8 maxpkt)
 {
-  ehci_qh_t *qh = &d->qh;
   memset(qh, 0, 1<<6);
   qh->next = EHCI_QH_PTR_T;
   qh->characteristics =
     /* Max Packet Size */
-    SETBITS(d->dev_desc.bMaxPacketSize0, 16, 11) |
-    /* Data toggle control */
-    //BIT(14) |
+    SETBITS(maxpkt, 16, 11) |
+    /* Data toggle control (0=Use HC; 1=use TD) */
+    // BIT(14) |
     /* endpoint speed: high */
     SETBITS(2, 12, 2) |
     /* endpoint number */
     SETBITS(endpt, 8, 4) |
     /* device address */
-    SETBITS(d->address, 0, 7) |
+    SETBITS(addr, 0, 7) |
     0;
   qh->capabilities =
     /* Mult */
@@ -909,9 +916,14 @@ status ehci_insert_qh(ehci_qh_t *cur, ehci_qh_t *new)
 
 void usb_init_subdevice(usb_device_t *d, u32 endpt, usb_device_t *parent)
 {
+  d->num_qh = USB_DEVICE_NUM_QH;
+  ehci_qh_t *cur = &QH(*parent,0);
   usb_clear_device(d);
-  ehci_init_bulk_qh(d, endpt);
-  ehci_insert_qh(&parent->qh, &d->qh);
+  FOR_QH(qh,*d) {
+    ehci_init_bulk_qh(qh, endpt, d->address, d->dev_desc.bMaxPacketSize0);
+    ehci_insert_qh(cur, qh);
+    cur = qh;
+  } END_FOR_QH;
 }
 
 #define EHCI_PIDCODE_OUT   0
@@ -1086,7 +1098,7 @@ static status usb_control_write(usb_device_t *d, u32 bmRequestType, u32 bRequest
   usb_device_request(devr, bmRequestType, bRequest, wValue, wIndex, wLength);
 
   /* setup qTDs */
-  ehci_detach_td(&d->qh);
+  ehci_detach_td(&QH(*d,0));
   ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
   if(ehci_fill_td(td[1], EHCI_PIDCODE_OUT, data, wLength, td[0]) != 0) { /* DATA stage */
     FREE_TDS(devr,td,3);
@@ -1095,12 +1107,12 @@ static status usb_control_write(usb_device_t *d, u32 bmRequestType, u32 bRequest
   ehci_fill_td(td[2], EHCI_PIDCODE_IN, NULL, 0, td[1]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(&d->qh, td[0]);
+  ehci_attach_td(&QH(*d,0), td[0]);
 
   /* wait for it */
   while(ehci_td_chain_active(td[0]) == OK);
 
-  ehci_detach_td(&d->qh);       /* detach before unwinding TD memory */
+  ehci_detach_td(&QH(*d,0));       /* detach before unwinding TD memory */
 
   status s = ehci_td_chain_status(td[0]);
   FREE_TDS(devr,td,3);
@@ -1115,7 +1127,7 @@ static status usb_control_read(usb_device_t *d, u32 bmRequestType, u32 bRequest,
   usb_device_request(devr, bmRequestType, bRequest, wValue, wIndex, wLength);
 
   /* setup qTDs */
-  ehci_detach_td(&d->qh);
+  ehci_detach_td(&QH(*d,0));
   ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
   if(ehci_fill_td(td[1], EHCI_PIDCODE_IN, data, wLength, td[0]) != 0) { /* DATA stage */
     FREE_TDS(devr,td,3);
@@ -1124,12 +1136,12 @@ static status usb_control_read(usb_device_t *d, u32 bmRequestType, u32 bRequest,
   ehci_fill_td(td[2], EHCI_PIDCODE_OUT, NULL, 0, td[1]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(&d->qh, td[0]);
+  ehci_attach_td(&QH(*d,0), td[0]);
 
   /* wait for it */
   while(ehci_td_chain_active(td[0]) == OK);
 
-  ehci_detach_td(&d->qh);       /* detach before unwinding TD memory */
+  ehci_detach_td(&QH(*d,0));       /* detach before unwinding TD memory */
 
   status s = ehci_td_chain_status(td[0]);
   FREE_TDS(devr,td,3);
@@ -1143,17 +1155,17 @@ static status usb_control_nodata(usb_device_t *d, u32 bmRequestType, u32 bReques
   usb_device_request(devr, bmRequestType, bRequest, wValue, wIndex, 0);
 
   /* setup qTDs */
-  ehci_detach_td(&d->qh);
+  ehci_detach_td(&QH(*d,0));
   ehci_fill_td(td[0], EHCI_PIDCODE_SETUP, devr, sizeof(usb_dev_req_t), NULL); /* SETUP stage */
   ehci_fill_td(td[1], EHCI_PIDCODE_IN, NULL, 0, td[0]); /* STATUS stage */
 
   /* queue it */
-  ehci_attach_td(&d->qh, td[0]);
+  ehci_attach_td(&QH(*d,0), td[0]);
 
   /* wait for it */
   while(ehci_td_chain_active(td[0]) == OK);
 
-  ehci_detach_td(&d->qh);       /* detach before unwinding TD memory */
+  ehci_detach_td(&QH(*d,0));       /* detach before unwinding TD memory */
 
   status s = ehci_td_chain_status(td[0]);
   FREE_TDS(devr,td,2);
@@ -1425,7 +1437,7 @@ u32 unused_address = 1;         /* store next unused address */
 
 status ehci_setup_new_device(usb_device_t *usbd)
 {
-  ehci_set_qh_max_packet_size(&usbd->qh, 8); /* start with 8 byte max packet size */
+  ehci_set_qh_max_packet_size(&QH(*usbd,0), 8); /* start with 8 byte max packet size */
 
   /* create SET_ADDRESS control request */
   u32 new_addr = unused_address++;
@@ -1436,7 +1448,7 @@ status ehci_setup_new_device(usb_device_t *usbd)
   }
 
   usbd->address = new_addr;
-  ehci_set_qh_address(&usbd->qh, new_addr);
+  ehci_set_qh_address(&QH(*usbd,0), new_addr);
 
   DLOG(1, "ehci_setup_new_device new_addr=%d\n", new_addr);
 
@@ -1445,7 +1457,10 @@ status ehci_setup_new_device(usb_device_t *usbd)
                    USB_TYPE_DEV_DESC << 8, 0, sizeof(usb_dev_desc_t), &usbd->dev_desc);
 
   /* get it again, but with correct max packet size */
-  ehci_set_qh_max_packet_size(&usbd->qh, usbd->dev_desc.bMaxPacketSize0);
+  FOR_QH(qh,*usbd) {
+    ehci_set_qh_max_packet_size(qh, usbd->dev_desc.bMaxPacketSize0);
+    ehci_set_qh_address(qh, usbd->address);
+  } END_FOR_QH;
 
   DLOG(1, "ehci_setup_new_device usbd->dev_desc.bMaxPacketSize0=%d\n", usbd->dev_desc.bMaxPacketSize0);
 
@@ -1701,13 +1716,13 @@ void hsusbhc_init()
 
 #ifdef USE_VMM
   u32 paddr = 0;
-  if(vmm_get_phys_addr((void *) &usbd->qh, &paddr) != OK) {
+  if(vmm_get_phys_addr((void *) &QH(*usbd,0), &paddr) != OK) {
     DLOG(1, "vmm_get_phys_addr returned NOT OK\n");
     return;                 /* FIXME: what to do */
   }
   R(EHCI_ASYNCLISTADDR) = paddr;
 #else
-  R(EHCI_ASYNCLISTADDR) = (u32) &usbd->qh;
+  R(EHCI_ASYNCLISTADDR) = (u32) &QH(*usbd,0);
 #endif
 
   DLOG(1, "EHCI_ASYNCLISTADDR=%#x\n", R(EHCI_ASYNCLISTADDR));

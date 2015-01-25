@@ -23,6 +23,9 @@ fun usb_reprogram_qh {i, endpt, maxpkt: nat | endpt < 16 && maxpkt < 2048} (
     !usb_device_vt (i, 0, false), int endpt, int maxpkt
   ): void = "mac#usb_reprogram_qh"
 
+// QH taken from USB device
+
+
 // phys addresses
 abst@ype physaddr_t (v: addr) = $extype "physaddr" // (v = associated virtual address). (could be invalidated).
 typedef physaddr = [v: agez] physaddr_t v
@@ -87,7 +90,7 @@ dataview usb_transfer_status (i: int) =
 
 // QH manip via USB device: QH is inside of usb_device
 // {next_td, alt_td, current_td} are inside of QH
-fun usb_device_clr_next_td (!usb_device): void = "mac#usb_device_clr_next_td"
+fun usb_device_clr_next_td (!usb_device,int): void = "mac#usb_device_clr_next_td"
 
 // Setting next TD on the QH causes it to begin the transfer
 fun usb_device_set_next_td {v: agz} {i, n: nat | n > 0} (
@@ -99,16 +102,16 @@ fun usb_device_set_next_td {v: agz} {i, n: nat | n > 0} (
   = "mac#usb_device_set_next_td"
 overload .set_next_td with usb_device_set_next_td
 
-fun usb_device_clr_current_td (!usb_device): void = "mac#usb_device_clr_current_td"
+fun usb_device_clr_current_td (!usb_device, int): void = "mac#usb_device_clr_current_td"
 overload .clr_current_td with usb_device_clr_current_td
 //fun usb_device_set_current_td (!usb_device, physaddr): void
 //overload .set_current_td with usb_device_set_current_td
 
-fun usb_device_clr_alt_td (!usb_device): void = "mac#usb_device_clr_alt_td"
+fun usb_device_clr_alt_td (!usb_device, int): void = "mac#usb_device_clr_alt_td"
 //fun usb_device_set_alt_td (!usb_device, physaddr): void
 //overload .set_alt_td with usb_device_set_alt_td
 
-fun usb_device_clr_overlay_status (!usb_device): void = "mac#usb_device_clr_overlay_status"
+fun usb_device_clr_overlay_status (!usb_device, int): void = "mac#usb_device_clr_overlay_status"
 overload .clr_overlay_status with usb_device_clr_overlay_status
 
 // definition of "end of chain" according to EHCI specification.
@@ -172,7 +175,7 @@ fun usb_device_detach_and_free_  {i, nTDs: nat} (
     ! usb_device_vt (i, nTDs, false) >> usb_device_vt (i, 0, false)
   ): void
 
-// attach a chain of TDs to the QH within the USB device
+// attach a chain of TDs to a QH within the USB device
 fun usb_device_attach {i, nTDs: nat | nTDs > 0} {l: agz} (
     ehci_td_chain_filled (l, nTDs) |
     ! usb_device_vt (i, 0, false) >> usb_device_vt (i, nTDs, true),

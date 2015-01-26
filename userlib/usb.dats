@@ -37,10 +37,27 @@ in
   ehci_td_chain_free tds; s
 end
 
+implement usb_device_detach_and_release_urb (usbd, urb) =
+let
+  val s = urb_transfer_result_status (urb)
+  val tds = urb_detach (urb)
+in
+  usb_device_release_urb (usbd, urb);
+  ehci_td_chain_free tds; s
+end
+
 implement urb_detach_and_free_ (urb) =
 let
   val tds = urb_detach urb
 in
+  ehci_td_chain_free tds
+end
+
+implement usb_device_detach_and_release_urb_ (usbd, urb) =
+let
+  val tds = urb_detach urb
+in
+  usb_device_release_urb (usbd, urb);
   ehci_td_chain_free tds
 end
 
@@ -415,26 +432,46 @@ let val s = urb_transfer_chain_active (xfer_v | urb) in
     if s = OK then urb_wait_while_active (xfer_v | urb) else ()
 end // [usb_wait_while_active]
 
-implement urb_set_configuration (urb, cfgval) =
+implement usb_with_urb (usbd, f) =
 let
-  val (xfer_v | s) =
-    urb_begin_control_nodata (urb, make_RequestType (HostToDevice, Standard, Device),
-                              make_Request SetConfiguration,
-                              cfgval, 0)
+  var urb: urb0?
+  val s = usb_device_alloc_urb (usbd, urb)
 in
-  if s = OK then begin
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    urb_detach_and_free urb
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    urb_detach_and_free_ urb;
-    s
-  end
-end // [usb_set_configuration]
+  if s != OK
+  then s where { prval _ = usb_device_release_null_urb urb }
+  else s where { val s = f (usbd, urb)
+                 val _ = usb_device_release_urb (usbd, urb) }
+end
 
-implement urb_get_configuration (urb, cfgval) =
-let
+implement usb_set_configuration {i} (usbd, cfgval) = usb_with_urb (usbd, f)
+where {
+  var f = lam@ (usbd: !usb_device_vt i, urb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
+    val _ = urb_set_control_endpoint (usbd, urb)
+    val (xfer_v | s) =
+        urb_begin_control_nodata (urb, make_RequestType (HostToDevice, Standard, Device),
+                                  make_Request SetConfiguration,
+                                  cfgval, 0)
+  in
+    if s = OK then begin
+      urb_wait_while_active (xfer_v | urb);
+      urb_transfer_completed (xfer_v | urb);
+      urb_detach_and_free urb
+    end else begin
+      urb_transfer_completed (xfer_v | urb);
+      urb_detach_and_free_ urb;
+      s
+    end
+  end
+}
+
+implement usb_get_configuration {i} (usbd, cfgval) = let
+  var urb: urb0?
+  val s = usb_device_alloc_urb (usbd, urb)
+in if s != OK then
+  s where { prval _ = usb_device_release_null_urb urb
+            val   _ = cfgval := $UN.cast{uint8}(0) }
+else let
+  val _ = urb_set_control_endpoint (usbd, urb)
   var buf = @[uint8][1]($UN.cast{uint8}(0))
   val (xfer_v | s) =
     urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Standard, Device),
@@ -445,14 +482,14 @@ in
     urb_wait_while_active (xfer_v | urb);
     urb_transfer_completed (xfer_v | urb);
     cfgval := array_get_at (buf, 0);
-    urb_detach_and_free urb
+    usb_device_detach_and_release_urb (usbd, urb)
   end else begin
     urb_transfer_completed (xfer_v | urb);
-    urb_detach_and_free_ urb;
+    usb_device_detach_and_release_urb_ (usbd, urb);
     cfgval := $UN.cast{uint8}(0);
     s
   end
-end // [usb_get_configuration]
+end end // [usb_get_configuration]
 
 // note: worked first time
 implement{a} urb_begin_bulk_read (pf | urb, numElems, data) =

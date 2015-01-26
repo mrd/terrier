@@ -322,8 +322,9 @@ static inline void *usb_acquire_device(int i)
 
 typedef ehci_qh_t *urb_t;
 
-static inline status usb_device_alloc_urb(usb_device_t *usbd, urb_t *urb)
+static inline status usb_device_alloc_urb(usb_device_t *usbd, void **_urb)
 {
+  urb_t *urb = (urb_t *) _urb;
   FOR_QH(q,*usbd) {
     if(q->priv2 == 0) {
       q->priv2 = 1;
@@ -474,6 +475,8 @@ static inline void urb_set_endpoint(ehci_qh_t *qh, u32 endpt, u32 maxpkt)
     SETBITS(0, 0, 8) |
     0;
 }
+
+#define urb_set_control_endpoint(usbd, urb) urb_set_endpoint(urb, 0, usbd->dev_desc.bMaxPacketSize0)
 
 #endif
 

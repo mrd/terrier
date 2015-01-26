@@ -26,12 +26,19 @@ vtypedef urb0 = [i: int | i >= ~1] urb_vt (i, 0, false)
 fun usb_device_alloc_urb {i: nat} (
     !usb_device_vt (i), &urb0? >> urb_vt (i', 0, false)
   ): #[s, i': int | (s != 0 || i' == i) && (s == 0 || i' == ~1)] status s = "mac#usb_device_alloc_urb"
-fun usb_device_release_urb {i: nat} (usb_device_vt (i), urb_vt (i, 0, false)): void = "mac#usb_device_release_urb"
+fun usb_device_release_urb {i: nat} (!usb_device_vt (i), urb_vt (i, 0, false)): void = "mac#usb_device_release_urb"
 prfun usb_device_release_null_urb (urb_vt (~1, 0, false)): void
 
+fun urb_set_control_endpoint {i: nat} (!usb_device_vt i, !urb_vt (i, 0, false)): void = "mac#urb_set_control_endpoint"
 fun urb_set_endpoint {i, endpt, maxpkt: nat | endpt < 16 && maxpkt < 2048} (
     !urb_vt (i, 0, false), int endpt, int maxpkt
   ): void = "mac#urb_set_endpoint"
+
+// URB wrapper
+fun usb_with_urb {i: nat} (
+    !usb_device_vt i, f: &((!usb_device_vt i, !urb_vt (i, 0, false)) -<clo1> [s: int] status s)
+  ): [s: int] status s;
+
 
 fun urb_clr_current_td {i: nat} (!urb_vt (i, 0, false)): void = "mac#urb_clr_current_td"
 overload .clr_current_td with urb_clr_current_td
@@ -128,10 +135,19 @@ fun urb_detach {i, nTDs: nat} (
 fun urb_detach_and_free {i, nTDs: nat | nTDs > 0} (
     ! urb_vt (i, nTDs, false) >> urb_vt (i, 0, false)
   ): [s: int] status s
+// combined URB release and detach
+fun usb_device_detach_and_release_urb {i, nTDs: nat | nTDs > 0} (
+    !usb_device_vt (i), urb_vt (i, nTDs, false)
+  ): [s: int] status s
+
 // version that does not return status
 fun urb_detach_and_free_  {i, nTDs: nat} (
     ! urb_vt (i, nTDs, false) >> urb_vt (i, 0, false)
   ): void
+fun usb_device_detach_and_release_urb_ {i, nTDs: nat} (
+    !usb_device_vt (i), urb_vt (i, nTDs, false)
+  ): void
+
 
 // attach a chain of TDs to a QH within the USB device
 fun urb_attach {i, nTDs: nat | nTDs > 0} {l: agz} (
@@ -267,7 +283,9 @@ fun urb_transfer_result_status {i, nTDs: nat | nTDs > 0} (
     !urb_vt (i, nTDs, false)
   ): [s: int] status s = "mac#urb_transfer_result_status"
 
+
 // ** USB control operations
+
 // control nodata
 fun{} urb_begin_control_nodata {i: nat} (
     !urb_vt (i, 0, false) >> urb_vt (i, nTDs, active),
@@ -316,9 +334,8 @@ fun urb_wait_while_active {i, nTDs: nat | nTDs > 0} (
     usbd: !urb_vt (i, nTDs, true) >> urb_vt (i, nTDs, false)
   ): void
 
-// Requires URB to be setup for Control transfers:
-fun urb_set_configuration {i: nat} (!urb_vt (i, 0, false), int): [s: int] status s
-fun urb_get_configuration {i: nat} (!urb_vt (i, 0, false), &uint8? >> uint8): [s: int] status s
+fun usb_set_configuration {i: nat} (!usb_device_vt (i), int): [s: int] status s
+fun usb_get_configuration {i: nat} (!usb_device_vt (i), &uint8? >> uint8): [s: int] status s
 
 // ** USB bulk operations
 // bulk read

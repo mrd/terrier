@@ -574,7 +574,9 @@ struct _ehci_qh {
   volatile u32 current_td;
   volatile u32 next_td;
   volatile u32 alt_td;
-  volatile u32 overlay[10];              /* used by hardware */
+  volatile u32 overlay[8];      /* used by hardware */
+  volatile u32 priv1;           /* extra space usable by drivers */
+  volatile u32 priv2;
 } __attribute__((aligned (32)));
 typedef struct _ehci_qh ehci_qh_t;
 
@@ -789,7 +791,7 @@ static status usb_root_port_enabled(usb_port_t *p)
 #define USB_DEVICE_NUM_QH 4
 typedef struct {
   ehci_qh_t qh[USB_DEVICE_NUM_QH];
-  ehci_td_t *attached[USB_DEVICE_NUM_QH]; /* currently attached TD chain if exists */
+  //ehci_td_t *attached[USB_DEVICE_NUM_QH]; /* currently attached TD chain if exists */
   u32 address, flags, num_qh;
   usb_dev_desc_t dev_desc;
 } usb_device_t;
@@ -797,7 +799,8 @@ typedef struct {
 #define FOR_QH(var,usbd) do { ehci_qh_t *var; \
   for(var = &(usbd).qh[0]; var < &(usbd).qh[(usbd).num_qh]; var++)
 #define END_FOR_QH } while (0)
-#define ATTACHED(usbd,i) ((usbd).attached[(i)])
+#define ATTACHED(usbd,i) ((ehci_td_t *) ((usbd).qh[(i)].priv1))
+#define SET_ATTACHED(usbd,i,v) ((usbd).qh[(i)].priv1) = (u32) (v)
 
 // create a pool for simple dynamic allocation using IPC memory
 IPC_POOL_DEFN(usb_device,usb_device_t,8);
@@ -806,7 +809,7 @@ void usb_clear_device(usb_device_t *d)
 {
   int i;
   d->address = d->flags = 0;
-  for(i=0;i<d->num_qh;i++) { d->attached[i] = NULL; }
+  for(i=0;i<d->num_qh;i++) { SET_ATTACHED(*d,i, NULL); }
   d->dev_desc.bMaxPacketSize0 = 8; /* default */
 }
 

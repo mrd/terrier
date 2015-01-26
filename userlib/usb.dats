@@ -22,24 +22,24 @@ staload _ = "prelude/DATS/integer_fixed.dats"
 
 
 // Attach and activate a TD chain
-implement usb_device_attach (filled_v | usbd, td, paddr) =
+implement urb_attach (filled_v | urb, td, paddr) =
 begin
-  usbd.clr_current_td (0);
-  usbd.clr_overlay_status (0);
-  usbd.set_next_td (filled_v | td, paddr)
+  urb.clr_current_td ();
+  urb.clr_overlay_status ();
+  urb.set_next_td (filled_v | td, paddr)
 end
 
-implement usb_device_detach_and_free (usbd) =
+implement urb_detach_and_free (urb) =
 let
-  val s = usb_transfer_result_status (usbd)
-  val tds = usb_device_detach (usbd)
+  val s = urb_transfer_result_status (urb)
+  val tds = urb_detach (urb)
 in
   ehci_td_chain_free tds; s
 end
 
-implement usb_device_detach_and_free_ (usbd) =
+implement urb_detach_and_free_ (urb) =
 let
-  val tds = usb_device_detach usbd
+  val tds = urb_detach urb
 in
   ehci_td_chain_free tds
 end
@@ -218,7 +218,7 @@ fun{a:vt0p} sizeofGEZ (): [s: nat] int s = $UN.cast{intGte(0)}(g1ofg0 (sizeof<a>
 extern fun dump_td (!ehci_td_ptr0, int): void = "mac#dump_td"
 extern fun dump_usb_dev_req (!usb_dev_req_ptr0): void = "mac#dump_usb_dev_req"
 
-implement{a} usb_begin_control_read (pf | usbd, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
+implement{a} urb_begin_control_read (pf | urb, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
 let
   var startTD: ehci_td_ptr0?
   var devr: usb_dev_req_ptr0?
@@ -279,14 +279,14 @@ in
   end else let
     // OK and ready-to-go
     //val _ = dump_td (startTD,0)
-    val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
+    val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     usb_dev_req_pool_free devr;
     (xfer_v | OK)
   end end end end end // flattened
 end
 
-implement{a} usb_begin_control_write (pf | usbd, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
+implement{a} urb_begin_control_write (pf | urb, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
 let
   var startTD: ehci_td_ptr0?
   var devr: usb_dev_req_ptr0?
@@ -347,14 +347,14 @@ in
   end else let
     // OK and ready-to-go
     //val _ = dump_td (startTD,0)
-    val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
+    val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     usb_dev_req_pool_free devr;
     (xfer_v | OK)
   end end end end end // flattened
 end
 
-implement{} usb_begin_control_nodata (usbd, bmRequestType, bRequest, wValue, wIndex) =
+implement{} urb_begin_control_nodata (urb, bmRequestType, bRequest, wValue, wIndex) =
 let
   var startTD: ehci_td_ptr0?
   var devr: usb_dev_req_ptr0?
@@ -403,59 +403,59 @@ in
   end else let
     // OK and ready-to-go
     //val _ = dump_td (startTD,0)
-    val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
+    val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     usb_dev_req_pool_free devr;
     (xfer_v | OK)
   end end end end // flattened
 end
 
-implement usb_wait_while_active (xfer_v | usbd) =
-let val s = usb_transfer_chain_active (xfer_v | usbd) in
-    if s = OK then usb_wait_while_active (xfer_v | usbd) else ()
+implement urb_wait_while_active (xfer_v | urb) =
+let val s = urb_transfer_chain_active (xfer_v | urb) in
+    if s = OK then urb_wait_while_active (xfer_v | urb) else ()
 end // [usb_wait_while_active]
 
-implement usb_set_configuration (usbd, cfgval) =
+implement urb_set_configuration (urb, cfgval) =
 let
   val (xfer_v | s) =
-    usb_begin_control_nodata (usbd, make_RequestType (HostToDevice, Standard, Device),
+    urb_begin_control_nodata (urb, make_RequestType (HostToDevice, Standard, Device),
                               make_Request SetConfiguration,
                               cfgval, 0)
 in
   if s = OK then begin
-    usb_wait_while_active (xfer_v | usbd);
-    usb_transfer_completed (xfer_v | usbd);
-    usb_device_detach_and_free usbd
+    urb_wait_while_active (xfer_v | urb);
+    urb_transfer_completed (xfer_v | urb);
+    urb_detach_and_free urb
   end else begin
-    usb_transfer_completed (xfer_v | usbd);
-    usb_device_detach_and_free_ usbd;
+    urb_transfer_completed (xfer_v | urb);
+    urb_detach_and_free_ urb;
     s
   end
 end // [usb_set_configuration]
 
-implement usb_get_configuration (usbd, cfgval) =
+implement urb_get_configuration (urb, cfgval) =
 let
   var buf = @[uint8][1]($UN.cast{uint8}(0))
   val (xfer_v | s) =
-    usb_begin_control_read (view@ buf | usbd, make_RequestType (DeviceToHost, Standard, Device),
+    urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Standard, Device),
                             make_Request GetConfiguration,
                             0, 0, 1, addr@ buf)
 in
   if s = OK then begin
-    usb_wait_while_active (xfer_v | usbd);
-    usb_transfer_completed (xfer_v | usbd);
+    urb_wait_while_active (xfer_v | urb);
+    urb_transfer_completed (xfer_v | urb);
     cfgval := array_get_at (buf, 0);
-    usb_device_detach_and_free usbd
+    urb_detach_and_free urb
   end else begin
-    usb_transfer_completed (xfer_v | usbd);
-    usb_device_detach_and_free_ usbd;
+    urb_transfer_completed (xfer_v | urb);
+    urb_detach_and_free_ urb;
     cfgval := $UN.cast{uint8}(0);
     s
   end
 end // [usb_get_configuration]
 
 // note: worked first time
-implement{a} usb_begin_bulk_read (pf | usbd, numElems, data) =
+implement{a} urb_begin_bulk_read (pf | urb, numElems, data) =
 let
   val packet_size = 512 // FIXME
   var startTD: ehci_td_ptr0? = ehci_td_pool_alloc ()
@@ -508,13 +508,13 @@ in if ptrcast startTD = 0 then let
   end else let
     // OK and ready-to-go
     //val _ = dump_td (startTD,0)
-    val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
+    val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     (xfer_v | OK)
   end end end end end // flattened
 end
 
-implement{a} usb_begin_bulk_write (pf | usbd, numElems, data) =
+implement{a} urb_begin_bulk_write (pf | urb, numElems, data) =
 let
   val packet_size = 512 // FIXME
   var startTD: ehci_td_ptr0? = ehci_td_pool_alloc ()
@@ -567,7 +567,7 @@ in if ptrcast startTD = 0 then let
   end else let
     // OK and ready-to-go
     //val _ = dump_td (startTD, 0)
-    val (xfer_v | ()) = usb_device_attach (filled_v | usbd, startTD, paddr)
+    val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     (xfer_v | OK)
   end end end end end // flattened

@@ -478,6 +478,8 @@ static inline void urb_set_endpoint(ehci_qh_t *qh, u32 endpt, u32 maxpkt)
 
 #define urb_set_control_endpoint(usbd, urb) urb_set_endpoint(urb, 0, usbd->dev_desc.bMaxPacketSize0)
 
+#define dump_urb(urb,i) dump_qh(urb,i)
+
 #endif
 
 /*

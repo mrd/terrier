@@ -23,6 +23,8 @@ fun usb_release_device {i: nat} (usb_device_vt (i)): void = "mac#usb_release_dev
 // USB Request Block
 absvtype urb_vt (i: int, nTDs: int, active: bool) = $extype "ehci_qh_t *"
 vtypedef urb0 = [i: int | i >= ~1] urb_vt (i, 0, false)
+vtypedef urb1 = [i: nat] urb_vt (i, 0, false)
+vtypedef urb2 = [i, nTDs: nat] [active: bool] urb_vt (i, nTDs, active)
 fun usb_device_alloc_urb {i: nat} (
     !usb_device_vt (i), &urb0? >> urb_vt (i', 0, false)
   ): #[s, i': int | (s != 0 || i' == i) && (s == 0 || i' == ~1)] status s = "mac#usb_device_alloc_urb"

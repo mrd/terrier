@@ -547,6 +547,7 @@ end end end end end end end end end end end end end end end end end end end end 
 
 
 extern fun uintarray2uint_le {n: nat | n >= 4} (!(@[uint8][n])): uint = "mac#get4bytes_le"
+extern fun dump_urb (!urb2, int): void = "mac#dump_urb"
 
 fun test_write {i: nat} (usbd: !usb_device_vt (i)): void = let
   var urb: urb0?
@@ -616,10 +617,13 @@ else let
   macdef b (x) = $UN.cast{uint8}(,(x))
   var buf = @[uint8][1600](b(0))
   val (xfer_v | s) =
-    urb_begin_bulk_read (view@ buf | urb, 1600, addr@ buf)
+    urb_begin_bulk_read (view@ buf | urb, 1514, addr@ buf)
 in
   if s = OK then begin
     $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
+
+    test_write usbd;  // send out an ARP broadcast instigating a response
+
     urb_wait_while_active (xfer_v | urb);
     urb_transfer_completed (xfer_v | urb);
     usb_device_detach_and_release_urb_ (usbd, urb);
@@ -651,18 +655,6 @@ let
   val s = usb_get_configuration (usbd, buf8)
   val () = $extfcall (void, "debuglog", 0, 1, "usb_get_configuration returned (%d, %d)\n", s, buf8)
 
-//  val s = smsclan_get_all_regs (usbd, g1int2uint 0)
-
-//  val s = smsclan_eeprom_confirm_not_busy usbd
-//  val () = $extfcall (void, "debuglog", 0, 1, "smsclan_eeprom_confirm_not_busy returned %d\n", s)
-//
-//  var mac = @[uint][6](g1int2uint 0xff)
-//  val s = smsclan_read_eeprom (usbd, EEPROM_MAC_OFFSET, 6, mac)
-//  val () = $extfcall (void, "debuglog", 0, 1, "smsclan_read_eeprom returned %d\n", s)
-//  val () = $extfcall (void, "debuglog", 0, 1, "mac=%#x:%#x:%#x:%#x:%#x:%#x\n",
-//                      array_get_at (mac, 0), array_get_at (mac, 1), array_get_at (mac, 2),
-//                      array_get_at (mac, 3), array_get_at (mac, 4), array_get_at (mac, 5))
-//
   val s = smsclan_reset usbd
   val () = $extfcall (void, "debuglog", 0, 1, "smsclan_reset returned %d\n", s)
 
@@ -674,8 +666,7 @@ let
   val s = smsclan_get_mac_addr (usbd, lo, hi)
   val _ = $extfcall (void, "debuglog", 0, 1, "get_mac_addr: hi=%.4x lo=%.8x\n", hi, lo)
 
-  val _ = test_write (usbd)
-  val _ = test_read (usbd)
+  val _ = test_read (usbd) // setup a test read and instigate an ARP response
 
   val s = smsclan_get_mac_addr (usbd, lo, hi)
   val _ = $extfcall (void, "debuglog", 0, 1, "get_mac_addr: hi=%.4x lo=%.8x\n", hi, lo)

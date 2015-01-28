@@ -15,7 +15,7 @@ endif
 
 CFLAGS += $(USER_CFLAGS) -Wno-attributes -ffreestanding
 SFLAGS +=
-LDFLAGS += -r $(USER_LDFLAGS)
+LDFLAGS += -r -d $(USER_LDFLAGS)
 
 ATSFLAGS += -IATS ../../include -IATS ../../userlib
 ATSCFLAGS += -I../../userlib -I../../include $(USER_ATSCFLAGS)

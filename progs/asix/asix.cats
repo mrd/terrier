@@ -26,8 +26,18 @@ ipcmapping_t _ipcmappings[] = {
   {0}
 };
 
+#define OMAP4460 // FIXME: assume OMAP4460 for now
+
+/* 32-kHz sync timer counter */
+#ifdef OMAP3530
+#define TIMER_ADDR 0x48320010
+#endif
+#ifdef OMAP4460
+#define TIMER_ADDR 0x4A304010
+#endif
+
 mapping_t _mappings[] = {
-  // { (TIMER_ADDR & (~0xFFF)), NULL, 1, 12, 0, 0, R_RW, "32-kHz sync timer" },
+  { (TIMER_ADDR & (~0xFFF)), NULL, 1, 12, 0, 0, R_RW, "32-kHz sync timer" },
   { 0 }
 };
 
@@ -205,6 +215,17 @@ void printbuf(buf_t b)
 }
 
 /* ************************************************** */
+
+#define make_VendorRequest(x) x
+
+volatile unsigned int *reg_32ksyncnt_cr = (volatile unsigned int *) TIMER_ADDR;
+
+static inline void msleep(int msec)
+{
+  u32 now = *reg_32ksyncnt_cr;
+  u32 then = now + (msec << 5); // a msec is approx 32-multiplier
+  for(;*reg_32ksyncnt_cr < then;) ASM("MOV r0,r0");
+}
 
 /*
  * Local Variables:

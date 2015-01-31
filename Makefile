@@ -45,7 +45,7 @@ C_FILES = init/init.c init/stub.c init/early_uart3.c init/device_id.c \
 	debug/log.c tests/cswitch.c tests/test_process.c
 S_FILES = init/startup.S intr/table.S
 DATS_FILES = sched/$(SCHED).dats mem/physical.dats
-PROGS = progs/idle progs/uart progs/ehci progs/test progs/test2 progs/smsclan
+PROGS = progs/idle progs/uart progs/ehci progs/test progs/test2 progs/smsclan progs/asix
 
 IMGNAME = terrier
 ADDRESS = 0x80008000

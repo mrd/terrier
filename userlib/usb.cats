@@ -304,7 +304,9 @@ static void dump_td(ehci_td_t *td, u32 indent)
 
 /* ************************************************** */
 
-#define usb_device_num_configurations(d) (d)->dev_desc.bNumConfigurations;
+#define usb_device_num_configurations(d) (d)->dev_desc.bNumConfigurations
+#define usb_device_id_vendor(d) (d)->dev_desc.idVendor
+#define usb_device_id_product(d) (d)->dev_desc.idProduct
 
 /* ************************************************** */
 

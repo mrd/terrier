@@ -378,6 +378,10 @@ abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"
 macdef usb_dev_desc_empty = $extval (usb_dev_desc_t, "((usb_dev_desc_t) {0})")
 fun usb_device_num_configurations (!usb_device): int = "mac#usb_device_num_configurations"
 overload .num_configurations with usb_device_num_configurations
+fun usb_device_id_vendor (!usb_device): int = "mac#usb_device_id_vendor"
+overload .id_vendor with usb_device_id_vendor
+fun usb_device_id_product (!usb_device): int = "mac#usb_device_id_product"
+overload .id_product with usb_device_id_product
 
 abst@ype usb_cfg_desc_t = $extype "usb_cfg_desc_t"
 macdef usb_cfg_desc_empty = $extval (usb_cfg_desc_t, "((usb_cfg_desc_t) {0})")

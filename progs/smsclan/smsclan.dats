@@ -1268,11 +1268,11 @@ int main(void)
   //while(*((volatile u32 *) (&usbd[1].flags)) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
   while(__atomic_load_n(&usbd[1].flags, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
   DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", QH( *usbd,0).capabilities);
-  DLOG(1, "smsclan ****************** invoking test_usb\n");
   //test(); // Test USB
-  DLOG(1, "SMSCLAN timer=%d\n", clock_time());
+  //DLOG(1, "SMSCLAN timer=%d\n", clock_time());
+  DLOG(1, "smsclan ****************** invoking test_usb\n");
   test_usb (); // Test ATS version of USB code
-  DLOG(1, "SMSCLAN timer=%d\n", clock_time());
+  //DLOG(1, "SMSCLAN timer=%d\n", clock_time());
   DLOG(1, "smsclan ****************** invoking atsmain\n");
   return atsmain();
 }

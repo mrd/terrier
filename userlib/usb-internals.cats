@@ -10,8 +10,6 @@
 DEVICE_POOL_DEFN (usb_dev_req, usb_dev_req_t, 4, 64);
 DEVICE_POOL_DEFN (ehci_td, ehci_td_t, 32, 64); // FIXME: perhaps a more dynamic approach?
 
-u32 toggle = 0;
-
 #endif
 
 /*

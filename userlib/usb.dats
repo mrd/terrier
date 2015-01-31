@@ -11,11 +11,13 @@ staload "prelude/SATS/array.sats"
 staload _ = "prelude/DATS/array.dats"
 staload _ = "prelude/DATS/integer.dats"
 staload _ = "prelude/DATS/integer_fixed.dats"
+staload _ = "prelude/DATS/bool.dats"
 #include "atspre_staload.hats"
 
 
 %{^
 
+#include "bool.cats"
 #include "usb-internals.cats"
 
 %}
@@ -98,7 +100,7 @@ end
 // helper functions defined in macros or inline
 extern fun clear_td (!ehci_td_ptr1): void = "mac#_clear_td"
 extern fun setup_td {cpage, errcnt: nat | cpage < 5 && errcnt < 4} (
-    !ehci_td_ptr1, bytes: int, ioc: bool, cpage: int cpage, errcnt: int errcnt, pid: pidcode, active: bool
+    !ehci_td_ptr1, tog: bool, bytes: int, ioc: bool, cpage: int cpage, errcnt: int errcnt, pid: pidcode, active: bool
   ): void = "mac#_setup_td"
 extern fun set_td_buf {i: nat} (!ehci_td_ptr1, int i, physaddr): void = "mac#_set_td_buf"
 overload .set_buf with set_td_buf
@@ -123,18 +125,20 @@ in
 end
 // end [setup_td_buffers]
 
-implement ehci_td_start_fill (startTD, trav, pid, data, len) =
+implement ehci_td_start_fill (urb, startTD, trav, pid, data, len) =
 let
   val len0 = len
   val () = clear_td startTD
   val s = setup_td_buffers (startTD, 0, data, len)
   val bytes = len0 - len
+  val urbtog = urb_overlay_data_toggle urb
+  val tog = if pid = EHCI_PIDSetup then false else urbtog
 in
   if s != OK then begin
     trav := ehci_td_traversal_null0 (startTD);
     (ehci_td_filling_abort ehci_td_filling_start | s)
   end else begin
-    setup_td (startTD, bytes, true, 0, 3, pid, true);
+    setup_td (startTD, tog, bytes, true, 0, 3, pid, true);
     trav := ehci_td_traversal_start startTD;
     (ehci_td_filling_start | OK)
   end
@@ -176,7 +180,7 @@ in
         fill_v := ehci_td_filling_abort fill_v;
         s
       end else begin // success
-        setup_td (td, bytes, true, 0, 3, pid, true);
+        setup_td (td, not (ehci_td_traversal_get_toggle trav), bytes, true, 0, 3, pid, true);
         ehci_td_traversal_next (trav, td, paddr);
         fill_v := ehci_td_filling_step fill_v;
         OK
@@ -256,7 +260,7 @@ in
     var p1: ptr = ptrcast devr
     var p1len: int = sizeofGEZ<usb_dev_req_vt>() // assert that size >= 0
     var trav: ptr?
-    val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
+    val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDSetup, p1, p1len)
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
     prval _ = ehci_td_traversal_free_null trav
@@ -324,7 +328,7 @@ in
     var p1: ptr = ptrcast devr
     var p1len: int = sizeofGEZ<usb_dev_req_vt>()
     var trav: ptr?
-    val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
+    val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDSetup, p1, p1len)
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
     prval _ = ehci_td_traversal_free_null trav
@@ -391,7 +395,7 @@ in
     var p1: ptr = ptrcast devr
     var p1len: int = sizeofGEZ<usb_dev_req_vt>()
     var trav: ptr?
-    val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDSetup, p1, p1len)
+    val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDSetup, p1, p1len)
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
     prval _ = ehci_td_traversal_free_null trav
@@ -435,10 +439,10 @@ let val s = urb_transfer_chain_active (xfer_v | urb) in
     if s = OK then urb_wait_while_active (xfer_v | urb) else ()
 end // [usb_wait_while_active]
 
-implement usb_with_urb (usbd, f) =
+implement usb_with_urb (usbd, endpt, maxpkt, f) =
 let
   var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, urb)
+  val s = usb_device_alloc_urb (usbd, endpt, maxpkt, urb)
 in
   if s != OK
   then s where { prval _ = usb_device_release_null_urb urb }
@@ -446,10 +450,11 @@ in
                  val _ = usb_device_release_urb (usbd, urb) }
 end
 
-implement usb_set_configuration {i} (usbd, cfgval) = usb_with_urb (usbd, f)
+extern fun usb_device_clear_all_data_toggles (!usb_device): void = "mac#usb_device_clear_all_data_toggles"
+
+implement usb_set_configuration {i} (usbd, cfgval) = usb_with_urb (usbd, 0, 0, f)
 where {
   var f = lam@ (usbd: !usb_device_vt i, urb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
-    val _ = urb_set_control_endpoint (usbd, urb)
     val (xfer_v | s) =
         urb_begin_control_nodata (urb, make_RequestType (HostToDevice, Standard, Device),
                                   make_Request SetConfiguration,
@@ -458,6 +463,7 @@ where {
     if s = OK then begin
       urb_wait_while_active (xfer_v | urb);
       urb_transfer_completed (xfer_v | urb);
+      usb_device_clear_all_data_toggles usbd; // All toggles are cleared upon a configuration event
       urb_detach_and_free urb
     end else begin
       urb_transfer_completed (xfer_v | urb);
@@ -469,12 +475,11 @@ where {
 
 implement usb_get_configuration {i} (usbd, cfgval) = let
   var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, urb)
+  val s = usb_device_alloc_urb (usbd, 0, 0, urb)
 in if s != OK then
   s where { prval _ = usb_device_release_null_urb urb
             val   _ = cfgval := $UN.cast{uint8}(0) }
 else let
-  val _ = urb_set_control_endpoint (usbd, urb)
   var buf = @[uint8][1]($UN.cast{uint8}(0))
   val (xfer_v | s) =
     urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Standard, Device),
@@ -509,7 +514,7 @@ in if ptrcast startTD = 0 then let
     val need_empty = false //(plen mod packet_size) = 0
     var p: ptr = data
     var trav: ptr?
-    val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDIn, p, plen)
+    val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDIn, p, plen)
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
     prval _ = ehci_td_traversal_free_null trav
@@ -517,7 +522,6 @@ in if ptrcast startTD = 0 then let
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
-    val _ = ehci_td_traversal_set_toggle trav
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDIn, p, plen)
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
@@ -549,7 +553,7 @@ in if ptrcast startTD = 0 then let
   end else let
     // OK and ready-to-go
     //val _ = dump_urb (urb,0)
-    //val _ = dump_td (startTD,0)
+    //val _ = dump_td (startTD,2)
     val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     (xfer_v | OK)
@@ -570,7 +574,7 @@ in if ptrcast startTD = 0 then let
     val need_empty = true //(plen mod packet_size) != 0
     var p: ptr = data
     var trav: ptr?
-    val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDOut, p, plen) // FIXME: PING protocol
+    val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDOut, p, plen) // FIXME: PING protocol
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
     prval _ = ehci_td_traversal_free_null trav
@@ -598,6 +602,7 @@ in if ptrcast startTD = 0 then let
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
+    //val _ = ehci_td_traversal_set_toggle trav //TOGGLE
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
@@ -609,7 +614,7 @@ in if ptrcast startTD = 0 then let
   end else let
     // OK and ready-to-go
     //val _ = dump_urb (urb,0)
-    //val _ = dump_td (startTD, 0)
+    //val _ = dump_td (startTD, 2)
     val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     (xfer_v | OK)

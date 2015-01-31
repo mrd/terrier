@@ -91,13 +91,15 @@ void dump_qh(ehci_qh_t *qh, u32 indent)
 
 #else
   dump_indent(indent);
-  DLOG_NO_PREFIX(1, "QH: %#x %#x %#x %#x %#x %#x\n",
+  DLOG_NO_PREFIX(1, "QH: %#x %#x %#x %#x %#x %#x %#x %d\n",
                  qh->next,
                  qh->characteristics,
                  qh->capabilities,
                  qh->current_td,
                  qh->next_td,
-                 qh->alt_td);
+                 qh->alt_td,
+                 qh->overlay[0],
+                 GETBITS(qh->overlay[0],31,1));
   if(!(qh->current_td & EHCI_TD_PTR_T))
     dump_td((ehci_td_t *) (qh->current_td & EHCI_TD_PTR_MASK), indent+2);
   else if(!(qh->next_td & EHCI_TD_PTR_T))

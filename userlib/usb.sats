@@ -27,20 +27,20 @@ vtypedef urb1 = [i: nat] urb_vt (i, 0, false)
 vtypedef urb2 = [i, nTDs: nat] [active: bool] urb_vt (i, nTDs, active)
 vtypedef urb1 (i: int) = urb_vt (i, 0, false)
 vtypedef urb2 (i: int) = [nTDs: nat] [active: bool] urb_vt (i, nTDs, active)
-fun usb_device_alloc_urb {i: nat} (
-    !usb_device_vt (i), &urb0? >> urb_vt (i', 0, false)
+fun usb_device_alloc_urb {i, endpt, maxpkt: nat | (endpt < 16 && 7 < maxpkt && maxpkt < 2048) || (endpt == 0 && maxpkt == 0)} (
+    !usb_device_vt (i), int endpt, int maxpkt, &urb0? >> urb_vt (i', 0, false)
   ): #[s, i': int | (s != 0 || i' == i) && (s == 0 || i' == ~1)] status s = "mac#usb_device_alloc_urb"
 fun usb_device_release_urb {i: nat} (!usb_device_vt (i), urb_vt (i, 0, false)): void = "mac#usb_device_release_urb"
 prfun usb_device_release_null_urb (urb_vt (~1, 0, false)): void
 
-fun urb_set_control_endpoint {i: nat} (!usb_device_vt i, !urb_vt (i, 0, false)): void = "mac#urb_set_control_endpoint"
-fun urb_set_endpoint {i, endpt, maxpkt: nat | endpt < 16 && maxpkt < 2048} (
-    !urb_vt (i, 0, false), int endpt, int maxpkt
-  ): void = "mac#urb_set_endpoint"
+//fun urb_set_control_endpoint {i: nat} (!usb_device_vt i, !urb_vt (i, 0, false)): void = "mac#urb_set_control_endpoint"
+//fun urb_set_endpoint {i, endpt, maxpkt: nat | endpt < 16 && maxpkt < 2048} (
+//    !urb_vt (i, 0, false), int endpt, int maxpkt
+//  ): void = "mac#urb_set_endpoint"
 
 // URB wrapper
-fun usb_with_urb {i: nat} (
-    !usb_device_vt i, f: &((!usb_device_vt i, !urb_vt (i, 0, false)) -<clo1> [s: int] status s)
+fun usb_with_urb {i, endpt, maxpkt: nat | (endpt < 16 && 7 < maxpkt && maxpkt < 2048) || (endpt == 0 && maxpkt == 0)} (
+    !usb_device_vt i, int endpt, int maxpkt, f: &((!usb_device_vt i, !urb_vt (i, 0, false)) -<clo1> [s: int] status s)
   ): [s: int] status s;
 
 
@@ -208,6 +208,8 @@ fun usb_device_request_fill (!usb_dev_req_ptr1, usb_RequestType_t, usb_Request_t
 datasort pidcode = PIDSetup | PIDIn | PIDOut
 abst@ype pidcode_t (p: pidcode) = int
 typedef pidcode = [p: pidcode] pidcode_t p
+fun pidcode_eq (pidcode, pidcode): bool = "mac#pidcode_eq"
+overload = with pidcode_eq
 macdef EHCI_PIDSetup = $extval(pidcode_t PIDSetup, "EHCI_PIDCODE_SETUP")
 macdef EHCI_PIDIn    = $extval(pidcode_t PIDIn,    "EHCI_PIDCODE_IN")
 macdef EHCI_PIDOut   = $extval(pidcode_t PIDOut,   "EHCI_PIDCODE_OUT")
@@ -238,11 +240,17 @@ fun ehci_td_traversal_next {lstart, lcur: agz} (
   ): void
   = "mac#ehci_td_traversal_next"
 prfun ehci_td_traversal_free_null {lstart: agz} (ehci_td_traversal_vt (lstart, null)): void
-fun ehci_td_traversal_set_toggle {l: addr} (&ehci_td_traversal1 l): void = "mac#ehci_td_traversal_set_toggle"
+
+// get the status of the toggle bit stored in the URB overlay area (to be used for initial TD)
+fun urb_overlay_data_toggle (!urb2): bool = "mac#urb_overlay_data_toggle"
+// get the toggle bit associated with the current TD in the traversal
+fun ehci_td_traversal_get_toggle {l: agz} (&ehci_td_traversal1 l): bool = "mac#ehci_td_traversal_get_toggle"
+// set the toggle bit associated with the current TD in the traversal
+fun ehci_td_traversal_set_toggle {l: agz} (&ehci_td_traversal1 l): void = "mac#ehci_td_traversal_set_toggle"
 
 // begin process of filling TDs
 fun ehci_td_start_fill {lstart, ldata: agz} {p: pidcode} {len: nat} (
-    !ehci_td_ptr lstart, &ptr? >> ehci_td_traversal_optr (lstart, s), pidcode_t p, &ptr ldata >> ptr ldata', &int len >> int len'
+    !urb2, !ehci_td_ptr lstart, &ptr? >> ehci_td_traversal_optr (lstart, s), pidcode_t p, &ptr ldata >> ptr ldata', &int len >> int len'
   ): #[s: int]
      #[len': nat]
      #[ldata': agz | ldata' >= ldata]

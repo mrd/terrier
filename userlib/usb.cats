@@ -182,6 +182,8 @@ typedef struct _usb_str_desc usb_str_desc_t;
 #define EHCI_PIDCODE_IN    1
 #define EHCI_PIDCODE_SETUP 2
 
+#define pidcode_eq(p1,p2) ((p1)==(p2))
+
 /* Transfer Descriptor (section 3.5) */
 struct _ehci_td {
   volatile u32 next;
@@ -322,13 +324,36 @@ static inline void *usb_acquire_device(int i)
 
 typedef ehci_qh_t *urb_t;
 
-static inline status usb_device_alloc_urb(usb_device_t *usbd, void **_urb)
+static inline status usb_device_alloc_urb(usb_device_t *usbd, int endpt, int maxpkt, void **_urb)
 {
   urb_t *urb = (urb_t *) _urb;
+  if(maxpkt == 0 && endpt == 0) maxpkt = usbd->dev_desc.bMaxPacketSize0;
   FOR_QH(q,*usbd) {
     if(q->priv2 == 0) {
       q->priv2 = 1;
       *urb = q;
+
+      u32 addr = GETBITS(q->characteristics, 0, 7); // should be setup by EHCI module
+      q->characteristics =
+        /* Max Packet Size */
+        SETBITS(maxpkt, 16, 11) |
+        /* Data TOGGLE control (0=Use HC; 1=use TD) (0 doesn't seem to work) */
+        (endpt >= 1 ? BIT(14) : 0) |
+        /* endpoint speed: high */
+        SETBITS(2, 12, 2) |
+        /* endpoint number */
+        SETBITS(endpt, 8, 4) |
+        /* device address */
+        SETBITS(addr, 0, 7) |
+        0;
+      q->capabilities =
+        /* Mult */
+        SETBITS(3, 30, 2) |
+        /* S-mask: 0 for async */
+        SETBITS(0, 0, 8) |
+        0;
+      q->overlay[0] = 0;
+
       return OK;
     }
   } END_FOR_QH;
@@ -337,9 +362,14 @@ static inline status usb_device_alloc_urb(usb_device_t *usbd, void **_urb)
 
 static inline void usb_device_release_urb(usb_device_t *usbd, urb_t urb)
 {
+  /* FIXME: should probably require that the endpoint be cleared before release */
   urb->priv1 = 0;
   urb->priv2 = 0;
 }
+
+#define usb_device_clear_all_data_toggles(usbd) do {                    \
+    FOR_QH(q,*(usbd)) { q->overlay[0] &= ~(BIT(31)); } END_FOR_QH;      \
+  } while (0)
 
 #define urb_clr_current_td(urb) URB_QH(urb).current_td = EHCI_QH_PTR_T
 #define urb_clr_overlay_status(urb) URB_QH(urb).overlay[0] = 0
@@ -384,22 +414,24 @@ static void NO_INLINE _incr_td_page (int cpage, ats_ref_type *_addr, ats_ref_typ
 }
 
 #define _clear_td(td) do { memset((td), 0, 1<<5); (td)->next = EHCI_TD_PTR_T; (td)->nextv = NULL; } while (0)
-#define _setup_td(td,bytes,ioc,cpage,errcnt,pid,active) do {    \
-    ((ehci_td_t *)(td))->alt_next = EHCI_TD_PTR_T;              \
-    ((ehci_td_t *)(td))->token =                                \
-      /* total bytes to transfer */                             \
-      SETBITS((bytes), 16, 15) |                                \
-      /* interrupt-on-complete */                               \
-      ((ioc) ? BIT(15) : 0) |                                   \
-      /* current page */                                        \
-      SETBITS((cpage), 12, 3) |                                 \
-      /* error counter */                                       \
-      SETBITS((errcnt), 10, 2) |                                \
-      /* token: PID code: 0=OUT 1=IN 2=SETUP */                 \
-      SETBITS((pid), 8, 2) |                                    \
-      /* status: active */                                      \
-      ((active) ? BIT(7) : 0) |                                 \
-      0;                                                        \
+#define _setup_td(td,tog,bytes,ioc,cpage,errcnt,pid,active) do {        \
+    ((ehci_td_t *)(td))->alt_next = EHCI_TD_PTR_T;                      \
+    ((ehci_td_t *)(td))->token =                                        \
+      /* data toggle bit */                                             \
+      SETBITS((tog), 31, 1) |                                           \
+      /* total bytes to transfer */                                     \
+      SETBITS((bytes), 16, 15) |                                        \
+      /* interrupt-on-complete */                                       \
+      ((ioc) ? BIT(15) : 0) |                                           \
+      /* current page */                                                \
+      SETBITS((cpage), 12, 3) |                                         \
+      /* error counter */                                               \
+      SETBITS((errcnt), 10, 2) |                                        \
+      /* token: PID code: 0=OUT 1=IN 2=SETUP */                         \
+      SETBITS((pid), 8, 2) |                                            \
+      /* status: active */                                              \
+      ((active) ? BIT(7) : 0) |                                         \
+      0;                                                                \
   } while(0)
 
 /* ************************************************** */
@@ -414,8 +446,9 @@ static void NO_INLINE _incr_td_page (int cpage, ats_ref_type *_addr, ats_ref_typ
     (*((ehci_td_t **)(trav))) = (td);                   \
   } while (0)
 
-extern u32 toggle;
-#define ehci_td_traversal_set_toggle(trav) do { if (toggle) { (*((ehci_td_t **)(trav)))->token |= BIT(31); } toggle = !toggle; } while (0)
+#define urb_overlay_data_toggle(urb) (GETBITS(((urb_t) (urb))->overlay[0],31,1))
+#define ehci_td_traversal_get_toggle(trav) (GETBITS((*((ehci_td_t **)(trav)))->token, 31, 1))
+#define ehci_td_traversal_set_toggle(trav) (*((ehci_td_t **)(trav)))->token |= BIT(31)
 
 /* ************************************************** */
 /* USB transfer */
@@ -461,8 +494,8 @@ static inline void urb_set_endpoint(ehci_qh_t *qh, u32 endpt, u32 maxpkt)
   qh->characteristics =
     /* Max Packet Size */
     SETBITS(maxpkt, 16, 11) |
-    /* Data toggle control (0=Use HC; 1=use TD) */
-    (endpt == 1 ? BIT(14) : 0) |
+    /* Data TOGGLE control (0=Use HC; 1=use TD) (0 doesn't seem to work) */
+    BIT(14) |
     /* endpoint speed: high */
     SETBITS(2, 12, 2) |
     /* endpoint number */
@@ -476,6 +509,7 @@ static inline void urb_set_endpoint(ehci_qh_t *qh, u32 endpt, u32 maxpkt)
     /* S-mask: 0 for async */
     SETBITS(0, 0, 8) |
     0;
+  qh->overlay[0] &= BIT(31);
 }
 
 #define urb_set_control_endpoint(usbd, urb) urb_set_endpoint(urb, 0, usbd->dev_desc.bMaxPacketSize0)

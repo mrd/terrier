@@ -33,9 +33,10 @@
  * $Id: psock.c,v 1.2 2006/06/12 08:00:30 adam Exp $
  */
 
-#include <stdio.h>
-#include <string.h>
+//#include <stdio.h>
+//#include <string.h>
 
+#define NULL ((void *)0)
 #include "uipopt.h"
 #include "psock.h"
 #include "uip.h"
@@ -308,7 +309,7 @@ PT_THREAD(psock_readbuf(register struct psock *psock))
   do {
     if(psock->readlen == 0) {
       PT_WAIT_UNTIL(&psock->psockpt, psock_newdata(psock));
-      printf("Waited for newdata\n");
+      //printf("Waited for newdata\n");
       psock->state = STATE_READ;
       psock->readptr = (u8_t *)uip_appdata;
       psock->readlen = uip_datalen();

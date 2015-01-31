@@ -61,7 +61,7 @@
 
 #include "uip_arp.h"
 
-#include <string.h>
+//#include <string.h>
 
 struct arp_hdr {
   struct uip_eth_hdr ethhdr;

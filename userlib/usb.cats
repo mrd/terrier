@@ -369,9 +369,10 @@ static inline void _usb_device_request_fill(usb_dev_req_t *req, u32 bmrt, u32 br
   req->wLength = l;
 }
 
-#define _set_td_buf(td,i,paddr) ((ehci_td_t *) td)->buf[(i)] = (paddr)
+#define _set_td_buf(td,i,paddr) ((ehci_td_t *) (td))->buf[(i)] = (paddr)
 
-static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
+// GCC bug? inlining causes this not to work properly
+static void NO_INLINE _incr_td_page (int cpage, ats_ref_type *_addr, ats_ref_type *_len)
 {
   u32 addr = *((u32 *) _addr);
   s32 len =  *((s32 *) _len);
@@ -413,11 +414,12 @@ static inline void _incr_td_page (ats_ref_type *_addr, ats_ref_type *_len)
     (*((ehci_td_t **)(trav))) = (td);                   \
   } while (0)
 
-#define ehci_td_traversal_set_toggle(trav) (*((ehci_td_t **)(trav)))->token |= BIT(31)
+extern u32 toggle;
+#define ehci_td_traversal_set_toggle(trav) do { if (toggle) { (*((ehci_td_t **)(trav)))->token |= BIT(31); } toggle = !toggle; } while (0)
 
 /* ************************************************** */
 /* USB transfer */
-#define urb_transfer_completed(d) //dump_td(ATTACHED(*d,0), 8)
+#define urb_transfer_completed(d) //dump_td(URB_ATTACHED((urb_t) d), 8)
 
 
 static inline status urb_transfer_chain_active(urb_t urb)
@@ -460,7 +462,7 @@ static inline void urb_set_endpoint(ehci_qh_t *qh, u32 endpt, u32 maxpkt)
     /* Max Packet Size */
     SETBITS(maxpkt, 16, 11) |
     /* Data toggle control (0=Use HC; 1=use TD) */
-    // BIT(14) |
+    (endpt == 1 ? BIT(14) : 0) |
     /* endpoint speed: high */
     SETBITS(2, 12, 2) |
     /* endpoint number */

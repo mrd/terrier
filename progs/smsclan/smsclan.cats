@@ -7,11 +7,17 @@
 #include "pointer.cats"
 #include "integer.cats"
 #include "virtual.h"
+#include "uip/clock-arch.h"
+#include "uip/uip.h"
+#include "uip/uip_arp.h"
+#include "uip/timer.h"
+
+
 
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */
-unsigned int _scheduler_capacity = 1 << 11;
-unsigned int _scheduler_period = 4 << 11;
+unsigned int _scheduler_capacity = 2 << 7;
+unsigned int _scheduler_period = 4 << 7;
 unsigned int _scheduler_affinity = 1;
 
 ipcmapping_t _ipcmappings[] = {
@@ -20,6 +26,10 @@ ipcmapping_t _ipcmappings[] = {
   {0}
 };
 
+mapping_t _mappings[] = {
+  { (TIMER_ADDR & (~0xFFF)), NULL, 1, 12, 0, 0, R_RW, "32-kHz sync timer" },
+  { 0 }
+};
 
 typedef struct { char s[124]; } buf_t;
 
@@ -223,6 +233,21 @@ static inline void dump_buf(u8 *buf, int n)
 
 // FIXME: figure out why this is needed:
 #define smsclan_write_wait() do { int _ww; for(_ww=0;_ww<3000000;_ww++) { ASM("NOP"); } } while (0)
+
+// UIP support
+void copy_into_uip_buf(u8 *buf, u32 len)
+{
+  // Assume buf has a 4-byte USB Ethernet header (not counted in len)
+  memcpy(uip_buf, buf + 4, len);
+  uip_len = len;
+}
+
+u32 copy_from_uip_buf(u8 *buf)
+{
+  // We must leave space for two command words (USB Ethernet: SMSC LAN)
+  memcpy(buf + 8, uip_buf, uip_len);
+  return uip_len;
+}
 
 /*
  * Local Variables:

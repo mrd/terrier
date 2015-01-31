@@ -551,7 +551,7 @@ static void rewrite_binary_section(void *pstart, Elf32_Rel *rel, u32 num_rel_ent
       u32 t = S + A;
       /* re-encode instruction */
       *ptr = (ins & 0xFFF00000) | ((t & 0xF000) << 4) | (ins & 0x0000F000) | (t & 0xFFF);
-      DLOG_NO_PREFIX(4, "MOVT/MOVW: A=%#x S=%#x result=%#x\n", A, S, *ptr);
+      DLOG_NO_PREFIX(4, "MOVT/MOVW: A=%#x S=%#x sym=%s result=%#x\n", A, S, symstr, *ptr);
       break;
     case R_ARM_PREL31:
       // R_ARM_PREL31 formula is ((S + A) | T) – P

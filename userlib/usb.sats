@@ -25,6 +25,8 @@ absvtype urb_vt (i: int, nTDs: int, active: bool) = $extype "ehci_qh_t *"
 vtypedef urb0 = [i: int | i >= ~1] urb_vt (i, 0, false)
 vtypedef urb1 = [i: nat] urb_vt (i, 0, false)
 vtypedef urb2 = [i, nTDs: nat] [active: bool] urb_vt (i, nTDs, active)
+vtypedef urb1 (i: int) = urb_vt (i, 0, false)
+vtypedef urb2 (i: int) = [nTDs: nat] [active: bool] urb_vt (i, nTDs, active)
 fun usb_device_alloc_urb {i: nat} (
     !usb_device_vt (i), &urb0? >> urb_vt (i', 0, false)
   ): #[s, i': int | (s != 0 || i' == i) && (s == 0 || i' == ~1)] status s = "mac#usb_device_alloc_urb"
@@ -275,6 +277,7 @@ prfun ehci_td_abort_fill {lstart: agz} {nTDs: nat} {s: int | s <> 0} (
 
 // USB operations
 fun urb_transfer_completed {i, nTDs: nat} (usb_transfer_status i | !urb_vt (i, nTDs, false)): void = "mac#urb_transfer_completed"
+fun urb_transfer_abort {i, nTDs: nat} {active: bool} (usb_transfer_status i | !urb_vt (i, nTDs, active)): void = "mac#urb_transfer_abort"
 
 fun urb_transfer_chain_active {i, nTDs: nat | nTDs > 0} (
     !usb_transfer_status i |

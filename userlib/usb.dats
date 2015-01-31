@@ -103,7 +103,7 @@ extern fun setup_td {cpage, errcnt: nat | cpage < 5 && errcnt < 4} (
 extern fun set_td_buf {i: nat} (!ehci_td_ptr1, int i, physaddr): void = "mac#_set_td_buf"
 overload .set_buf with set_td_buf
 extern fun incr_td_page {l: agz} {n: nat} (
-    &ptr l >> ptr l', &int n >> int n'
+    int, &ptr l >> ptr l', &int n >> int n'
   ): #[l': agz | l' >= l] #[n': int | 0 <= n' && n' <= n] void = "mac#_incr_td_page"
 
 // 5 pages = 20480 bytes is max for single TD
@@ -115,8 +115,9 @@ if len <= 0 then OK else if cpage >= 5 then OK else let
   val s = vmm_get_phys_addr (data, pdata)
 in
   if s != OK then s else begin
-    td.set_buf (cpage, pdata);
-    incr_td_page (data, len);
+    //if cpage > 0 then $extfcall (void, "debuglog", 0, 1, "setup_td_buffers\n") else (); // cpage=%d pdata=%#x\n",cpage,pdata) else ();
+    td.set_buf (cpage, pdata); // FIXME: something's not right
+    incr_td_page (g0ofg1 cpage, data, len);
     setup_td_buffers (td, cpage + 1, data, len)
   end
 end
@@ -184,6 +185,25 @@ in
   end
 end
 // end [ehci_td_step_fill]
+
+// another step in the filling process (but only if need_empty = true)
+extern fun ehci_td_step_fill1 {lstart: agz} {p: pidcode} {nTDs, len: nat} {ldata: agez | len == 0 || ldata > null} (
+    !ehci_td_filling_v (lstart, 0, nTDs) >> ehci_td_filling_v (lstart, s, nTDs') |
+    bool,
+    !ehci_td_ptr lstart,
+    &ehci_td_traversal1 lstart >> ehci_td_traversal_optr (lstart, s),
+    pidcode_t p,
+    &ptr ldata >> ptr ldata',
+    &int len >> int len'
+  ): #[s: int]
+     #[nTDs': int | (s <> 0 || nTDs' >= nTDs) && (s == 0 || nTDs' == nTDs)]
+     #[len': nat | len' <= len]
+     #[ldata': agez | ldata' >= ldata]
+     status s
+
+implement ehci_td_step_fill1 (fill_v | need_empty, startTD, trav, pid, data, len) =
+  if need_empty then ehci_td_step_fill (fill_v | startTD, trav, pid, data, len)
+  else OK
 
 // iteratively fills TDs from a given buffer of data
 fun{} data_stage {lstart: agz} {nTDs, len: nat} {ldata: agez | len == 0 || ldata > null} {p: pidcode} (
@@ -486,6 +506,7 @@ in if ptrcast startTD = 0 then let
     (usb_transfer_aborted | ENOSPACE)
   end else let
     var plen = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
+    val need_empty = false //(plen mod packet_size) = 0
     var p: ptr = data
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDIn, p, plen)
@@ -496,7 +517,20 @@ in if ptrcast startTD = 0 then let
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
+    val _ = ehci_td_traversal_set_toggle trav
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDIn, p, plen)
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
+    ehci_td_chain_free startTD;
+    (usb_transfer_aborted | s)
+  end else let
+    var empty: ptr null = the_null_ptr
+    var emptylen: int 0 = 0
+    // empty packet if partial packet was last
+    typedef status0 = [s: int] status s
+    val s = ehci_td_step_fill1 (fill_v | need_empty, startTD, trav, EHCI_PIDIn, empty, emptylen)
   in if s != OK then let
     prval _ = ehci_td_abort_fill (fill_v, startTD)
     prval _ = ehci_td_traversal_free_null trav
@@ -519,7 +553,7 @@ in if ptrcast startTD = 0 then let
     val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     (xfer_v | OK)
-  end end end end // flattened
+  end end end end end // flattened
 end
 
 implement{a} urb_begin_bulk_write (pf | urb, numElems, data) =
@@ -533,6 +567,7 @@ in if ptrcast startTD = 0 then let
     (usb_transfer_aborted | ENOSPACE)
   end else let
     var plen = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
+    val need_empty = true //(plen mod packet_size) != 0
     var p: ptr = data
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (startTD, trav, EHCI_PIDOut, p, plen) // FIXME: PING protocol
@@ -551,6 +586,18 @@ in if ptrcast startTD = 0 then let
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
+    var empty: ptr null = the_null_ptr
+    var emptylen: int 0 = 0
+    // empty packet if partial packet was last
+    typedef status0 = [s: int] status s
+    val s = ehci_td_step_fill1 (fill_v | need_empty, startTD, trav, EHCI_PIDOut, empty, emptylen)
+  in if s != OK then let
+    prval _ = ehci_td_abort_fill (fill_v, startTD)
+    prval _ = ehci_td_traversal_free_null trav
+  in
+    ehci_td_chain_free startTD;
+    (usb_transfer_aborted | s)
+  end else let
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
@@ -561,11 +608,12 @@ in if ptrcast startTD = 0 then let
     (usb_transfer_aborted | s)
   end else let
     // OK and ready-to-go
+    //val _ = dump_urb (urb,0)
     //val _ = dump_td (startTD, 0)
     val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     (xfer_v | OK)
-  end end end end // flattened
+  end end end end end // flattened
 end
 
 

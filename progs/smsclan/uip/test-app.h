@@ -45,4 +45,27 @@ typedef int  uip_tcp_appstate_t;
 #endif
 
 
+#ifndef MEMCPY_MEMSET
+#define MEMCPY_MEMSET
+static inline void *memcpy(void *dest, const void *src, unsigned int count)
+{
+  unsigned int i;
+  unsigned char *dest8 = (unsigned char *) dest;
+  unsigned char *src8 = (unsigned char *) src;
+  for(i=0;i<count;i++)
+    dest8[i] = src8[i];
+  return dest;
+}
+
+static inline void *memset(void *dest, unsigned int byte, unsigned int count)
+{
+  unsigned int i;
+  unsigned char *dest8 = (unsigned char *) dest;
+  for(i=0;i<count;i++)
+    dest8[i] = (unsigned char) byte;
+  return dest;
+}
+#endif
+
+
 #endif /* __TEST_H__ */

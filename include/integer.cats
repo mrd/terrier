@@ -296,6 +296,29 @@
 //
 /* ****** ****** */
 
+#define atspre_g1uint_succ_uint atspre_g0uint_succ_uint
+#define atspre_g1uint_pred_uint atspre_g0uint_pred_uint
+#define atspre_g1uint_half_uint atspre_g0uint_half_uint
+#define atspre_g1uint_add_uint atspre_g0uint_add_uint
+#define atspre_g1uint_sub_uint atspre_g0uint_sub_uint
+#define atspre_g1uint_mul_uint atspre_g0uint_mul_uint
+#define atspre_g1uint_div_uint atspre_g0uint_div_uint
+#define atspre_g1uint_mod_uint atspre_g0uint_mod_uint
+#define atspre_g1uint_isgtz_uint atspre_g0uint_isgtz_uint
+#define atspre_g1uint_iseqz_uint atspre_g0uint_iseqz_uint
+#define atspre_g1uint_isneqz_uint atspre_g0uint_isneqz_uint
+#define atspre_g1uint_lt_uint atspre_g0uint_lt_uint
+#define atspre_g1uint_lte_uint atspre_g0uint_lte_uint
+#define atspre_g1uint_gt_uint atspre_g0uint_gt_uint
+#define atspre_g1uint_gte_uint atspre_g0uint_gte_uint
+#define atspre_g1uint_eq_uint atspre_g0uint_eq_uint
+#define atspre_g1uint_neq_uint atspre_g0uint_neq_uint
+#define atspre_g1uint_compare_uint atspre_g0uint_compare_uint
+#define atspre_g1uint_max_uint atspre_g0uint_max_uint
+#define atspre_g1uint_min_uint atspre_g0uint_min_uint
+
+/* ****** ****** */
+
 
 ATSinline()
 atstype_int

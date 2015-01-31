@@ -41,7 +41,7 @@ typedef int  uip_tcp_appstate_t;
    must return void and take no arguments (i.e., C type "void
    appfunc(void)"). */
 #ifndef UIP_APPCALL
-#define UIP_APPCALL     foo
+#define UIP_APPCALL     appcall
 #endif
 
 

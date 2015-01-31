@@ -453,6 +453,7 @@ static void NO_INLINE _incr_td_page (int cpage, ats_ref_type *_addr, ats_ref_typ
 /* ************************************************** */
 /* USB transfer */
 #define urb_transfer_completed(d) //dump_td(URB_ATTACHED((urb_t) d), 8)
+#define urb_transfer_abort(d) //dump_td(URB_ATTACHED((urb_t) d), 8)
 
 
 static inline status urb_transfer_chain_active(urb_t urb)

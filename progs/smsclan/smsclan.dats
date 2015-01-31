@@ -81,6 +81,7 @@ extern fun dump_usb_cfg_desc (&usb_cfg_desc_t): void = "mac#dump_usb_cfg_desc"
 extern fun get_usb_dev_desc_vendor(&usb_dev_desc_t): int = "mac#get_usb_dev_desc_vendor"
 extern fun dump_usb_dev_qh (!usb_device): void = "mac#dump_usb_dev_qh"
 extern fun dump_buf {n,m: nat | n <= m} (& @[uint8][m], int n): void = "mac#dump_buf"
+extern fun dump_bufptr {n,m: nat | n <= m} {l: agz} (!((@[uint8][m]) @ l) | ptr l, int n): void = "mac#dump_buf"
 
 extern fun swap_endian32 (uint): uint = "mac#swap_endian32"
 
@@ -693,19 +694,19 @@ in
 end end
 
 // should match value in uip-conf.h for BUFSIZE
-extern fun get_uip_buf (): [l: agz] ((@[uint8][1500]) @ l | ptr l) = "mac#get_uip_buf"
-extern fun put_uip_buf {l: agz} ((@[uint8][1500] @ l) | ptr l): void = "mac#put_uip_buf"
+stadef UIP_BUFSIZE = 1500
+macdef UIP_BUFSIZE = $extval(uint UIP_BUFSIZE, "UIP_BUFSIZE")
 
 vtypedef buf_vt (l: addr, m: int) = ((@[uint8][m]) @ l | ptr l)
 
-extern fun copy_into_uip_buf {n, m: nat | n <= m && n <= 1500} {l: agz} (
+extern fun copy_into_uip_buf {n, m: nat | n <= m && n <= UIP_BUFSIZE} {l: agz} (
     !array_v (uint8, l, m) |
     ptr l, uint n
   ): void = "mac#copy_into_uip_buf"
 extern fun copy_from_uip_buf {m: nat} {l: agz} (
     !array_v (uint8, l, m) |
     ptr l
-  ): [n: nat | n <= m && n <= 1500] uint n = "mac#copy_from_uip_buf"
+  ): [n: nat | n <= m && n <= UIP_BUFSIZE] uint n = "mac#copy_from_uip_buf"
 
 extern fun get_uip_len (): int = "mac#get_uip_len"
 extern fun put_uip_len (int): void = "mac#put_uip_len"
@@ -734,7 +735,7 @@ in
       val size = g1ofg0 ((header land RX_STS_FL_) >> 16)
     in
       //printnum ($UN.cast{int}(size));
-      if size <= g1int2uint 1500 then
+      if size <= UIP_BUFSIZE then
         size where { val _ = copy_into_uip_buf (view@ buf | addr@ buf, size) }
       else g1int2uint 0
     end
@@ -823,8 +824,10 @@ implement do_one_read_2 (pfbuf, xfer_v | usbd, urb, buf, s) =
       //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read header=%#x\n", header);
       //dump_int_sts usbd;
       //dump_statistics usbd;
-      if size <= g1int2uint 1500 then
-        size where { val _ = copy_into_uip_buf (pfbuf | buf, size) }
+      if size <= UIP_BUFSIZE then
+        size where { val _ = $extfcall (void, "debuglog", 0, 1, "size=%#x\n", size)
+                     val _ = dump_bufptr (pfbuf | buf, 64);
+                     val _ = copy_into_uip_buf (pfbuf | buf, size) }
       else g1int2uint 0
     end
   end else begin
@@ -897,6 +900,8 @@ let val _ = $extfcall (void, "debuglog", 0, 1, "FLOW=%#x\n", buf)
 let val _ = $extfcall (void, "debuglog", 0, 1, "AFG_CFG=%#x\n", buf)
 in () end end end end end end
 
+extern fun smsclan_uip_loop {i: nat} (usbd: !usb_device_vt i): [s: int] status s = "ext#smsclan_uip_loop"
+
 implement test_usb () =
 let
   val usbd = usb_acquire_device 1
@@ -920,23 +925,195 @@ let
   val s = smsclan_get_mac_addr (usbd, lo, hi)
   val _ = $extfcall (void, "debuglog", 0, 1, "get_mac_addr: hi=%.4x lo=%.8x\n", hi, lo)
 
-  val _ = $extfcall (void, "debuglog", 0, 1, "invoking test_uip\n")
-  val _ = test_uip usbd
+  //val _ = $extfcall (void, "debuglog", 0, 1, "invoking test_uip\n")
+  //val _ = test_uip usbd
+  val _ = $extfcall (void, "debuglog", 0, 1, "invoking smsclan_uip_loop\n")
+  val _ = smsclan_uip_loop usbd
 in
   usb_release_device usbd
 end // [test_usb]
 
-extern fun smsclan_uip_loop {i: nat} (usbd: !usb_device_vt i): void = "ext#smsclan_uip_loop"
-
 viewdef rxbuf_v (l: addr) = (@[uint8][1600]) @ l
-extern fun alloc_rx_buf (): [l: agz] (rxbuf_v l | ptr l) = "mac#alloc_rx_buf"
-extern fun release_rx_buf {l: agz} (rxbuf_v l | ptr l): void = "mac#release_rx_buf"
+
+// //////////////////////////////////////////////////
+// UIP interface
+abst@ype uip_timer_t = $extype "struct timer"
+extern fun timer_set (&uip_timer_t? >> uip_timer_t, int): void = "mac#timer_set"
+extern fun timer_reset (&uip_timer_t): void = "mac#timer_reset"
+extern fun timer_expired (&uip_timer_t): bool = "mac#timer_expired"
+
+extern fun uip_init (): void = "mac#uip_init"
+abst@ype uip_eth_addr_t = $extype "struct uip_eth_addr"
+extern fun uip_eth_addr (&uip_eth_addr_t? >> uip_eth_addr_t, int, int, int, int, int, int): void = "mac#uip_eth_addr"
+extern fun uip_setethaddr (!uip_eth_addr_t): void = "mac#uip_setethaddr"
+abst@ype uip_ipaddr_t = $extype "uip_ipaddr_t"
+extern fun uip_ipaddr (!uip_ipaddr_t? >> uip_ipaddr_t, int, int, int, int): void = "mac#uip_ipaddr"
+extern fun uip_sethostaddr(!uip_ipaddr_t): void = "mac#uip_sethostaddr"
+extern fun uip_setdraddr(!uip_ipaddr_t): void = "mac#uip_setdraddr"
+extern fun uip_setnetmask(!uip_ipaddr_t): void = "mac#uip_setnetmask"
+
+extern fun uip_periodic(int): void = "mac#uip_periodic"
+extern fun uip_arp_out(): void = "mac#uip_arp_out"
+extern fun uip_arp_ipin(): void = "mac#uip_arp_ipin"
+extern fun uip_arp_arpin(): void = "mac#uip_arp_arpin"
+extern fun uip_arp_timer(): void = "mac#uip_arp_timer"
+extern fun uip_udp_periodic(int): void = "mac#uip_udp_periodic"
+
+extern fun uip_input(): void = "mac#uip_input"
+
+extern fun get_uip_buftype (): uint = "mac#get_uip_buftype"
+
+macdef UIP_ETHTYPE_IP = $extval(uint, "UIP_ETHTYPE_IP")
+macdef UIP_ETHTYPE_ARP = $extval(uint, "UIP_ETHTYPE_ARP")
+
+extern fun htons (uint): uint = "mac#htons" // just use uint for simplicity, should be ok
+
+macdef CLOCK_SECOND = $extval(int, "CLOCK_SECOND")
+macdef UIP_CONNS = $extval(int, "UIP_CONNS")
+
+// //////////////////////////////////////////////////
+
+implement smsclan_uip_loop {i} (usbd) = let
+  fun uip_preamble (periodic_timer: &uip_timer_t? >> uip_timer_t, arp_timer: &uip_timer_t? >> uip_timer_t): void =
+  let
+    var ethaddr: uip_eth_addr_t
+    var ipaddr: uip_ipaddr_t
+  in
+    timer_set (periodic_timer, CLOCK_SECOND / 2);
+    timer_set (arp_timer, CLOCK_SECOND * 10);
+    uip_init ();
+
+    uip_eth_addr (ethaddr,0x02,0xac,0x6f,0x3a,0x0d,0xdf);
+    uip_setethaddr ethaddr;
+
+    uip_ipaddr (ipaddr, 10,0,0,2);
+    uip_sethostaddr ipaddr;
+    uip_ipaddr (ipaddr, 10,0,0,1);
+    uip_setdraddr ipaddr;
+    uip_ipaddr (ipaddr, 255,255,255,0);
+    uip_setnetmask ipaddr
+  end
+
+
+  fun uip_periodic_check {i: nat} (usbd: !usb_device_vt i, periodic_timer: &uip_timer_t, arp_timer: &uip_timer_t): void =
+    if timer_expired periodic_timer then
+      let
+        fun loop1 {i: nat} (usbd: !usb_device_vt i, j: int): void =
+          if j >= UIP_CONNS then () else begin
+            uip_periodic j;
+            if get_uip_len () > 0 then begin
+              uip_arp_out ();
+              do_one_send usbd
+            end else ();
+            loop1 (usbd, j + 1)
+          end
+(*
+        fun loop2 {i: nat} (usbd: !usb_device_vt i, j: int): void =
+          if j >= UIP_CONNS then () else begin
+            uip_udp_periodic j;
+            if get_uip_len () > 0 then
+              do_one_send usbd where { val _ = uip_arp_out () }
+            else ();
+            loop2 (usbd, j + 1)
+          end
+*)
+      in
+        timer_reset periodic_timer;
+        loop1 (usbd, 0);
+        //loop2 (usbd, 0);
+        if timer_expired arp_timer then begin
+          timer_reset arp_timer;
+          uip_arp_timer ();
+        end else ()
+      end
+    else ()
+
+  fun loop_body {i, nrTDs: nat | nrTDs > 0} {l: agz} (
+        pfrbuf: !rxbuf_v l |
+        usbd: !usb_device_vt i,
+        rurb: !urb_vt (i, nrTDs, false) >> urb_vt (i, nrTDs', active'),
+        rbuf: ptr l
+      ): #[s: int] #[nrTDs': nat | (s == 0) <==> (nrTDs' > 0)] #[active': bool | active' == (s == 0)]
+         (usb_transfer_status i | status s) =
+  let val s = urb_detach_and_free rurb in if s != OK then (usb_transfer_aborted | s) else
+    let
+      val header = uintarrayptr2uint_le (pfrbuf | rbuf)
+      val size = g1ofg0 ((header land RX_STS_FL_) >> 16)
+    in
+      if size > UIP_BUFSIZE
+      then (usb_transfer_aborted | EINVALID)
+      else let
+        val _ = copy_into_uip_buf (pfrbuf | rbuf, size);
+        val (rxfer_v' | s) = urb_begin_bulk_read (pfrbuf | rurb, 1536, rbuf); // begin next read
+      in
+        // process current read
+        if get_uip_buftype () = htons (UIP_ETHTYPE_IP) then begin
+          uip_arp_ipin ();
+          uip_input ();
+          if get_uip_len () > 0 then begin
+            uip_arp_out ();
+            do_one_send usbd
+          end else ()
+        end else if get_uip_buftype () = htons (UIP_ETHTYPE_ARP) then begin
+          uip_arp_arpin ();
+          if get_uip_len () > 0 then
+            do_one_send usbd
+          else ()
+        end;
+        (rxfer_v' | s)
+      end
+    end
+  end
+
+  // ATS helped sort out the resource alloc & clean-up for these functions
+  fun loop {i, nrTDs: nat | nrTDs > 0} {rl: agz} (
+        rxfer_v: usb_transfer_status i,
+        pfrbuf: !rxbuf_v rl |
+        usbd: !usb_device_vt i,
+        rurb: !urb_vt (i, nrTDs, true) >> urb_vt (i, 0, false),
+        rbuf: ptr rl,
+        periodic_timer: &uip_timer_t,
+        arp_timer: &uip_timer_t
+      ): #[s: int | s != 0] status s =
+  let
+    val s = urb_transfer_chain_active (rxfer_v | rurb)
+  in
+    if s = OK then begin // No Rx
+      uip_periodic_check (usbd, periodic_timer, arp_timer);
+      loop (rxfer_v, pfrbuf | usbd, rurb, rbuf, periodic_timer, arp_timer)
+    end else // Rx one packet
+      let
+        val _ = urb_transfer_completed (rxfer_v | rurb)
+        val (rxfer_v' | s) = loop_body (pfrbuf | usbd, rurb, rbuf)
+      in
+        if s != 0 then s where { val _ = urb_transfer_abort (rxfer_v' | rurb)
+                                 val _ = urb_detach_and_free_ rurb }
+        else loop (rxfer_v', pfrbuf | usbd, rurb, rbuf, periodic_timer, arp_timer)
+      end
+  end
+
+  var start_loop = lam@ (usbd: !usb_device_vt i, rurb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
+    var rxbuf = @[uint8][1600]($UN.cast{uint8}(0))
+    var periodic_timer: uip_timer_t
+    var arp_timer: uip_timer_t
+    val _ = uip_preamble (periodic_timer, arp_timer)
+    val (rxfer_v | s) = urb_begin_bulk_read (view@ rxbuf | rurb, 1536, addr@ rxbuf)
+  in
+    if s != OK then
+      s where { val _ = urb_transfer_abort (rxfer_v | rurb) }
+    else begin
+      loop (rxfer_v, view@ rxbuf | usbd, rurb, addr@ rxbuf, periodic_timer, arp_timer)
+    end
+  end
+in
+  usb_with_urb (usbd, 1, 512, start_loop)
+end
 
 
 
 %{$
 
-void foo(void)
+void appcall(void)
 {
 }
 
@@ -948,6 +1125,20 @@ void uip_log(char *m)
 #define BUF ((struct uip_eth_hdr *)&uip_buf[0])
 
 u8 buf1[1600], buf2[1600];
+
+void network_setup (void)
+{
+  uip_ipaddr_t ipaddr;
+  struct uip_eth_addr eaddr = {{0x02,0xac,0x6f,0x3a,0x0d,0xdf}};
+  uip_setethaddr(eaddr);
+
+  uip_ipaddr(ipaddr, 10,0,0,2);
+  uip_sethostaddr(ipaddr);
+  uip_ipaddr(ipaddr, 10,0,0,1);
+  uip_setdraddr(ipaddr);
+  uip_ipaddr(ipaddr, 255,255,255,0);
+  uip_setnetmask(ipaddr);
+}
 
 void test_uip(usb_device_t *usbd)
 {
@@ -1010,6 +1201,7 @@ void test_uip(usb_device_t *usbd)
           do_one_send(usbd);
         }
       } else if(BUF->type == htons(UIP_ETHTYPE_ARP)) {
+        //DLOG(1, "ETHTYPE_ARP\n");
         uip_arp_arpin();
         /* If the above function invocation resulted in data that
            should be sent out on the network, the global variable

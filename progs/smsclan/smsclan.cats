@@ -251,6 +251,19 @@ u32 copy_from_uip_buf(u8 *buf)
   return uip_len;
 }
 
+static inline void uip_eth_addr(struct uip_eth_addr *eaddr, int a, int b, int c, int d, int e, int f)
+{
+  eaddr->addr[0] = a;
+  eaddr->addr[1] = b;
+  eaddr->addr[2] = c;
+  eaddr->addr[3] = d;
+  eaddr->addr[4] = e;
+  eaddr->addr[5] = f;
+}
+
+#define get_uip_len() uip_len
+#define get_uip_buftype() (((struct uip_eth_hdr *)&uip_buf[0])->type)
+
 /*
  * Local Variables:
  * indent-tabs-mode: nil

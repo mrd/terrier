@@ -7,10 +7,10 @@
 #include "pointer.cats"
 #include "integer.cats"
 #include "virtual.h"
-//#include "uip/clock-arch.h"
-//#include "uip/uip.h"
-//#include "uip/uip_arp.h"
-//#include "uip/timer.h"
+#include "uip/clock-arch.h"
+#include "uip/uip.h"
+#include "uip/uip_arp.h"
+#include "uip/timer.h"
 
 
 
@@ -217,8 +217,33 @@ void printbuf(buf_t b)
 /* ************************************************** */
 
 #define make_VendorRequest(x) x
+static inline u32 swap_endian32(u32 x)
+{
+  u8 *data = (u8 *) &x;
+  u32 result = ((u32) (data[3]<<0)) | ((u32) (data[2]<<8)) | ((u32) (data[1]<<16)) | ((u32) (data[0]<<24));
+  return result;
+}
 
-volatile unsigned int *reg_32ksyncnt_cr = (volatile unsigned int *) TIMER_ADDR;
+static inline u32 get4bytes_le(u8 *data)
+{
+  u32 result = ((u32) (data[0]<<0)) | ((u32) (data[1]<<8)) | ((u32) (data[2]<<16)) | ((u32) (data[3]<<24));
+  return result;
+}
+
+static inline void dump_buf(u8 *buf, int n)
+{
+  int i,j;
+  DLOG(1, "dump_buf (%#.8x, %d):\n", buf, n);
+  for(i=0;;i++) {
+    for(j=0;j<8;j++) {
+      if(8*i+j >= n) { DLOG_NO_PREFIX(1, "\n"); return; }
+      DLOG_NO_PREFIX(1, " %.2x", buf[8*i+j]);
+    }
+    DLOG_NO_PREFIX(1, "\n");
+  }
+}
+
+extern volatile unsigned int *reg_32ksyncnt_cr;
 
 static inline void msleep(int msec)
 {
@@ -226,6 +251,48 @@ static inline void msleep(int msec)
   u32 then = now + (msec << 5); // a msec is approx 32-multiplier
   for(;*reg_32ksyncnt_cr < then;) ASM("MOV r0,r0");
 }
+
+int counterv = 0;
+#define counter() counterv++
+
+// UIP support
+void copy_into_uip_buf(u8 *buf, u32 len)
+{
+  // Assume buf has a 4-byte USB Ethernet header (not counted in len)
+  memcpy(uip_buf, buf + 4, len);
+  uip_len = len;
+}
+
+u32 copy_from_uip_buf(u8 *buf)
+{
+  // We must leave space for one status word
+  memcpy(buf + 4, uip_buf, uip_len);
+  return uip_len;
+}
+
+static inline void uip_eth_addr(struct uip_eth_addr *eaddr, int a, int b, int c, int d, int e, int f)
+{
+  eaddr->addr[0] = a;
+  eaddr->addr[1] = b;
+  eaddr->addr[2] = c;
+  eaddr->addr[3] = d;
+  eaddr->addr[4] = e;
+  eaddr->addr[5] = f;
+}
+
+static inline void uip_eth_addr_array(struct uip_eth_addr *eaddr, u8 *array)
+{
+  eaddr->addr[0] = array[0];
+  eaddr->addr[1] = array[1];
+  eaddr->addr[2] = array[2];
+  eaddr->addr[3] = array[3];
+  eaddr->addr[4] = array[4];
+  eaddr->addr[5] = array[5];
+}
+
+#define get_uip_len() uip_len
+#define get_uip_buftype() (((struct uip_eth_hdr *)&uip_buf[0])->type)
+
 
 /*
  * Local Variables:

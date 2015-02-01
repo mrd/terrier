@@ -88,7 +88,51 @@ macdef word0 = $extval(uint16, "0")
 
 // //////////////////////////////////////////////////
 
+#define MII_BMCR (g1int2uint 0x00)
+#define MII_BMSR (g1int2uint 0x01)
+#define MII_PHYSID1 (g1int2uint 0x02)
+#define MII_PHYSID2 (g1int2uint 0x03)
+#define MII_ADVERTISE (g1int2uint 0x04)
+
+#define BMCR_RESET (g1int2uint 0x8000)
+#define BMCR_ANRESTART (g1int2uint 0x0200)
+#define BMCR_ANENABLE (g1int2uint 0x1000)
+#define BMCR_LOOPBACK (g1int2uint 0x4000)
+
+#define ADVERTISE_CSMA (g1int2uint 0x0001)
+#define ADVERTISE_10HALF (g1int2uint  0x0020)
+#define ADVERTISE_100HALF (g1int2uint 0x0080)
+#define ADVERTISE_10FULL (g1int2uint 0x0040)
+#define ADVERTISE_100FULL (g1int2uint 0x100)
+#define ADVERTISE_ALL (ADVERTISE_10HALF lor ADVERTISE_10FULL lor ADVERTISE_100HALF lor ADVERTISE_100FULL)
+
+#define MEDIUM_PF (g1int2uint   0x0080)
+#define MEDIUM_JFE (g1int2uint  0x0040)
+#define MEDIUM_TFC (g1int2uint  0x0020)
+#define MEDIUM_RFC (g1int2uint  0x0010)
+#define MEDIUM_ENCK (g1int2uint 0x0008)
+#define MEDIUM_AC (g1int2uint   0x0004)
+#define MEDIUM_FD (g1int2uint   0x0002)
+#define MEDIUM_GM (g1int2uint   0x0001)
+#define MEDIUM_SM (g1int2uint   0x1000)
+#define MEDIUM_SBP (g1int2uint  0x0800)
+#define MEDIUM_PS (g1int2uint   0x0200)
+#define MEDIUM_RE (g1int2uint   0x0100)
+
+#define AX88772_MEDIUM_DEFAULT (MEDIUM_FD lor MEDIUM_RFC lor MEDIUM_TFC lor MEDIUM_PS lor MEDIUM_AC lor MEDIUM_RE )
+
+#define AX88772_IPG0_DEFAULT (g1int2uint 0x15)
+#define AX88772_IPG1_DEFAULT (g1int2uint 0x0C)
+#define AX88772_IPG2_DEFAULT (g1int2uint 0x12)
+
+// //////////////////////////////////////////////////
+
 extern fun dump_usb_dev_desc (&usb_dev_desc_t): void = "mac#dump_usb_dev_desc"
+extern fun dump_buf {n,m: nat | n <= m} (& @[uint8][m], int n): void = "mac#dump_buf"
+extern fun dump_bufptr {n,m: nat | n <= m} {l: agz} (!((@[uint8][m]) @ l) | ptr l, int n): void = "mac#dump_buf"
+extern fun uintarray2uint_le {n: nat | n >= 4} (!(@[uint8][n])): uint = "mac#get4bytes_le"
+extern fun uintarrayptr2uint_le {n: nat | n >= 4} {l: agz} (!array_v (uint8, l, n) | ptr l): uint = "mac#get4bytes_le"
+
 
 fun print_dev_desc {i: nat} (usbd: !usb_device_vt (i)): void = () where { val _ = usb_with_urb (usbd, 0, 0, f) }
 where {
@@ -115,6 +159,8 @@ where {
 // //////////////////////////////////////////////////
 
 extern fun make_VendorRequest (i:uint): usb_Request_t = "mac#make_VendorRequest"
+
+extern fun dump_urb (!urb2, int): void = "mac#dump_urb"
 
 fun{a:t@ype} asix_write_cmd {i, n: nat} {l: agz} (
     pf: !(@[a][n]) @ l |
@@ -153,9 +199,9 @@ in if s != OK then
   s where { prval _ = usb_device_release_null_urb urb }
 else let
   val (xfer_v | s) =
-    urb_begin_control_write (pf | urb, make_RequestType (DeviceToHost, Vendor, Device),
-                             make_VendorRequest cmd,
-                             wValue, wIndex, count, data)
+    urb_begin_control_read (pf | urb, make_RequestType (DeviceToHost, Vendor, Device),
+                            make_VendorRequest cmd,
+                            wValue, wIndex, count, data)
 in
   if s = OK then begin
     urb_wait_while_active (xfer_v | urb);
@@ -200,18 +246,46 @@ end // [asix_write_gpio]
 fun asix_sw_reset {i: nat} (usbd: !usb_device_vt i, flags: uint): [s: int] status s =
   asix_write_cmd_nodata (usbd, AX_CMD_SW_RESET, $UN.cast{int}(flags), 0)
 
+fun asix_mdio_write {i: nat} (usbd: !usb_device_vt i, phy_id: uint, loc: uint, value: uint): [s: int] status s =
+let
+  var v = @[uint16][1]($UN.cast{uint16}(value))
+  val s = asix_write_cmd_nodata (usbd, AX_CMD_SET_SW_MII, 0, 0)
+  //val _ = $extfcall (void, "debuglog", 0, 1, "SET_SW_MII returned %d\n", s)
+  val s = asix_write_cmd (view@ v | usbd, AX_CMD_WRITE_MII_REG, $UN.cast{int}(phy_id), $UN.cast{int}(loc), 1, addr@ v)
+  val _ = asix_write_cmd_nodata (usbd, AX_CMD_SET_HW_MII, 0, 0)
+in
+  s
+end
+
+fun asix_mdio_read {i: nat} (usbd: !usb_device_vt i, phy_id: uint, loc: uint, value: &uint? >> uint): [s: int] status s =
+let
+  var v = @[uint16][1]($UN.cast{uint16}(value))
+  val _ = asix_write_cmd_nodata (usbd, AX_CMD_SET_SW_MII, 0, 0)
+  val s = asix_read_cmd (view@ v | usbd, AX_CMD_READ_MII_REG, $UN.cast{int}(phy_id), $UN.cast{int}(loc), 1, addr@ v)
+  val _ = asix_write_cmd_nodata (usbd, AX_CMD_SET_HW_MII, 0, 0)
+in
+  value := $UN.cast{uint}(array_get_at(v, 0)); s
+end
+
 // //////////////////////////////////////////////////
 
 fun asix_reset {i: nat} (dev: !usb_device_vt i): [s: int] status s = let
-  val s = asix_sw_reset (dev, g1int2uint 0) // blink LEDs
   val s = asix_write_gpio (dev, AX_GPIO_RSE lor AX_GPIO_GPO_2 lor AX_GPIO_GPO2EN, 5)
   val _ = $extfcall (void, "debuglog", 0, 1, "asix_write_gpio returned %d\n", s)
+  val _ = msleep 5
 in if s != OK then s else let
-  var v = @[uint8][2](byte0)
-  val s = asix_read_cmd (view@ v | dev, AX_CMD_READ_PHY_ID, 0, 0, 2, addr@ v)
+  var v = @[uint16][1](word0)
+  val s = asix_read_cmd (view@ v | dev, AX_CMD_READ_PHY_ID, 0, 0, 1, addr@ v)
 in if s != OK then s else let
-  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_READ_PHY_ID returned %d (v=%d)\n", s, array_get_at (v, 1))
-  val embd_phy = 0
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_READ_PHY_ID returned %d (v=%#x)\n", s, array_get_at (v, 0))
+  val phy_id0 = $UN.cast{uint}(array_get_at (v, 0))
+  val phy_id1 = if (phy_id0 land (g1int2uint 0xe0)) = g1int2uint 0xe0 then phy_id0 >> 8 else phy_id0
+in if phy_id1 = (g0int2uint 0xe0) then begin
+  $extfcall (void, "debuglog", 0, 1, "no supported phy_id (%#x)\n", phy_id0); EINVALID
+end else let
+  val phy_id = phy_id1 land g1int2uint 0x1f
+  val _ = $extfcall (void, "debuglog", 0, 1, "phy_id=%#x\n", phy_id)
+  val embd_phy = if (phy_id land (g1int2uint 0x1f)) = (g1int2uint 0x10) then 1 else 0
   val s = asix_write_cmd_nodata (dev, AX_CMD_SW_PHY_SELECT, embd_phy, 0);
   val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_SW_PHY_SELECT returned %d\n", s)
 in if s != OK then s else let
@@ -223,14 +297,81 @@ in if s != OK then s else let
   val _ = $extfcall (void, "debuglog", 0, 1, "AX_SWRESET_CLEAR returned %d\n", s)
 in if s != OK then s else let
   val _ = msleep(150);
-  val s = asix_sw_reset(dev, if embd_phy = 0 then AX_SWRESET_IPRL else AX_SWRESET_PRTE)
+  val s = asix_sw_reset(dev, if eq_g0int_int(embd_phy, 0) then AX_SWRESET_IPRL else AX_SWRESET_PRTE)
   val _ = $extfcall (void, "debuglog", 0, 1, "AX_SWRESET (IPRL or PRTE) returned %d\n", s)
 in if s != OK then s else let
   val _ = msleep(150)
+  var rx = @[uint16][1](word0)
+  val s = asix_read_cmd (view@ rx | dev, AX_CMD_READ_RX_CTL, 0, 0, 1, addr@ rx)
+in if s != OK then s else let
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_READ_RX_CTL returned %d (rx=%#x)\n", s, array_get_at (v, 0))
+  val _ = msleep(150)
+  val _ = asix_write_cmd_nodata (dev, AX_CMD_WRITE_RX_CTL, 0, 0)
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_WRITE_RX_CTL returned %d\n", s)
+in if s != OK then s else let
+  var mac = @[uint8][6](byte0)
+  // Get the MAC address
+  val s = asix_read_cmd (view@ mac | dev, AX_CMD_READ_NODE_ID, 0, 0, 6, addr@ mac)
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_READ_NODE_ID returned %d (%.2x:%.2x:%.2x:%.2x:%.2x:%.2x)\n", s,
+                     array_get_at (mac, 0),
+                     array_get_at (mac, 1),
+                     array_get_at (mac, 2),
+                     array_get_at (mac, 3),
+                     array_get_at (mac, 4),
+                     array_get_at (mac, 5))
+  var phy_reg1: uint
+  var phy_reg2: uint
+  val s = asix_mdio_read (dev, phy_id, MII_PHYSID1, phy_reg1)
+  val s = asix_mdio_read (dev, phy_id, MII_PHYSID2, phy_reg2)
+  val _ = $extfcall (void, "debuglog", 0, 1, "MII_PHYSID returned %d (reg=%#x %#x)\n", s, phy_reg1, phy_reg2)
 
+  // reset card again
+  val s = asix_sw_reset (dev, AX_SWRESET_PRL)
+  val _ = $extfcall (void, "debuglog", 0, 1, "SW_RESET_PRL returned %d\n", s)
+  val _ = msleep 150
+
+  val s = asix_sw_reset (dev, AX_SWRESET_IPRL lor AX_SWRESET_PRL)
+  val _ = $extfcall (void, "debuglog", 0, 1, "SW_RESET_IPRL|SW_RESET_PRL returned %d\n", s)
+  val _ = msleep 150
+
+  val s = asix_mdio_write (dev, phy_id, MII_BMCR, BMCR_RESET)
+  val _ = $extfcall (void, "debuglog", 0, 1, "MII_BMCR BMCR_RESET returned %d\n", s)
+
+  val s = asix_mdio_write (dev, phy_id, MII_ADVERTISE, ADVERTISE_ALL lor ADVERTISE_CSMA)
+  val _ = $extfcall (void, "debuglog", 0, 1, "MII_ADVERTISE returned %d\n", s)
+
+  var bmcr: uint
+  val s = asix_mdio_read (dev, phy_id, MII_BMCR, bmcr)
+  val _ = $extfcall (void, "debuglog", 0, 1, "read MII_BMCR returned %d (bmcr=%#x)\n", s, bmcr)
+in if (bmcr land BMCR_ANENABLE) = g1int2uint 0 then EINVALID else let
+  val _ = bmcr := bmcr lor BMCR_ANRESTART
+  val s = asix_mdio_write (dev, phy_id, MII_BMCR, bmcr)
+  val _ = $extfcall (void, "debuglog", 0, 1, "write MII_BMCR returned %d (bmcr=%#x)\n", s, bmcr)
+
+  val m:uint = (AX88772_MEDIUM_DEFAULT)
+  val s = asix_write_cmd_nodata (dev, AX_CMD_WRITE_MEDIUM_MODE, $UN.cast{int}(m), 0)
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_WRITE_MEDIUM_MODE returned %d\n", s)
+
+  val ipg_v:uint = AX88772_IPG0_DEFAULT lor (AX88772_IPG1_DEFAULT << 8)
+  val ipg_i:uint = AX88772_IPG2_DEFAULT
+  val s = asix_write_cmd_nodata (dev, AX_CMD_WRITE_IPG0, $UN.cast{int}(ipg_v), $UN.cast{int}(ipg_v))
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_WRITE_IPG0 returned %d\n", s)
+
+  val s = asix_write_cmd_nodata (dev, AX_CMD_WRITE_RX_CTL, 0x88, 0) // AB | SO
+  val _ = $extfcall (void, "debuglog", 0, 1, "Accepting broadcasts, starting operation (s=%d)\n", s)
+
+  val s = asix_mdio_read (dev, phy_id, MII_BMCR, bmcr)
+  val _ = $extfcall (void, "debuglog", 0, 1, "read MII_BMCR returned %d (bmcr=%#x)\n", s, bmcr)
+
+  val s = asix_mdio_read (dev, phy_id, MII_BMSR, bmcr)
+  val _ = $extfcall (void, "debuglog", 0, 1, "read MII_BMSR returned %d (bmcr=%#x)\n", s, bmcr)
+
+  var medium = @[uint16][1](word0)
+  val s = asix_read_cmd (view@ medium | dev, AX_CMD_READ_MEDIUM_STATUS, 0, 0, 1, addr@ medium)
+  val _ = $extfcall (void, "debuglog", 0, 1, "read MEDIUM STATUS returned %d (m=%#x)\n", s, array_get_at(medium, 0))
 in
-  OK
-end end end end end end end // flattened lets
+  $extfcall (void, "debuglog", 0, 1, "reset complete\n"); OK
+end end end end end end end end end end end // flattened lets
 
 fun asix_write_mac {i: nat} (usbd: !usb_device_vt i): void = let
   var mac = @[uint8][6](byte0)
@@ -247,6 +388,113 @@ in
   ()
 end
 
+extern fun counter (): int = "mac#counter" //testing
+
+// should match value in uip-conf.h for BUFSIZE
+stadef UIP_BUFSIZE = 1500
+macdef UIP_BUFSIZE = $extval(uint UIP_BUFSIZE, "UIP_BUFSIZE")
+
+extern fun copy_into_uip_buf {n, m: nat | n <= m && n <= UIP_BUFSIZE} {l: agz} (
+    !array_v (uint8, l, m) |
+    ptr l, uint n
+  ): void = "mac#copy_into_uip_buf"
+extern fun copy_from_uip_buf {m: nat} {l: agz} (
+    !array_v (uint8, l, m) |
+    ptr l
+  ): [n: nat | n <= m && n <= UIP_BUFSIZE] uint n = "mac#copy_from_uip_buf"
+
+extern fun do_one_send {i: nat} (usbd: !usb_device_vt (i)): void = "ext#do_one_send"
+
+implement do_one_send (usbd) = let
+  var urb: urb0?
+  val s = usb_device_alloc_urb (usbd, 3, 512, urb)
+in if s != OK then
+  () where { prval _ = usb_device_release_null_urb urb }
+else let
+  macdef b (x) = $UN.cast{uint8}(,(x))
+  var txbuf = @[uint8][1600](b 0)
+  val txlen: [n: int] uint n = copy_from_uip_buf (view@ txbuf | addr@ txbuf) // will leave 4 bytes for status word
+  // txlen does not include status word length
+  val proplen:uint = ((txlen lxor (g1int2uint 0xffff)) << 16) lor txlen
+  val mask8:uint = g0int2uint 0xff
+in
+  array_set_at (txbuf, 0, b ((proplen >> 0) land mask8));
+  array_set_at (txbuf, 1, b ((proplen >> 8) land mask8));
+  array_set_at (txbuf, 2, b ((proplen >> 16) land mask8));
+  array_set_at (txbuf, 3, b ((proplen >> 24) land mask8));
+  //dump_buf (txbuf, g1uint2int (txlen + g1int2uint 8));
+let
+  val (xfer_v | s) = urb_begin_bulk_write (view@ txbuf | urb, g1uint2int (txlen + g1int2uint 4), addr@ txbuf)
+in
+  if s = OK then begin
+    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s);
+    urb_wait_while_active (xfer_v | urb);
+    urb_transfer_completed (xfer_v | urb);
+    let val s = usb_device_detach_and_release_urb (usbd, urb) in
+      //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write transfer complete s = %d\n", s)
+    end
+  end else begin
+    urb_transfer_completed (xfer_v | urb);
+    usb_device_detach_and_release_urb_ (usbd, urb);
+    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s)
+  end
+end end end
+
+fun test_write {i: nat} (usbd: !usb_device_vt (i)): void = let
+  var urb: urb0?
+  val s = usb_device_alloc_urb (usbd, 3, 512, urb) // EP3 OUT
+in if s != OK then
+  () where { prval _ = usb_device_release_null_urb urb }
+else let
+  macdef b (x) = $UN.cast{uint8}(,(x))
+  var txbuf = @[uint8](
+    b 0x00, b 0x00, b 0x00, b 0x00, // Length header (ASIX)
+    b 0xff, b 0xff, b 0xff, b 0xff, b 0xff, b 0xff, // Destination MAC
+    b 0x00, b 0x0e, b 0xc6, b 0xf0, b 0x10, b 0x00, // Source MAC
+    b 0x08, b 0x06, // Type: ARP
+    b 0x00, b 0x01, // Hardware Type: Ethernet
+    b 0x08, b 0x00, // Protocol Type: IP
+    b 0x06, // Hardware Size
+    b 0x04, // Protocol Size
+    b 0x00, b 0x01, // Opcode: request
+    b 0x00, b 0x0e, b 0xc6, b 0xf0, b 0x10, b 0x00, // Sender MAC
+    b 0x0a, b 0x00, b 0x00, b 0x03, // Sender IP
+    b 0x00, b 0x00, b 0x00, b 0x00, b 0x00, b 0x00, // Target MAC
+    b 0x0a, b 0x00, b (counter ()), b 0x01  // Target IP
+    ,b 0x0, b 0x00, b 0x00, b 0x00, b 0xff, b 0xff, b 0xff, b 0xff
+  )
+
+  val len = 50
+  val txlen:uint = g0int2uint (len - 8)
+  val proplen:uint = ((txlen lxor (g1int2uint 0xffff)) << 16) lor txlen
+  val mask8:uint = g0int2uint 0xff
+in
+  array_set_at (txbuf, 0, b ((proplen >> 0) land mask8));
+  array_set_at (txbuf, 1, b ((proplen >> 8) land mask8));
+  array_set_at (txbuf, 2, b ((proplen >> 16) land mask8));
+  array_set_at (txbuf, 3, b ((proplen >> 24) land mask8));
+  dump_buf (txbuf, len+4);
+let
+  val (xfer_v | s) = urb_begin_bulk_write (view@ txbuf | urb, len + 4, addr@ txbuf)
+in
+  if s = OK then begin
+    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s);
+    urb_wait_while_active (xfer_v | urb);
+    urb_transfer_completed (xfer_v | urb);
+    let val s = usb_device_detach_and_release_urb (usbd, urb) in
+      $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write transfer complete s = %d\n", s)
+    end
+  end else begin
+    urb_transfer_completed (xfer_v | urb);
+    usb_device_detach_and_release_urb_ (usbd, urb);
+    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s)
+  end
+end end end
+
+extern fun smsclan_uip_loop {i: nat} {l:agz} (
+    pfmac: !(@[uint8][6]) @ l | usbd: !usb_device_vt i, mac: ptr l
+  ): [s: int] status s = "ext#smsclan_uip_loop"
+
 fun asix_init {i: nat} (usbd: !usb_device_vt i): void = let
   val s = usb_set_configuration (usbd, 1)
   val _ = $extfcall (void, "debuglog", 0, 1, "usb_set_configuration returned %d\n", s)
@@ -254,7 +502,8 @@ fun asix_init {i: nat} (usbd: !usb_device_vt i): void = let
   val s = usb_get_configuration (usbd, cfgval)
   val _ = $extfcall (void, "debuglog", 0, 1, "usb_get_configuration returned %d (cfgval=%d)\n", s, cfgval)
 
-  val _ = asix_write_mac usbd
+  val _ = asix_reset usbd
+
   var mac = @[uint8][6](byte0)
   // Get the MAC address
   val s = asix_read_cmd (view@ mac | usbd, AX_CMD_READ_NODE_ID, 0, 0, 6, addr@ mac)
@@ -266,13 +515,49 @@ fun asix_init {i: nat} (usbd: !usb_device_vt i): void = let
                      array_get_at (mac, 4),
                      array_get_at (mac, 5))
 
-  val _ = asix_reset usbd
+
 
   var v = @[uint16][1](word0)
   val s = asix_read_cmd (view@ v | usbd, AX_CMD_READ_RX_CTL, 0, 0, 1, addr@ v)
-  val _ = $extfcall (void, "debuglog", 0, 1, "asix_read_cmd returned %d (v=%#x)\n", s, array_get_at (v, 0))
+  val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_READ_RX_CTL returned %d (v=%#x)\n", s, array_get_at (v, 0))
+
+//  var stat:uint
+//  val s = usb_get_endpoint_status (usbd, 3, stat)
+//  val _ = $extfcall (void, "debuglog", 0, 1, "usb_get_endpoint_status returned %d (stat=%#x)\n", s, stat)
+//
+//  val s = usb_clear_endpoint (usbd, 3)
+//  val _ = $extfcall (void, "debuglog", 0, 1, "usb_clear_endpoint returned %d\n", s)
+
+  //val _ = begin test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; end
+
+  //val _ = begin test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; test_write usbd; end
+
+  var f = lam@ (usbd: !usb_device_vt i, urb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
+      var rbuf = @[uint8][1600](byte0)
+      val (xfer_v | s) = urb_begin_bulk_read (view@ rbuf | urb, 1536, addr@ rbuf)
+    in
+      if s = OK then begin
+        $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
+        urb_wait_while_active (xfer_v | urb);
+        urb_transfer_completed (xfer_v | urb);
+        urb_detach_and_free_ urb;
+        $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read transfer complete\n");
+        dump_buf (rbuf, 64);
+        $extfcall (void, "debuglog", 0, 1, "size=%d\n", $UN.cast{int}(size)) where {
+          val header = uintarray2uint_le rbuf
+          val size = (header land (g1int2uint 0x7ff))
+        }; OK
+      end else begin
+        urb_transfer_completed (xfer_v | urb);
+        $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
+        urb_detach_and_free_ urb; s
+      end
+    end
+
+  //val _ = usb_with_urb (usbd, 2, 512, f)  // EP2 = IN
 in
-  ()
+  // test_write usbd; test_write usbd; test_write usbd; test_write usbd;
+  () where { val _ = smsclan_uip_loop (view@ mac | usbd, addr@ mac) };
 end
 
 fun asix_operate {i: nat} (usbd: !usb_device_vt i): void = begin
@@ -297,8 +582,347 @@ end
 
 // //////////////////////////////////////////////////
 
+viewdef rxbuf_v (l: addr) = (@[uint8][1600]) @ l
+extern fun get_uip_len (): int = "mac#get_uip_len"
+
+// //////////////////////////////////////////////////
+// UIP interface
+abst@ype uip_timer_t = $extype "struct timer"
+extern fun timer_set (&uip_timer_t? >> uip_timer_t, int): void = "mac#timer_set"
+extern fun timer_reset (&uip_timer_t): void = "mac#timer_reset"
+extern fun timer_expired (&uip_timer_t): bool = "mac#timer_expired"
+
+extern fun uip_init (): void = "mac#uip_init"
+abst@ype uip_eth_addr_t = $extype "struct uip_eth_addr"
+extern fun uip_eth_addr (&uip_eth_addr_t? >> uip_eth_addr_t, int, int, int, int, int, int): void = "mac#uip_eth_addr"
+extern fun uip_eth_addr_array {l: agz} (!((@[uint8][6]) @ l) | &uip_eth_addr_t? >> uip_eth_addr_t, ptr l): void = "mac#uip_eth_addr_array"
+extern fun uip_setethaddr (!uip_eth_addr_t): void = "mac#uip_setethaddr"
+abst@ype uip_ipaddr_t = $extype "uip_ipaddr_t"
+extern fun uip_ipaddr (!uip_ipaddr_t? >> uip_ipaddr_t, int, int, int, int): void = "mac#uip_ipaddr"
+extern fun uip_sethostaddr(!uip_ipaddr_t): void = "mac#uip_sethostaddr"
+extern fun uip_setdraddr(!uip_ipaddr_t): void = "mac#uip_setdraddr"
+extern fun uip_setnetmask(!uip_ipaddr_t): void = "mac#uip_setnetmask"
+
+extern fun uip_periodic(int): void = "mac#uip_periodic"
+extern fun uip_arp_out(): void = "mac#uip_arp_out"
+extern fun uip_arp_ipin(): void = "mac#uip_arp_ipin"
+extern fun uip_arp_arpin(): void = "mac#uip_arp_arpin"
+extern fun uip_arp_timer(): void = "mac#uip_arp_timer"
+extern fun uip_udp_periodic(int): void = "mac#uip_udp_periodic"
+
+extern fun uip_input(): void = "mac#uip_input"
+
+extern fun get_uip_buftype (): uint = "mac#get_uip_buftype"
+
+macdef UIP_ETHTYPE_IP = $extval(uint, "UIP_ETHTYPE_IP")
+macdef UIP_ETHTYPE_ARP = $extval(uint, "UIP_ETHTYPE_ARP")
+
+extern fun htons (uint): uint = "mac#htons" // just use uint for simplicity, should be ok
+
+macdef CLOCK_SECOND = $extval(int, "CLOCK_SECOND")
+macdef UIP_CONNS = $extval(int, "UIP_CONNS")
+
+// //////////////////////////////////////////////////
+
+implement smsclan_uip_loop {i} (pfmac | usbd, mac) = let
+  fun uip_preamble (periodic_timer: &uip_timer_t? >> uip_timer_t, arp_timer: &uip_timer_t? >> uip_timer_t): void =
+  let
+    var ipaddr: uip_ipaddr_t
+  in
+    timer_set (periodic_timer, CLOCK_SECOND / 2);
+    timer_set (arp_timer, CLOCK_SECOND * 10);
+    uip_init ();
+
+    uip_ipaddr (ipaddr, 10,0,0,3);
+    uip_sethostaddr ipaddr;
+    uip_ipaddr (ipaddr, 10,0,0,1);
+    uip_setdraddr ipaddr;
+    uip_ipaddr (ipaddr, 255,255,255,0);
+    uip_setnetmask ipaddr
+  end
+
+
+  fun uip_periodic_check {i: nat} (usbd: !usb_device_vt i, periodic_timer: &uip_timer_t, arp_timer: &uip_timer_t): void =
+    if timer_expired periodic_timer then
+      let
+        fun loop1 {i: nat} (usbd: !usb_device_vt i, j: int): void =
+          if j >= UIP_CONNS then () else begin
+            uip_periodic j;
+            if get_uip_len () > 0 then begin
+              uip_arp_out ();
+              do_one_send usbd
+            end else ();
+            loop1 (usbd, j + 1)
+          end
+(*
+        fun loop2 {i: nat} (usbd: !usb_device_vt i, j: int): void =
+          if j >= UIP_CONNS then () else begin
+            uip_udp_periodic j;
+            if get_uip_len () > 0 then
+              do_one_send usbd where { val _ = uip_arp_out () }
+            else ();
+            loop2 (usbd, j + 1)
+          end
+*)
+      in
+        timer_reset periodic_timer;
+        loop1 (usbd, 0);
+        //loop2 (usbd, 0);
+        if timer_expired arp_timer then begin
+          timer_reset arp_timer;
+          uip_arp_timer ();
+        end else ()
+      end
+    else ()
+
+  fun loop_body {i, nrTDs: nat | nrTDs > 0} {l: agz} (
+        pfrbuf: !rxbuf_v l |
+        usbd: !usb_device_vt i,
+        rurb: !urb_vt (i, nrTDs, false) >> urb_vt (i, nrTDs', active'),
+        rbuf: ptr l
+      ): #[s: int] #[nrTDs': nat | (s == 0) <==> (nrTDs' > 0)] #[active': bool | active' == (s == 0)]
+         (usb_transfer_status i | status s) =
+  let val s = urb_detach_and_free rurb in if s != OK then (usb_transfer_aborted | s) else
+    let
+      val header = uintarrayptr2uint_le (pfrbuf | rbuf)
+      val size = g1ofg0 (header land (g1int2uint 0x7ff))
+    in
+      if size > UIP_BUFSIZE
+      then (usb_transfer_aborted | EINVALID)
+      else let
+        val _ = copy_into_uip_buf (pfrbuf | rbuf, size)
+        //val _ = dump_bufptr (pfrbuf | rbuf, 64)
+        val (rxfer_v' | s) = urb_begin_bulk_read (pfrbuf | rurb, 1536, rbuf); // begin next read
+      in
+        // process current read
+        if get_uip_buftype () = htons (UIP_ETHTYPE_IP) then begin
+          uip_arp_ipin ();
+          uip_input ();
+          if get_uip_len () > 0 then begin
+            uip_arp_out ();
+            do_one_send usbd
+          end else ()
+        end else if get_uip_buftype () = htons (UIP_ETHTYPE_ARP) then begin
+          uip_arp_arpin ();
+          if get_uip_len () > 0 then
+            do_one_send usbd
+          else ()
+        end;
+        (rxfer_v' | s)
+      end
+    end
+  end
+
+  // ATS helped sort out the resource alloc & clean-up for these functions
+  fun loop {i, nrTDs: nat | nrTDs > 0} {rl: agz} (
+        rxfer_v: usb_transfer_status i,
+        pfrbuf: !rxbuf_v rl |
+        usbd: !usb_device_vt i,
+        rurb: !urb_vt (i, nrTDs, true) >> urb_vt (i, 0, false),
+        rbuf: ptr rl,
+        periodic_timer: &uip_timer_t,
+        arp_timer: &uip_timer_t
+      ): #[s: int | s != 0] status s =
+  let
+    val s = urb_transfer_chain_active (rxfer_v | rurb)
+  in
+    if s = OK then begin // No Rx
+      uip_periodic_check (usbd, periodic_timer, arp_timer);
+      loop (rxfer_v, pfrbuf | usbd, rurb, rbuf, periodic_timer, arp_timer)
+    end else // Rx one packet
+      let
+        val _ = urb_transfer_completed (rxfer_v | rurb)
+        val (rxfer_v' | s) = loop_body (pfrbuf | usbd, rurb, rbuf)
+      in
+        if s != 0 then s where { val _ = urb_transfer_abort (rxfer_v' | rurb)
+                                 val _ = urb_detach_and_free_ rurb }
+        else loop (rxfer_v', pfrbuf | usbd, rurb, rbuf, periodic_timer, arp_timer)
+      end
+  end
+
+  var start_loop = lam@ (usbd: !usb_device_vt i, rurb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
+    var rxbuf = @[uint8][1600]($UN.cast{uint8}(0))
+    var periodic_timer: uip_timer_t
+    var arp_timer: uip_timer_t
+    val _ = uip_preamble (periodic_timer, arp_timer)
+    val (rxfer_v | s) = urb_begin_bulk_read (view@ rxbuf | rurb, 1536, addr@ rxbuf)
+  in
+    if s != OK then
+      s where { val _ = urb_transfer_abort (rxfer_v | rurb) }
+    else begin
+      loop (rxfer_v, view@ rxbuf | usbd, rurb, addr@ rxbuf, periodic_timer, arp_timer)
+    end
+  end
+
+  var ethaddr: uip_eth_addr_t
+in
+  uip_eth_addr_array (pfmac | ethaddr, mac);
+  uip_setethaddr ethaddr;
+  usb_with_urb (usbd, 2, 512, start_loop)
+end
 
 %{$
+
+void appcall(void)
+{
+}
+
+void uip_log(char *m)
+{
+  DLOG(1, "uIP log message: %s\n", m);
+}
+
+#if 0
+static bool
+send_cmd (bool input, uint8 cmd, uint16 val, uint16 index,
+          uint16 len, uint8 *buf)
+{
+  USB_DEV_REQ setup_req;
+
+  setup_req.bmRequestType = (input ? 0x80 : 0x00) | 0x40;
+  setup_req.bRequest = cmd;
+  setup_req.wValue = val;
+  setup_req.wIndex = index;
+  setup_req.wLength = len;
+
+  {
+    uint8 *ptr = (uint8 *) &setup_req;
+    DLOG ("send_cmd : %.02X%.02X_%.02X%.02X_%.02X%.02X_%.02X%.02X",
+          ptr[0], ptr[1], ptr[2], ptr[3],
+          ptr[4], ptr[5], ptr[6], ptr[7]);
+  }
+
+  return usb_control_transfer (ethusbdev, &setup_req, sizeof (USB_DEV_REQ),
+                               buf, len) == 0;
+}
+
+
+static bool
+reset (void)
+{
+  u32 phy_id, phy_reg1, phy_reg2;
+  u16 bmcr, medium;
+
+  /* setup GPIO */
+  if (!send_cmd (FALSE, GPIO_WRITE, GPIO_RSE | GPIO_GPO_2 | GPIO_GPO2EN,
+                 0, 0, NULL))
+    goto abort;
+  delay (5);
+
+  /* setup embedded or external PHY */
+  if (!send_cmd (TRUE, ETH_PHY_ID, 0, 0, 2, (u8 *)&phy_id))
+    goto abort;
+
+  if ((phy_id & 0xE0) == 0xE0) {
+    /* lower byte is unsupported PHY */
+    phy_id >>= 8;
+    if ((phy_id & 0xE0) == 0xE0) {
+      DLOG ("no supported PHY");
+      goto abort;
+    }
+  }
+
+  phy_id &= 0x1F;               /* mask ID bits */
+
+  DLOG ("phy_id=0x%x", phy_id);
+
+  if (!send_cmd (FALSE, SW_PHY_SELECT,
+                 (phy_id & 0x1F) == 0x10 ? 1 : 0,
+                 0, 0, NULL))
+    goto abort;
+
+  DLOG ("sending SW reset");
+  /* reset card */
+  if (!send_cmd (FALSE, SW_RESET, SWRESET_IPPD | SWRESET_PRL, 0, 0, NULL))
+    goto abort;
+  delay (150);
+  if (!send_cmd (FALSE, SW_RESET, SWRESET_CLEAR, 0, 0, NULL))
+    goto abort;
+  delay (150);
+  if (!send_cmd (FALSE, SW_RESET,
+                 (phy_id & 0x1F) == 0x10 ? SWRESET_IPRL : SWRESET_PRTE,
+                 0, 0, NULL))
+    goto abort;
+  delay (150);
+
+  /* check RX CTRL */
+  DLOG ("RXCTRL=0x%x", read_rx_ctrl ());
+  if (!write_rx_ctrl (0x0))
+    goto abort;
+  DLOG ("wrote 0x0 -- RXCTRL=0x%x", read_rx_ctrl ());
+
+  /* get ethernet address */
+  memset (ethaddr, 0, ETH_ADDR_LEN);
+  if (!send_cmd (TRUE, GET_NODE_ID, 0, 0, ETH_ADDR_LEN, ethaddr))
+    goto abort;
+
+  DLOG ("ethaddr=%.02X:%.02X:%.02X:%.02X:%.02X:%.02X",
+        ethaddr[0], ethaddr[1], ethaddr[2], ethaddr[3], ethaddr[4], ethaddr[5]);
+
+  /* get PHY IDENTIFIER (vendor, model) from MII registers */
+  phy_reg1 = mdio_read (phy_id, MII_PHYSID1);
+  phy_reg2 = mdio_read (phy_id, MII_PHYSID2);
+
+  DLOG ("MII said PHY IDENTIFIER=0x%x",
+        ((phy_reg1 & 0xffff) << 16) | (phy_reg2 & 0xffff));
+
+
+  /* reset card again */
+  DLOG ("resending SW reset");
+  if (!send_cmd (FALSE, SW_RESET, SWRESET_PRL, 0, 0, NULL))
+    goto abort;
+  delay (150);
+  if (!send_cmd (FALSE, SW_RESET, SWRESET_IPRL | SWRESET_PRL, 0, 0, NULL))
+    goto abort;
+  delay (150);
+
+  /* init MII */
+  mdio_write (phy_id, MII_BMCR, BMCR_RESET);
+  mdio_write (phy_id, MII_ADVERTISE, ADVERTISE_ALL | ADVERTISE_CSMA);
+
+  /* autonegotiation */
+  bmcr = mdio_read (phy_id, MII_BMCR);
+  DLOG ("enabling autonegotiation.  BMCR=0x%x", bmcr);
+  if (bmcr & BMCR_ANENABLE) {
+    bmcr |= BMCR_ANRESTART;
+    mdio_write (phy_id, MII_BMCR, bmcr);
+  } else
+    goto abort;
+
+  DLOG ("setting medium mode=0x%x", AX88772_MEDIUM_DEFAULT);
+  /* setup medium mode */
+  if (!send_cmd (FALSE, MEDIUM_MODE, AX88772_MEDIUM_DEFAULT, 0, 0, NULL))
+    goto abort;
+
+  /* interpacket gap */
+  DLOG ("setting IPG");
+  if (!send_cmd (FALSE, WRITE_IPG,
+                 AX88772_IPG0_DEFAULT | (AX88772_IPG1_DEFAULT << 8),
+                 AX88772_IPG2_DEFAULT, 0, NULL))
+    goto abort;
+
+  DLOG ("accepting broadcasts, starting operation");
+  /* Accept Broadcasts and Start Operation */
+  if (!write_rx_ctrl (0x88))       /* AB | SO */
+    goto abort;
+
+  DLOG ("RXCTRL=0x%x at end of reset", read_rx_ctrl ());
+
+  if (!send_cmd (TRUE, MEDIUM_STATUS, 0, 0, 2, (u8 *) &medium))
+    goto abort;
+  DLOG ("medium status=0x%x at end of reset", medium);
+
+  bmcr = mdio_read (phy_id, MII_BMCR);
+  DLOG ("BMCR=0x%x at end of reset", bmcr);
+
+  DLOG ("BMSR=0x%x at end of reset", mdio_read (phy_id, MII_BMSR));
+
+  return TRUE;
+ abort:
+  DLOG ("reset failed");
+  return FALSE;
+}
+#endif
 
 int main(void)
 {

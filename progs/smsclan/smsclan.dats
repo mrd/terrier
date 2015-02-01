@@ -85,7 +85,7 @@ extern fun dump_bufptr {n,m: nat | n <= m} {l: agz} (!((@[uint8][m]) @ l) | ptr 
 
 extern fun swap_endian32 (uint): uint = "mac#swap_endian32"
 
-extern fun test_usb (): void = "test_usb"
+extern fun smsclan_operate (): void = "smsclan_operate"
 
 fun print_dev_desc {i: nat} (usbd: !usb_device_vt (i)): void = () where { val _ = usb_with_urb (usbd, 0, 0, f) }
 where {
@@ -902,7 +902,7 @@ in () end end end end end end
 
 extern fun smsclan_uip_loop {i: nat} (usbd: !usb_device_vt i): [s: int] status s = "ext#smsclan_uip_loop"
 
-implement test_usb () =
+implement smsclan_operate () =
 let
   val usbd = usb_acquire_device 1
   val () = print_dev_desc usbd
@@ -931,7 +931,7 @@ let
   val _ = smsclan_uip_loop usbd
 in
   usb_release_device usbd
-end // [test_usb]
+end // [smsclan_operate]
 
 viewdef rxbuf_v (l: addr) = (@[uint8][1600]) @ l
 
@@ -1270,8 +1270,8 @@ int main(void)
   DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", QH( *usbd,0).capabilities);
   //test(); // Test USB
   //DLOG(1, "SMSCLAN timer=%d\n", clock_time());
-  DLOG(1, "smsclan ****************** invoking test_usb\n");
-  test_usb (); // Test ATS version of USB code
+  DLOG(1, "smsclan ****************** invoking smsclan_operate\n");
+  smsclan_operate (); // Test ATS version of USB code
   //DLOG(1, "SMSCLAN timer=%d\n", clock_time());
   DLOG(1, "smsclan ****************** invoking atsmain\n");
   return atsmain();

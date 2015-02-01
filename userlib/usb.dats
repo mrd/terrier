@@ -132,7 +132,7 @@ let
   val s = setup_td_buffers (startTD, 0, data, len)
   val bytes = len0 - len
   val urbtog = urb_overlay_data_toggle urb
-  val tog = if pid = EHCI_PIDSetup then false else urbtog
+  val tog = if pid = EHCI_PIDSetup then false else urbtog // SETUP stage is always DATA0
 in
   if s != OK then begin
     trav := ehci_td_traversal_null0 (startTD);
@@ -291,6 +291,7 @@ in
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
+    val _ = ehci_td_traversal_set_toggle trav // STATUS stage always is DATA1
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
@@ -302,7 +303,8 @@ in
     (usb_transfer_aborted | s)
   end else let
     // OK and ready-to-go
-    //val _ = dump_td (startTD,0)
+    //val _ = dump_urb (urb, 0)
+    //val _ = dump_td (startTD,2)
     val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     usb_dev_req_pool_free devr;
@@ -359,6 +361,7 @@ in
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let
+    val _ = ehci_td_traversal_set_toggle trav // STATUS stage always is DATA1
     prval filled_v = ehci_td_complete_fill (fill_v, startTD, trav)
     var paddr: physaddr
     val s = vmm_get_phys_addr (ptrcast startTD, paddr)
@@ -370,7 +373,8 @@ in
     (usb_transfer_aborted | s)
   end else let
     // OK and ready-to-go
-    //val _ = dump_td (startTD,0)
+    //val _ = dump_urb (urb,0)
+    //val _ = dump_td (startTD,2)
     val (xfer_v | ()) = urb_attach (filled_v | urb, startTD, paddr)
   in
     usb_dev_req_pool_free devr;
@@ -439,6 +443,13 @@ let val s = urb_transfer_chain_active (xfer_v | urb) in
     if s = OK then urb_wait_while_active (xfer_v | urb) else ()
 end // [usb_wait_while_active]
 
+implement urb_wait_while_active_with_timeout (xfer_v | urb, timeout) =
+if timeout > 0 then let val s = urb_transfer_chain_active (xfer_v | urb) in
+  if s = OK then urb_wait_while_active_with_timeout (xfer_v | urb, timeout - 1)
+            else urb_transfer_completed (xfer_v | urb)
+end else urb_transfer_abort (xfer_v | urb)
+// [usb_wait_while_active]
+
 implement usb_with_urb (usbd, endpt, maxpkt, f) =
 let
   var urb: urb0?
@@ -498,6 +509,52 @@ in
     s
   end
 end end // [usb_get_configuration]
+
+implement usb_get_endpoint_status {i} (usbd, endpt, status) = let
+  var urb: urb0?
+  val s = usb_device_alloc_urb (usbd, 0, 0, urb)
+in if s != OK then
+  s where { prval _ = usb_device_release_null_urb urb
+            val   _ = status := g0int2uint 0 }
+else let
+  var buf = @[uint16][1]($UN.cast{uint16}(0))
+  val (xfer_v | s) =
+    urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Standard, Endpoint),
+                            make_Request GetStatus,
+                            0, endpt, 1, addr@ buf)
+in
+  if s = OK then begin
+    urb_wait_while_active (xfer_v | urb);
+    urb_transfer_completed (xfer_v | urb);
+    status := $UN.cast{uint}(array_get_at (buf, 0));
+    usb_device_detach_and_release_urb (usbd, urb)
+  end else begin
+    urb_transfer_completed (xfer_v | urb);
+    usb_device_detach_and_release_urb_ (usbd, urb);
+    status := g0int2uint 0;
+    s
+  end
+end end // [usb_get_endpoint_status]
+
+implement usb_clear_endpoint {i} (usbd, endpt) = usb_with_urb (usbd, 0, 0, f)
+where {
+  var f = lam@ (usbd: !usb_device_vt i, urb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
+    val (xfer_v | s) =
+        urb_begin_control_nodata (urb, make_RequestType (HostToDevice, Standard, Endpoint),
+                                  make_Request ClearFeature,
+                                  0, endpt) // 0 = ENDPOINT_HALT
+  in
+    if s = OK then begin
+      urb_wait_while_active (xfer_v | urb);
+      urb_transfer_completed (xfer_v | urb);
+      urb_detach_and_free urb
+    end else begin
+      urb_transfer_completed (xfer_v | urb);
+      urb_detach_and_free_ urb;
+      s
+    end
+  end
+}
 
 // note: worked first time
 implement{a} urb_begin_bulk_read (pf | urb, numElems, data) =

@@ -340,7 +340,7 @@ static inline status usb_device_alloc_urb(usb_device_t *usbd, int endpt, int max
         /* Max Packet Size */
         SETBITS(maxpkt, 16, 11) |
         /* Data TOGGLE control (0=Use HC; 1=use TD) (0 doesn't seem to work) */
-        (endpt >= 1 ? BIT(14) : 0) |
+        BIT(14) |
         /* endpoint speed: high */
         SETBITS(2, 12, 2) |
         /* endpoint number */
@@ -454,8 +454,8 @@ static void NO_INLINE _incr_td_page (int cpage, ats_ref_type *_addr, ats_ref_typ
 
 /* ************************************************** */
 /* USB transfer */
-#define urb_transfer_completed(d) //dump_td(URB_ATTACHED((urb_t) d), 8)
-#define urb_transfer_abort(d) //dump_td(URB_ATTACHED((urb_t) d), 8)
+#define urb_transfer_completed(d) //do { dump_td(URB_ATTACHED((urb_t) d), 8); } while (0)
+#define urb_transfer_abort(d) //dump_td(URB_ATTACHED((urb_t) d), 10)
 
 
 static inline status urb_transfer_chain_active(urb_t urb)

@@ -285,7 +285,10 @@ prfun ehci_td_abort_fill {lstart: agz} {nTDs: nat} {s: int | s <> 0} (
 
 // USB operations
 fun urb_transfer_completed {i, nTDs: nat} (usb_transfer_status i | !urb_vt (i, nTDs, false)): void = "mac#urb_transfer_completed"
-fun urb_transfer_abort {i, nTDs: nat} {active: bool} (usb_transfer_status i | !urb_vt (i, nTDs, active)): void = "mac#urb_transfer_abort"
+fun urb_transfer_abort {i, nTDs: nat} {active: bool} (
+    usb_transfer_status i |
+    !urb_vt (i, nTDs, active) >> urb_vt (i, nTDs, false)
+  ): void = "mac#urb_transfer_abort"
 
 fun urb_transfer_chain_active {i, nTDs: nat | nTDs > 0} (
     !usb_transfer_status i |
@@ -347,8 +350,16 @@ fun urb_wait_while_active {i, nTDs: nat | nTDs > 0} (
     usbd: !urb_vt (i, nTDs, true) >> urb_vt (i, nTDs, false)
   ): void
 
+fun urb_wait_while_active_with_timeout {i, nTDs: nat | nTDs > 0} (
+    xfer_v: usb_transfer_status i |
+    usbd: !urb_vt (i, nTDs, true) >> urb_vt (i, nTDs, false),
+    timeout: int
+  ): void
+
 fun usb_set_configuration {i: nat} (!usb_device_vt (i), int): [s: int] status s
 fun usb_get_configuration {i: nat} (!usb_device_vt (i), &uint8? >> uint8): [s: int] status s
+fun usb_get_endpoint_status {i: nat} (!usb_device_vt (i), int, &uint? >> uint): [s: int] status s
+fun usb_clear_endpoint {i: nat} (!usb_device_vt (i), int): [s: int] status s
 
 // ** USB bulk operations
 // bulk read

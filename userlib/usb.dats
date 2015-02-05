@@ -117,6 +117,7 @@ if len <= 0 then OK else if cpage >= 5 then OK else let
   val s = vmm_get_phys_addr (data, pdata)
 in
   if s != OK then s else begin
+    //$extfcall (void, "debuglog", 0, 1, "data=%#x pdata=%#x\n", data, pdata);
     //if cpage > 0 then $extfcall (void, "debuglog", 0, 1, "setup_td_buffers\n") else (); // cpage=%d pdata=%#x\n",cpage,pdata) else ();
     td.set_buf (cpage, pdata); // FIXME: something's not right
     incr_td_page (g0ofg1 cpage, data, len);
@@ -242,11 +243,11 @@ extern fun dump_td (!ehci_td_ptr0, int): void = "mac#dump_td"
 extern fun dump_urb (!urb2, int): void = "mac#dump_urb"
 extern fun dump_usb_dev_req (!usb_dev_req_ptr0): void = "mac#dump_usb_dev_req"
 
-implement{a} urb_begin_control_read (pf | urb, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
+implement urb_begin_control_read (urb, bmRequestType, bRequest, wValue, wIndex, wLength, data) =
 let
   var startTD: ehci_td_ptr0?
   var devr: usb_dev_req_ptr0?
-  val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
+  //val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength)
   //val _ = dump_usb_dev_req devr
 in
@@ -269,7 +270,7 @@ in
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let // DATA
-    var p2: ptr = data
+    var p2: ptr = ptrcast data
     var p2len: int = wLength
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDIn, p2, p2len)
   in if s != OK then let
@@ -312,11 +313,11 @@ in
   end end end end end // flattened
 end
 
-implement{a} urb_begin_control_write (pf | urb, bmRequestType, bRequest, wValue, wIndex, numElems, data) =
+implement urb_begin_control_write (urb, bmRequestType, bRequest, wValue, wIndex, wLength, data) =
 let
   var startTD: ehci_td_ptr0?
   var devr: usb_dev_req_ptr0?
-  val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // FIXME: why is the cast necessary?
+  //val wLength = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // FIXME: why is the cast necessary?
   val s = usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength)
   //val _ = dump_usb_dev_req devr
 in
@@ -339,7 +340,7 @@ in
     ehci_td_chain_free startTD;
     (usb_transfer_aborted | s)
   end else let // DATA
-    var p2: ptr = data
+    var p2: ptr = ptrcast data
     var p2len: int = wLength
     val s = data_stage (fill_v | startTD, trav, EHCI_PIDOut, p2, p2len)
   in if s != OK then let
@@ -484,57 +485,102 @@ where {
   end
 }
 
-implement usb_get_configuration {i} (usbd, cfgval) = let
+(*
+implement usb_with_urb_and_buf {n} (usbd, endpt, maxpkt, n, f) =
+let
+  val buf = usb_buf_alloc_vt n
+in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null_vt buf } else let
   var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, 0, 0, urb)
-in if s != OK then
-  s where { prval _ = usb_device_release_null_urb urb
-            val   _ = cfgval := $UN.cast{uint8}(0) }
-else let
-  var buf = @[uint8][1]($UN.cast{uint8}(0))
-  val (xfer_v | s) =
-    urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Standard, Device),
-                            make_Request GetConfiguration,
-                            0, 0, 1, addr@ buf)
+  val s = usb_device_alloc_urb (usbd, endpt, maxpkt, urb)
 in
-  if s = OK then begin
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    cfgval := array_get_at (buf, 0);
-    usb_device_detach_and_release_urb (usbd, urb)
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    cfgval := $UN.cast{uint8}(0);
-    s
-  end
-end end // [usb_get_configuration]
+  if s != OK
+  then s where { prval _ = usb_device_release_null_urb urb
+                 val   _ = usb_buf_release_vt buf }
+  else let val s = f (usbd, urb, buf)
+           val _ = usb_device_release_urb (usbd, urb)
+           val _ = usb_buf_release_vt buf
+       in s end
+end end
+*)
 
-implement usb_get_endpoint_status {i} (usbd, endpt, status) = let
-  var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, 0, 0, urb)
-in if s != OK then
-  s where { prval _ = usb_device_release_null_urb urb
-            val   _ = status := g0int2uint 0 }
-else let
-  var buf = @[uint16][1]($UN.cast{uint16}(0))
-  val (xfer_v | s) =
-    urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Standard, Endpoint),
-                            make_Request GetStatus,
-                            0, endpt, 1, addr@ buf)
+implement usb_get_endpoint_status (usbd, endpt, status) =
+let
+  val buf = usb_buf_alloc 2
 in
-  if s = OK then begin
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    status := $UN.cast{uint}(array_get_at (buf, 0));
-    usb_device_detach_and_release_urb (usbd, urb)
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    status := g0int2uint 0;
-    s
-  end
-end end // [usb_get_endpoint_status]
+  if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf
+                                           val   _ = status := g0int2uint 0 }
+  else
+    let
+      var urb: urb0?
+      val s = usb_device_alloc_urb (usbd, 0, 0, urb)
+    in
+      if s != OK then
+        s where { prval _ = usb_device_release_null_urb urb
+                  val   _ = usb_buf_release buf
+                  val   _ = status := g0int2uint 0 }
+        else
+          let
+            val (xfer_v | s) =
+              urb_begin_control_read (urb, make_RequestType (DeviceToHost, Standard, Endpoint),
+                                      make_Request GetStatus,
+                                      0, endpt, 2, buf)
+          in
+            if s = OK then begin
+              urb_wait_while_active (xfer_v | urb);
+              urb_transfer_completed (xfer_v | urb);
+              status := $UN.cast{uint}(usb_buf_get_uint16 buf);
+              usb_buf_release (buf);
+              usb_device_detach_and_release_urb (usbd, urb)
+            end else begin
+              urb_transfer_completed (xfer_v | urb);
+              status := g0int2uint 0;
+              usb_buf_release (buf);
+              usb_device_detach_and_release_urb_ (usbd, urb);
+              s
+            end
+          end
+    end 
+end
+
+
+implement usb_get_configuration {i} (usbd, cfgval) =
+let
+  val buf = usb_buf_alloc 1
+in
+  if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf
+                                           val   _ = cfgval := $UN.cast{uint8} 0 }
+  else
+    let
+      var urb: urb0?
+      val s = usb_device_alloc_urb (usbd, 0, 0, urb)
+    in
+      if s != OK then
+        s where { prval _ = usb_device_release_null_urb urb
+                  val   _ = usb_buf_release buf
+                  val   _ = cfgval := $UN.cast{uint8}(0) }
+      else
+        let
+          val (xfer_v | s) =
+            urb_begin_control_read (urb, make_RequestType (DeviceToHost, Standard, Device),
+                                    make_Request GetConfiguration,
+                                    0, 0, 1, buf)
+        in
+          if s = OK then begin
+            urb_wait_while_active (xfer_v | urb);
+            urb_transfer_completed (xfer_v | urb);
+            cfgval := usb_buf_get_uint8 buf;
+            usb_buf_release buf;
+            usb_device_detach_and_release_urb (usbd, urb)
+          end else begin
+            urb_transfer_completed (xfer_v | urb);
+            usb_device_detach_and_release_urb_ (usbd, urb);
+            cfgval := $UN.cast{uint8}(0);
+            usb_buf_release buf;
+            s
+          end
+        end
+    end
+end // [usb_get_configuration]
 
 implement usb_clear_endpoint {i} (usbd, endpt) = usb_with_urb (usbd, 0, 0, f)
 where {
@@ -557,7 +603,7 @@ where {
 }
 
 // note: worked first time
-implement{a} urb_begin_bulk_read (pf | urb, numElems, data) =
+implement urb_begin_bulk_read (urb, length, data) =
 let
   val packet_size = 512 // FIXME
   var startTD: ehci_td_ptr0? = ehci_td_pool_alloc ()
@@ -567,9 +613,9 @@ in if ptrcast startTD = 0 then let
   in
     (usb_transfer_aborted | ENOSPACE)
   end else let
-    var plen = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
+    var plen = length
     val need_empty = false //(plen mod packet_size) = 0
-    var p: ptr = data
+    var p: ptr = ptrcast data
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDIn, p, plen)
   in if s != OK then let
@@ -617,7 +663,7 @@ in if ptrcast startTD = 0 then let
   end end end end end // flattened
 end
 
-implement{a} urb_begin_bulk_write (pf | urb, numElems, data) =
+implement urb_begin_bulk_write (urb, length, data) =
 let
   val packet_size = 512 // FIXME
   var startTD: ehci_td_ptr0? = ehci_td_pool_alloc ()
@@ -627,9 +673,9 @@ in if ptrcast startTD = 0 then let
   in
     (usb_transfer_aborted | ENOSPACE)
   end else let
-    var plen = $UN.cast{intGte(0)}(sizeofGEZ<a>() * numElems) // nat * nat is a nat
+    var plen = length
     val need_empty = true //(plen mod packet_size) != 0
-    var p: ptr = data
+    var p: ptr = ptrcast data
     var trav: ptr?
     val (fill_v | s) = ehci_td_start_fill (urb, startTD, trav, EHCI_PIDOut, p, plen) // FIXME: PING protocol
   in if s != OK then let

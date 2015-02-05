@@ -38,11 +38,52 @@ prfun usb_device_release_null_urb (urb_vt (~1, 0, false)): void
 //    !urb_vt (i, 0, false), int endpt, int maxpkt
 //  ): void = "mac#urb_set_endpoint"
 
+// ** Convenient device buffers for USB operations
+//absview usb_mem_v (l: addr, size: int)
+absvtype usb_mem_vt (l: addr, n: int) = ptr l
+vtypedef usb_mem (n: int) = [l:addr] usb_mem_vt (l,n)
+castfn usb_mem_ptr2ptr {l: addr} {n: int} (!usb_mem_vt (l, n)):<> ptr l
+overload ptrcast with usb_mem_ptr2ptr
+//fun usb_mem_vt_split {l: addr} {n: int} (usb_mem_vt (l,n)): (usb_mem_v (l,n) | ptr l)
+//fun usb_mem_vt_unsplit {l: addr} {n: int} (usb_mem_v (l,n) | ptr l): usb_mem_vt (l,n)
+
+stadef USB_BUF_SIZE = 4096
+//fun usb_buf_alloc {n: nat | n < USB_BUF_SIZE} (int n): [l: agez] (usb_mem_v (l, n) | ptr l) = "mac#usb_buf_alloc"
+fun usb_buf_alloc {n: nat | n < USB_BUF_SIZE} (int n): [l: agez] usb_mem_vt (l, n) = "mac#usb_buf_alloc"
+//fun usb_buf_release {l: agz} {n: int} (usb_mem_v (l, n) | ptr l): void = "mac#usb_buf_release"
+fun usb_buf_release {l: agz} {n: int} (usb_mem_vt (l, n)): void = "mac#usb_buf_release"
+//prfun usb_buf_release_null {a: t@ype} {n: int} (usb_mem_v (null, n)): void
+prfun usb_buf_release_null {a: t@ype} {n: int} (usb_mem_vt (null, n)): void
+fun usb_buf_takeout {a: t@ype} {l: agz} {n: nat | sizeof a <= n} (
+    usb_mem_vt (l, n)
+  ): (a @ l, a @ l -<lin,prf> usb_mem_vt (l, n) | ptr l) = "mac#usb_buf_takeout"
+
+fun usb_buf_get_uint {l: agz} {n: nat | 4 <= n} (!usb_mem_vt (l, n)): uint = "mac#usb_buf_get_uint"
+fun usb_buf_set_uint {l: agz} {n: nat | 4 <= n} (!usb_mem_vt (l, n), uint): void = "mac#usb_buf_set_uint"
+fun usb_buf_set_uint_at {l: agz} {i, n: nat | 4 * i <= n} (!usb_mem_vt (l, n), int i, uint): void = "mac#usb_buf_set_uint_at"
+praxi lemma_sizeof_uint (): [sizeof(uint) == 4] void
+fun usb_buf_get_uint16 {l: agz} {n: nat | 2 <= n} (!usb_mem_vt (l, n)): uint16 = "mac#usb_buf_get_uint16"
+praxi lemma_sizeof_uint16 (): [sizeof(uint16) == 2] void
+fun usb_buf_get_uint8 {l: agz} {n: nat | 1 <= n} (!usb_mem_vt (l, n)): uint8 = "mac#usb_buf_get_uint8"
+praxi lemma_sizeof_uint8 (): [sizeof(uint8) == 1] void
+
+
 // URB wrapper
 fun usb_with_urb {i, endpt, maxpkt: nat | (endpt < 16 && 7 < maxpkt && maxpkt < 2048) || (endpt == 0 && maxpkt == 0)} (
     !usb_device_vt i, int endpt, int maxpkt, f: &((!usb_device_vt i, !urb_vt (i, 0, false)) -<clo1> [s: int] status s)
   ): [s: int] status s;
 
+(*
+fun usb_with_urb_and_buf
+    {l: agz}
+    {n,i: nat}
+    {endpt, maxpkt: nat | (endpt < 16 && 7 < maxpkt && maxpkt < 2048) || (endpt == 0 && maxpkt == 0)}
+
+    (
+    !usb_device_vt i, int endpt, int maxpkt, !usb_mem_vt (l, n),
+    f: &((!usb_device_vt i, !urb_vt (i, 0, false), !usb_mem_vt (l, n)) -<clo1> [s: int] (status s))
+  ): [s: int] status s;
+*)
 
 fun urb_clr_current_td {i: nat} (!urb_vt (i, 0, false)): void = "mac#urb_clr_current_td"
 overload .clr_current_td with urb_clr_current_td
@@ -315,30 +356,28 @@ fun{} urb_begin_control_nodata {i: nat} (
      (usb_transfer_status i | status s)
 
 // control read
-fun{a:t@ype} urb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
-    !(@[a][n]) @ l |
+fun urb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
     !urb_vt (i, 0, false) >> urb_vt (i, nTDs, active),
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
     int, // wIndex
     int len, // number of elements
-    ptr l // data
+    !usb_mem_vt (l, n) // data
   ): #[s: int]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
 
 // control write
-fun{a:t@ype} urb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
-    !(@[a][n]) @ l |
+fun urb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
     !urb_vt (i, 0, false) >> urb_vt (i, nTDs, active),
     usb_RequestType_t,
     usb_Request_t,
     int, // wValue
     int, // wIndex
     int len, // number of elements
-    ptr l // data
+    !usb_mem_vt (l, n) // data
   ): #[s: int]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
@@ -363,22 +402,20 @@ fun usb_clear_endpoint {i: nat} (!usb_device_vt (i), int): [s: int] status s
 
 // ** USB bulk operations
 // bulk read
-fun{a:t@ype} urb_begin_bulk_read {i, n, len: nat | len <= n} {l: agz} (
-    !(@[a][n]) @ l |
+fun urb_begin_bulk_read {i, n, len: nat | len <= n} {l: agz} (
     !urb_vt (i, 0, false) >> urb_vt (i, nTDs, active),
     int len, // number of elements
-    ptr l // data
+    !usb_mem_vt (l, n) // data
   ): #[s: int]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
      (usb_transfer_status i | status s)
 
 // bulk write
-fun{a:t@ype} urb_begin_bulk_write {i, n, len: nat | len <= n} {l: agz} (
-    !(@[a][n]) @ l |
+fun urb_begin_bulk_write {i, n, len: nat | len <= n} {l: agz} (
     !urb_vt (i, 0, false) >> urb_vt (i, nTDs, active),
     int len, // number of elements
-    ptr l // data
+    !usb_mem_vt (l, n) // data
   ): #[s: int]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
      #[active: bool | (s == 0) == active]
@@ -386,6 +423,8 @@ fun{a:t@ype} urb_begin_bulk_write {i, n, len: nat | len <= n} {l: agz} (
 
 // USB specification defined data structures
 abst@ype usb_dev_desc_t = $extype "usb_dev_desc_t"
+praxi lemma_sizeof_usb_dev_desc_t (): [sizeof(usb_dev_desc_t) == 18] void
+macdef sizeof_usb_dev_desc_t = 18
 macdef usb_dev_desc_empty = $extval (usb_dev_desc_t, "((usb_dev_desc_t) {0})")
 fun usb_device_num_configurations (!usb_device): int = "mac#usb_device_num_configurations"
 overload .num_configurations with usb_device_num_configurations
@@ -395,6 +434,8 @@ fun usb_device_id_product (!usb_device): int = "mac#usb_device_id_product"
 overload .id_product with usb_device_id_product
 
 abst@ype usb_cfg_desc_t = $extype "usb_cfg_desc_t"
+praxi lemma_sizeof_usb_cfg_desc_t (): [sizeof(usb_cfg_desc_t) == 9] void
+macdef sizeof_usb_cfg_desc_t = 9
 macdef usb_cfg_desc_empty = $extval (usb_cfg_desc_t, "((usb_cfg_desc_t) {0})")
 
 abst@ype usb_if_desc_t  = $extype "usb_if_desc_t"

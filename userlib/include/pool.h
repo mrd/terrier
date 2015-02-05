@@ -42,10 +42,12 @@
 
 #define POOL_PROTO(name,ty)                     \
   extern ty *name##_pool_alloc(void);           \
-  extern void name##_pool_free(ty *)
+  extern void name##_pool_free(ty *);           \
+  extern u32 get_##name##_pool_addr(void);      \
+  extern u32 get_##name##_bitmap_addr(void)
 
 #define _POOL_FUNC_DEFN(name,ty,size,align)                             \
-  static u32 __##name##_pool_bitmap[(((size) - 1) >> 3) + 1];           \
+  static u32 __##name##_pool_bitmap[(((size) - 1) >> 3) + 1] = {0};     \
   ty *name##_pool_alloc(void) {                                         \
     int i;                                                              \
     for(i=0;i<(size);i++)                                               \
@@ -71,6 +73,10 @@
       BITMAP_CLR(__##name##_pool_bitmap, i);    \
   }                                             \
 
+#define _POOL_DEBUG_DEFN(name)                                          \
+  u32 get_##name##_pool_addr(void) { return (u32) &__##name##_pool_array; } \
+  u32 get_##name##_bitmap_addr(void) { return (u32) &__##name##_pool_bitmap; }
+
 #define POOL_DEFN(name,ty,size,align)                           \
   ALIGNED(align,static ty, __##name##_pool_array[size]);        \
   _POOL_FUNC_DEFN(name,ty,size,align)                           \
@@ -79,8 +85,8 @@
 #define DEVICE_POOL_DEFN(name,ty,size,align)                            \
   static ty __##name##_pool_array[size] __attribute__((aligned(align),section(_DEVICE_SECTION))); \
   _POOL_FUNC_DEFN(name,ty,size,align)                                   \
-  _POOL_FUNC_INIT_DEFN(name,size)
-
+  _POOL_FUNC_INIT_DEFN(name,size)                                       \
+  _POOL_DEBUG_DEFN(name)
 
 #define IPC_POOL_DEFN(name,ty,size)             \
   static ty * __##name##_pool_array;            \

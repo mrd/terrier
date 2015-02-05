@@ -226,12 +226,12 @@ typedef struct _ehci_qh ehci_qh_t;
 
 /* same as in ehci.cats */
 #define USB_DEVICE_NUM_QH 4
-typedef struct {
+struct _usb_device_t {
   ehci_qh_t qh[USB_DEVICE_NUM_QH];
-  //  ehci_td_t *attached[USB_DEVICE_NUM_QH]; /* currently attached TD chain if exists */
   u32 address, flags, num_qh;
   usb_dev_desc_t dev_desc;
-} usb_device_t;
+} __attribute__((aligned (512)));
+typedef struct _usb_device_t usb_device_t;
 #define QH(usbd,i) ((usbd).qh[(i)])
 #define FOR_QH(var,usbd) do { ehci_qh_t *var; \
   for(var = &(usbd).qh[0]; var < &(usbd).qh[(usbd).num_qh]; var++)
@@ -241,6 +241,30 @@ typedef struct {
 #define URB_ATTACHED(urb) ((ehci_td_t *) ((*(urb)).priv1))
 #define SET_URB_ATTACHED(urb,v)  ((*(urb)).priv1) = (u32) (v)
 #define URB_QH(urb) (*(urb))
+
+/* ************************************************** */
+
+/* temporary buffers that exist in device-usable memory */
+typedef u8 usb_buf_t[4096];
+POOL_PROTO(usb_buf, usb_buf_t);
+
+static void *usb_buf_alloc(size_t n)
+{
+  return usb_buf_pool_alloc();
+}
+
+static void usb_buf_release(void *p)
+{
+  usb_buf_pool_free(p);
+}
+
+#define usb_buf_takeout(b) (b)
+#define usb_buf_get_uint(b) (*((u32 *) (b)))
+#define usb_buf_set_uint(b,v) (*((u32 *) (b)) = (v))
+#define usb_buf_set_uint_at(b,i,v) (((u32 *) (b))[i] = (v))
+#define usb_buf_get_uint16(b) (*((u16 *) (b)))
+#define usb_buf_get_uint8(b) (*((u8 *) (b)))
+
 
 /* ************************************************** */
 
@@ -260,8 +284,6 @@ static void dump_td(ehci_td_t *td, u32 indent)
   for(i=0;i<indent;i++) debuglog_no_prefix(1, " ");
 
 #ifdef USE_VMM
-  /* FIXME: physical->virtual */
-
   int pid = GETBITS(td->token, 8, 2);
   char *pidcode = (pid == 0 ? "OUT" : (pid == 1 ? "IN" : (pid == 2 ? "SETUP" : "reserved")));
   debuglog_no_prefix(1, "TD: %#.8x %#.8x %#.8x (%s%s%s%s%s%s%s%s) (CERR=%d) %s [%#x %#x %#x %#x %#x]\n",
@@ -278,7 +300,8 @@ static void dump_td(ehci_td_t *td, u32 indent)
                  pidcode,
                  td->buf[0], td->buf[1], td->buf[2],
                  td->buf[3], td->buf[4]);
-  /* FIXME: use nextv */
+  if(!(td->next & EHCI_TD_PTR_T) && td->nextv != NULL)
+    dump_td(td->nextv, indent);
 #else
 
   int pid = GETBITS(td->token, 8, 2);

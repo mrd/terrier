@@ -789,12 +789,12 @@ static status usb_root_port_enabled(usb_port_t *p)
 
 /* same as in usb.cats */
 #define USB_DEVICE_NUM_QH 4
-typedef struct {
+struct _usb_device_t {
   ehci_qh_t qh[USB_DEVICE_NUM_QH];
-  //ehci_td_t *attached[USB_DEVICE_NUM_QH]; /* currently attached TD chain if exists */
   u32 address, flags, num_qh;
   usb_dev_desc_t dev_desc;
-} usb_device_t;
+} __attribute__((aligned (512)));
+typedef struct _usb_device_t usb_device_t;
 #define QH(usbd,i) ((usbd).qh[(i)])
 #define FOR_QH(var,usbd) do { ehci_qh_t *var; \
   for(var = &(usbd).qh[0]; var < &(usbd).qh[(usbd).num_qh]; var++)

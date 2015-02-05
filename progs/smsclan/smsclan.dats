@@ -37,6 +37,33 @@ extern fun printnum (_: int): void = "mac#printnum"
 
 typedef ehci_info_t = int
 
+extern fun wait_for_ehci_info (): void = "ext#wait_for_ehci_info"
+implement wait_for_ehci_info (): void = let
+  fun loop (fs: !fixedslot >> _): void = let
+    val x = fixedslot_read<int> fs
+  in
+    if x > 0 then () else loop fs
+  end // end [loop]
+
+  var pages: int?
+  val (opt_pf | ms) = ipcmem_get_view (0, pages)
+in
+  if ms > 0 then
+    let
+      prval Some_v pf_ipcmem = opt_pf
+      // fixedslot version
+      val fs = fixedslot_initialize_reader (pf_ipcmem | ms, pages)
+      val _  = loop (fs)
+      val (pf_ipcmem | ms) = fixedslot_free fs
+      prval _ = ipcmem_put_view pf_ipcmem
+    in
+      ()
+    end else () where {
+    // failed to acquire ipcmem
+    prval None_v () = opt_pf
+  }
+end // [fun wait_for_ehci_info]
+
 fun test_fixedslot():int = let
   fun do_nothing (): void = do_nothing ()
   fun loop (fs: !fixedslot >> _, p: int): void = let
@@ -89,46 +116,62 @@ extern fun smsclan_operate (): void = "smsclan_operate"
 
 fun print_dev_desc {i: nat} (usbd: !usb_device_vt (i)): void = () where { val _ = usb_with_urb (usbd, 0, 0, f) }
 where {
+  val size = sizeof_usb_dev_desc_t
   var f = lam@ (usbd: !usb_device_vt i, urb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
-    var devdesc = @[usb_dev_desc_t][1](usb_dev_desc_empty)
+    val devdesc = usb_buf_alloc size
+  in if ptrcast devdesc = 0 then ENOSPACE where { prval _ = usb_buf_release_null devdesc } else let
     val (xfer_v | s) =
-      urb_begin_control_read (view@ devdesc |
-                              urb, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
+      urb_begin_control_read (urb, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
                               USB_TYPE_DEV_DESC << 8, 0,
-                              1, addr@ devdesc)
+                              size, devdesc)
   in
     if s = OK then begin
       urb_wait_while_active (xfer_v | urb);
       urb_transfer_completed (xfer_v | urb);
-      dump_usb_dev_desc dd where { var dd = array_get_at (devdesc, 0) };
+      let
+        prval _ = lemma_sizeof_usb_dev_desc_t ()
+        val (pf, fpf | p) = usb_buf_takeout devdesc
+        val _ = dump_usb_dev_desc (!p)
+        prval _ = devdesc := fpf pf
+      in end;
+      usb_buf_release devdesc;
       urb_detach_and_free urb
     end else begin
       urb_transfer_completed (xfer_v | urb);
+      usb_buf_release devdesc;
       urb_detach_and_free_ urb; s
     end
-  end // [print_dev_desc]
+  end end // [print_dev_desc]
 }
 
 fun print_cfg_desc {i: nat} (usbd: !usb_device_vt (i), cfgidx: int): void = () where { val _ = usb_with_urb (usbd, 0, 0, f) }
 where {
+  val size = sizeof_usb_dev_desc_t
   var f = lam@ (usbd: !usb_device_vt i, urb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
-    var cfgdesc = @[usb_cfg_desc_t][1](usb_cfg_desc_empty)
+    val desc = usb_buf_alloc size
+  in if ptrcast desc = 0 then ENOSPACE where { prval _ = usb_buf_release_null desc } else let
     val (xfer_v | s) =
-      urb_begin_control_read (view@ cfgdesc |
-                              urb, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
+      urb_begin_control_read (urb, make_RequestType (DeviceToHost, Standard, Device), make_Request GetDescriptor,
                               (USB_TYPE_CFG_DESC << 8) + cfgidx, 0,
-                              1, addr@ cfgdesc)
+                              size, desc)
   in
     if s = OK then begin
       urb_wait_while_active (xfer_v | urb);
       urb_transfer_completed (xfer_v | urb);
-      dump_usb_cfg_desc dd where { var dd = array_get_at (cfgdesc, 0) };
+      let
+        prval _ = lemma_sizeof_usb_cfg_desc_t ()
+        val (pf, fpf | p) = usb_buf_takeout desc
+        val _ = dump_usb_cfg_desc (!p)
+        prval _ = desc := fpf pf
+      in end;
+      usb_buf_release desc;
       urb_detach_and_free urb
     end else begin
       urb_transfer_completed (xfer_v | urb);
+      usb_buf_release desc;
       urb_detach_and_free_ urb; s
     end
-  end // [print_cfg_desc]
+  end end // [print_cfg_desc]
 }
 
 //  USB Vendor Requests
@@ -154,26 +197,29 @@ extern fun make_VendorRequest (i:uint): usb_Request_t = "mac#make_VendorRequest"
 
 fun _smsclan_read_reg {i: nat} (urb: !urb_vt (i, 0, false), idx: uint, value: &uint? >> uint): [s: int] status s =
 let
-  var buf = @[uint][1](g1int2uint 0)
+  val buf = usb_buf_alloc 4
+in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf
+                                            val _   = value := g1int2uint 0 } else let
   val (xfer_v | s) =
-    urb_begin_control_read (view@ buf | urb, make_RequestType (DeviceToHost, Vendor, Device),
+    urb_begin_control_read (urb, make_RequestType (DeviceToHost, Vendor, Device),
                             make_VendorRequest USB_VENDOR_REQUEST_READ_REGISTER,
-                            0, g0uint2int idx, 1, addr@ buf)
+                            0, g0uint2int idx, 4, buf)
 in
   if s = OK then begin
     urb_wait_while_active (xfer_v | urb);
     urb_transfer_completed (xfer_v | urb);
     let val s = urb_detach_and_free urb in
-      if s = OK then begin value := (array_get_at (buf, 0)); OK end
-                else begin value := g1int2uint 0; s end
+      if s = OK then begin value := usb_buf_get_uint buf; usb_buf_release buf; OK end
+                else begin value := g1int2uint 0; usb_buf_release buf; s end
     end
   end else begin
     urb_transfer_completed (xfer_v | urb);
     urb_detach_and_free_ urb;
     value := g1int2uint 0;
+    usb_buf_release buf;
     s
   end
-end
+end end
 
 fun smsclan_read_reg {i: nat} (usbd: !usb_device_vt (i), idx: uint, value: &uint? >> uint): [s: int] status s =
 let
@@ -193,29 +239,34 @@ end // [smsclan_read_reg]
 extern fun smsclan_write_wait (): void = "mac#smsclan_write_wait"
 fun smsclan_write_reg {i: nat} (usbd: !usb_device_vt (i), idx: uint, value: uint): [s: int] status s =
 let
+  val buf = usb_buf_alloc 4
+in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf } else let
+  val _ = usb_buf_set_uint (buf, value)
   var urb: urb0?
   val s = usb_device_alloc_urb (usbd, 0, 0, urb)
 in if s != OK then
-  s where { prval _ = usb_device_release_null_urb urb }
+  s where { prval _ = usb_device_release_null_urb urb
+            val   _ = usb_buf_release buf }
 else let
-  var buf = @[uint][1](value)
   val (xfer_v | s) =
-    urb_begin_control_write (view@ buf | urb, make_RequestType (HostToDevice, Vendor, Device),
+    urb_begin_control_write (urb, make_RequestType (HostToDevice, Vendor, Device),
                              make_VendorRequest USB_VENDOR_REQUEST_WRITE_REGISTER,
-                             0, g0uint2int idx, 1, addr@ buf)
+                             0, g0uint2int idx, 4, buf)
 in
   if s = OK then begin
     urb_wait_while_active (xfer_v | urb);
     urb_transfer_completed (xfer_v | urb);
     // for some reason, the transmitter is much happier if I put a slight delay at this point:
     smsclan_write_wait ();
+    usb_buf_release buf;
     usb_device_detach_and_release_urb (usbd, urb)
   end else begin
     urb_transfer_completed (xfer_v | urb);
+    usb_buf_release buf;
     usb_device_detach_and_release_urb_ (usbd, urb);
     s
   end
-end end // [smsclan_write_reg]
+end end end // [smsclan_write_reg]
 
 fun smsclan_get_all_regs {i: nat} (usbd: !usb_device_vt (i), idx: uint): [s: int] status s =
 if idx < 305 then let
@@ -342,28 +393,35 @@ in
   if s1 = OK then if s2 = OK then OK else s2 else s1
 end
 
+(*
 fun smsclan_get_rx_statistics {i, n: nat | n >= 8} {l: agz} (pf: !(@[uint][n]) @ l | usbd: !usb_device_vt i, stats: ptr l): [s: int] status s =
 let
+  val buf = usb_buf_alloc 32
+in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf } else let
   var urb: urb0?
   val s = usb_device_alloc_urb (usbd, 0, 0, urb)
 in if s != OK then
-  s where { prval _ = usb_device_release_null_urb urb }
+  s where { prval _ = usb_device_release_null_urb urb
+            val   _ = usb_buf_release buf }
 else let
   val (xfer_v | s) =
-    urb_begin_control_read (pf | urb, make_RequestType (DeviceToHost, Vendor, Device),
+    urb_begin_control_read (urb, make_RequestType (DeviceToHost, Vendor, Device),
                             make_VendorRequest USB_VENDOR_REQUEST_GET_STATS,
-                            0, 0, 8, stats)
+                            0, 0, 32, buf)
 in
   if s = OK then begin
     urb_wait_while_active (xfer_v | urb);
     urb_transfer_completed (xfer_v | urb);
+    // FIXME: memcpy buf into stats
+    usb_buf_release buf;
     usb_device_detach_and_release_urb (usbd, urb)
   end else begin
     urb_transfer_completed (xfer_v | urb);
+    usb_buf_release buf;
     usb_device_detach_and_release_urb_ (usbd, urb);
     s
   end
-end end // [smsclan_get_rx_statistics]
+end end end // [smsclan_get_rx_statistics]
 
 fun smsclan_get_tx_statistics {i, n: nat | n >= 10} {l: agz} (pf: !(@[uint][n]) @ l | usbd: !usb_device_vt i, stats: ptr l): [s: int] status s =
 let
@@ -387,6 +445,7 @@ in
     s
   end
 end end // [smsclan_get_tx_statistics]
+*)
 
 #define ID_REV                          (g1int2uint 0x00)
 
@@ -503,7 +562,7 @@ end end // [smsclan_get_tx_statistics]
 fun smsclan_reset {i: nat} (usbd: !usb_device_vt (i)): [s: int] status s =
 // software reset -- seems to cause all kinds of problems
 // let val s = smsclan_write_reg (usbd, HW_CFG, HW_CFG_SRST_) in if s != OK then s else
-let val () = print_dev_desc usbd in
+//let val () = print_dev_desc usbd in
 // check for de-assert
 let fun loop {i: nat} (usbd: !usb_device_vt (i), regnum: uint, test: uint, timeout: int): [s: int] status s = s' where {
       var reg: uint
@@ -594,7 +653,7 @@ begin $extfcall (void, "debuglog", 0, 1, "smsclan[MAC_CR]=%#x\n", mac_cr);
 
 
    OK
-end end end end end end end end end end end end end end end end end
+end end end end end end end end end end end end end end end end //end
 end end end end end end end end end end end end end end end end end end end end end end end end end // flattened let-statements
 // end [smsclan_reset]
 
@@ -603,96 +662,6 @@ extern fun uintarray2uint_le {n: nat | n >= 4} (!(@[uint8][n])): uint = "mac#get
 extern fun uintarrayptr2uint_le {n: nat | n >= 4} {l: agz} (!array_v (uint8, l, n) | ptr l): uint = "mac#get4bytes_le"
 extern fun dump_urb (!urb2, int): void = "mac#dump_urb"
 
-fun test_write {i: nat} (usbd: !usb_device_vt (i)): void = let
-  var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, 2, 512, urb)
-in if s != OK then
-  () where { prval _ = usb_device_release_null_urb urb }
-else let
-  macdef b (x) = $UN.cast{uint8}(,(x))
-  var txbuf = @[uint8](
-    b 0x00, b 0x00, b 0x00, b 0x00, // Tx Cmd A
-    b 0x00, b 0x00, b 0x00, b 0x00, // Tx Cmd B
-    b 0xff, b 0xff, b 0xff, b 0xff, b 0xff, b 0xff, // Destination MAC
-    b 0x02, b 0xac, b 0x6f, b 0x3a, b 0x0d, b 0xdf, // Source MAC
-    b 0x08, b 0x06, // Type: ARP
-    b 0x00, b 0x01, // Hardware Type: Ethernet
-    b 0x08, b 0x00, // Protocol Type: IP
-    b 0x06, // Hardware Size
-    b 0x04, // Protocol Size
-    b 0x00, b 0x01, // Opcode: request
-    b 0x02, b 0xac, b 0x6f, b 0x3a, b 0x0d, b 0xdf, // Sender MAC
-    b 0x0a, b 0x00, b 0x00, b 0x02, // Sender IP
-    b 0x00, b 0x00, b 0x00, b 0x00, b 0x00, b 0x00, // Target MAC
-    b 0x0a, b 0x00, b 0x00, b 0x01  // Target IP
-  )
-
-  val txlen:uint = g0int2uint 42
-  val tx_cmd_a = (txlen lor TX_CMD_A_LAST_SEG_) lor TX_CMD_A_FIRST_SEG_
-  val tx_cmd_b = txlen
-  val mask8:uint = g0int2uint 0xff
-
-in
-  array_set_at (txbuf, 0, b ((tx_cmd_a >> 0) land mask8));
-  array_set_at (txbuf, 1, b ((tx_cmd_a >> 8) land mask8));
-  array_set_at (txbuf, 2, b ((tx_cmd_a >> 16) land mask8));
-  array_set_at (txbuf, 3, b ((tx_cmd_a >> 24) land mask8));
-  array_set_at (txbuf, 4, b ((tx_cmd_b >> 0) land mask8));
-  array_set_at (txbuf, 5, b ((tx_cmd_b >> 8) land mask8));
-  array_set_at (txbuf, 6, b ((tx_cmd_b >> 16) land mask8));
-  array_set_at (txbuf, 7, b ((tx_cmd_b >> 24) land mask8));
-  dump_buf (txbuf, 42+8);
-let
-  val (xfer_v | s) =
-    urb_begin_bulk_write (view@ txbuf | urb, 42 + 8, addr@ txbuf)
-in
-  if s = OK then begin
-    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s);
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    let val s = usb_device_detach_and_release_urb (usbd, urb) in
-      $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write transfer complete s = %d\n", s)
-    end
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s)
-  end
-end end end
-
-fun test_read {i: nat} (usbd: !usb_device_vt (i)): void = let
-  var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, 1, 512, urb)
-in if s != OK then
-  () where { prval _ = usb_device_release_null_urb urb }
-else let
-  macdef b (x) = $UN.cast{uint8}(,(x))
-  var buf = @[uint8][1600](b(0))
-  val (xfer_v | s) =
-    urb_begin_bulk_read (view@ buf | urb, 1536, addr@ buf)
-in
-  if s = OK then begin
-    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
-
-    test_write usbd;  // send out an ARP broadcast instigating a response
-
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read transfer complete\n");
-    dump_buf (buf, 64);
-    printnum ($UN.cast{int}(size)) where {
-      val header = uintarray2uint_le buf
-      val size = (header land RX_STS_FL_) >> 16
-    }
-
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    $extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s)
-  end
-end end
-
 // should match value in uip-conf.h for BUFSIZE
 stadef UIP_BUFSIZE = 1500
 macdef UIP_BUFSIZE = $extval(uint UIP_BUFSIZE, "UIP_BUFSIZE")
@@ -700,52 +669,14 @@ macdef UIP_BUFSIZE = $extval(uint UIP_BUFSIZE, "UIP_BUFSIZE")
 vtypedef buf_vt (l: addr, m: int) = ((@[uint8][m]) @ l | ptr l)
 
 extern fun copy_into_uip_buf {n, m: nat | n <= m && n <= UIP_BUFSIZE} {l: agz} (
-    !array_v (uint8, l, m) |
-    ptr l, uint n
+    !usb_mem_vt (l, m), uint n
   ): void = "mac#copy_into_uip_buf"
 extern fun copy_from_uip_buf {m: nat} {l: agz} (
-    !array_v (uint8, l, m) |
-    ptr l
+    !usb_mem_vt (l, m)
   ): [n: nat | n <= m && n <= UIP_BUFSIZE] uint n = "mac#copy_from_uip_buf"
 
 extern fun get_uip_len (): int = "mac#get_uip_len"
 extern fun put_uip_len (int): void = "mac#put_uip_len"
-
-extern fun do_one_read {i: nat} (usbd: !usb_device_vt (i)): [n: nat] uint n = "ext#do_one_read"
-
-implement do_one_read (usbd) = let
-  var urb: urb0?
-  val s = usb_device_alloc_urb (usbd, 1, 512, urb)
-in if s != OK then
-  g1int2uint 0 where { prval _ = usb_device_release_null_urb urb }
-else let
-  macdef b (x) = $UN.cast{uint8}(,(x))
-  var buf = @[uint8][1600](b(0))
-  val (xfer_v | s) =
-    urb_begin_bulk_read (view@ buf | urb, 1536, addr@ buf)
-in
-  if s = OK then begin
-    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read transfer complete\n");
-    let
-      val header = uintarray2uint_le buf
-      val size = g1ofg0 ((header land RX_STS_FL_) >> 16)
-    in
-      //printnum ($UN.cast{int}(size));
-      if size <= UIP_BUFSIZE then
-        size where { val _ = copy_into_uip_buf (view@ buf | addr@ buf, size) }
-      else g1int2uint 0
-    end
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
-    usb_device_detach_and_release_urb_ (usbd, urb);
-    g1int2uint 0
-  end
-end end
 
 fun dump_int_sts {i:nat} (usbd: !usb_device_vt i): void =
   let var reg: uint
@@ -753,6 +684,7 @@ fun dump_int_sts {i:nat} (usbd: !usb_device_vt i): void =
     $extfcall (void, "debuglog", 0, 1, "INT_STS=%#x\n", reg)
   end
 
+(*
 fun dump_statistics {i: nat} (usbd: !usb_device_vt i): void =
   let var rxstats = @[uint][8](g1int2uint 0) var txstats = @[uint][10](g1int2uint 0) in
     begin if smsclan_get_rx_statistics (view@ rxstats | usbd, addr@ rxstats) != OK then () else
@@ -780,63 +712,7 @@ fun dump_statistics {i: nat} (usbd: !usb_device_vt i): void =
                array_get_at (txstats, 9))
     end
   end
-
-
-extern fun do_one_read_1 {i: nat} {l: agz} (
-    !array_v (uint8, l, 1600) |
-    !usb_device_vt (i),
-    &urb1 i >> urb2 i,
-    ptr l
-  ): #[s,i': int ] //| (s != 0 || i' == i) && (s == 0 || i' == ~1)]
-     #[nTDs: int ] // | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
-     #[active: bool ] // | (s == 0) == active]
-     (usb_transfer_status i | status s)
-
- = "ext#do_one_read_1"
-
-extern fun do_one_read_2 {l: agz} {s: int} {i, nTDs: nat | (nTDs > 0) <==> (s == 0)} {active: bool | active == (s == 0)} (
-    !array_v (uint8, l, 1600),
-    usb_transfer_status i |
-    !usb_device_vt (i),
-    !urb_vt (i, nTDs, active) >> urb1 i,
-    ptr l,
-    status s
-  ): [n: int] (uint n) = "ext#do_one_read_2"
-
-implement do_one_read_1 (pfbuf | usbd, urb, buf) = urb_begin_bulk_read (pfbuf | urb, 1536, buf)
-
-extern fun dump_td (!ehci_td_ptr0, int): void = "mac#dump_td"
-
-implement do_one_read_2 (pfbuf, xfer_v | usbd, urb, buf, s) =
-  if s = OK then begin
-    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
-    urb_wait_while_active (xfer_v | urb);
-    urb_transfer_completed (xfer_v | urb);
-    let val tds = urb_detach urb in //dump_td (tds, 8);
-      ehci_td_chain_free tds
-    end;
-    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read transfer complete\n");
-    let
-      val header = uintarrayptr2uint_le (pfbuf | buf)
-      val size = g1ofg0 ((header land RX_STS_FL_) >> 16)
-    in
-      //printnum ($UN.cast{int}(size));
-      //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read header=%#x\n", header);
-      //dump_int_sts usbd;
-      //dump_statistics usbd;
-      if size <= UIP_BUFSIZE then
-        size where { val _ = $extfcall (void, "debuglog", 0, 1, "size=%#x\n", size)
-                     val _ = dump_bufptr (pfbuf | buf, 64);
-                     val _ = copy_into_uip_buf (pfbuf | buf, size) }
-      else g1int2uint 0
-    end
-  end else begin
-    urb_transfer_completed (xfer_v | urb);
-    //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_read returned %d\n", s);
-    urb_detach_and_free_ urb;
-    g1int2uint 0
-  end
-
+*)
 
 extern castfn g1uint2int {x: int} (uint x): int x
 
@@ -849,41 +725,36 @@ in if s != OK then
   () where { prval _ = usb_device_release_null_urb urb }
 else let
   macdef b (x) = $UN.cast{uint8}(,(x))
-  var txbuf = @[uint8][1600](b 0)
-  val txlen: [n: int] uint n = copy_from_uip_buf (view@ txbuf | addr@ txbuf) // will leave 8 bytes for Tx Cmd A & B
+  val txbuf = usb_buf_alloc 1600
+in if ptrcast txbuf = 0 then () where { val   _ = usb_device_release_urb (usbd, urb)
+                                        prval _ = usb_buf_release_null txbuf } else let
+  val txlen: [n: int] uint n = copy_from_uip_buf (txbuf) // will leave 8 bytes for Tx Cmd A & B
   // txlen does not include command word lengths
   val tx_cmd_a = (txlen lor TX_CMD_A_LAST_SEG_) lor TX_CMD_A_FIRST_SEG_
   val tx_cmd_b = txlen
   val mask8:uint = g0int2uint 0xff
-
 in
-  array_set_at (txbuf, 0, b ((tx_cmd_a >> 0) land mask8));
-  array_set_at (txbuf, 1, b ((tx_cmd_a >> 8) land mask8));
-  array_set_at (txbuf, 2, b ((tx_cmd_a >> 16) land mask8));
-  array_set_at (txbuf, 3, b ((tx_cmd_a >> 24) land mask8));
-  array_set_at (txbuf, 4, b ((tx_cmd_b >> 0) land mask8));
-  array_set_at (txbuf, 5, b ((tx_cmd_b >> 8) land mask8));
-  array_set_at (txbuf, 6, b ((tx_cmd_b >> 16) land mask8));
-  array_set_at (txbuf, 7, b ((tx_cmd_b >> 24) land mask8));
+  usb_buf_set_uint_at (txbuf, 0, tx_cmd_a);
+  usb_buf_set_uint_at (txbuf, 1, tx_cmd_b);
   //dump_buf (txbuf, g1uint2int (txlen + g1int2uint 8));
 let
-  val (xfer_v | s) = urb_begin_bulk_write (view@ txbuf | urb, g1uint2int (txlen + g1int2uint 8), addr@ txbuf)
+  val (xfer_v | s) = urb_begin_bulk_write (urb, g1uint2int (txlen + g1int2uint 8), txbuf)
 in
   if s = OK then begin
     //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s);
     urb_wait_while_active (xfer_v | urb);
+    usb_buf_release txbuf;
     urb_transfer_completed (xfer_v | urb);
     let val s = usb_device_detach_and_release_urb (usbd, urb) in
       //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write transfer complete s = %d\n", s)
     end
   end else begin
     urb_transfer_completed (xfer_v | urb);
+    usb_buf_release txbuf;
     usb_device_detach_and_release_urb_ (usbd, urb);
     //$extfcall (void, "debuglog", 0, 1, "urb_begin_bulk_write returned %d\n", s)
   end
-end end end
-
-extern fun test_uip {i: nat} (!usb_device_vt i): void = "test_uip"
+end end end end
 
 //fun check_register {i: nat} (usbd: !usb_device_vt i, int, string)
 fun check_registers {i: nat} (usbd: !usb_device_vt i): void =
@@ -901,6 +772,7 @@ let val _ = $extfcall (void, "debuglog", 0, 1, "AFG_CFG=%#x\n", buf)
 in () end end end end end end
 
 extern fun smsclan_uip_loop {i: nat} (usbd: !usb_device_vt i): [s: int] status s = "ext#smsclan_uip_loop"
+fun do_nothing (): void = do_nothing ()
 
 implement smsclan_operate () =
 let
@@ -925,8 +797,6 @@ let
   val s = smsclan_get_mac_addr (usbd, lo, hi)
   val _ = $extfcall (void, "debuglog", 0, 1, "get_mac_addr: hi=%.4x lo=%.8x\n", hi, lo)
 
-  //val _ = $extfcall (void, "debuglog", 0, 1, "invoking test_uip\n")
-  //val _ = test_uip usbd
   val _ = $extfcall (void, "debuglog", 0, 1, "invoking smsclan_uip_loop\n")
   val _ = smsclan_uip_loop usbd
 in
@@ -970,6 +840,7 @@ extern fun htons (uint): uint = "mac#htons" // just use uint for simplicity, sho
 
 macdef CLOCK_SECOND = $extval(int, "CLOCK_SECOND")
 macdef UIP_CONNS = $extval(int, "UIP_CONNS")
+extern fun clock_time (): int = "mac#clock_time"
 
 // //////////////////////////////////////////////////
 
@@ -1029,22 +900,21 @@ implement smsclan_uip_loop {i} (usbd) = let
     else ()
 
   fun loop_body {i, nrTDs: nat | nrTDs > 0} {l: agz} (
-        pfrbuf: !rxbuf_v l |
         usbd: !usb_device_vt i,
         rurb: !urb_vt (i, nrTDs, false) >> urb_vt (i, nrTDs', active'),
-        rbuf: ptr l
+        rbuf: !usb_mem_vt (l, 1600)
       ): #[s: int] #[nrTDs': nat | (s == 0) <==> (nrTDs' > 0)] #[active': bool | active' == (s == 0)]
          (usb_transfer_status i | status s) =
   let val s = urb_detach_and_free rurb in if s != OK then (usb_transfer_aborted | s) else
     let
-      val header = uintarrayptr2uint_le (pfrbuf | rbuf)
+      val header = usb_buf_get_uint rbuf
       val size = g1ofg0 ((header land RX_STS_FL_) >> 16)
     in
       if size > UIP_BUFSIZE
       then (usb_transfer_aborted | EINVALID)
       else let
-        val _ = copy_into_uip_buf (pfrbuf | rbuf, size);
-        val (rxfer_v' | s) = urb_begin_bulk_read (pfrbuf | rurb, 1536, rbuf); // begin next read
+        val _ = copy_into_uip_buf (rbuf, size);
+        val (rxfer_v' | s) = urb_begin_bulk_read (rurb, 1536, rbuf); // begin next read
       in
         // process current read
         if get_uip_buftype () = htons (UIP_ETHTYPE_IP) then begin
@@ -1067,11 +937,10 @@ implement smsclan_uip_loop {i} (usbd) = let
 
   // ATS helped sort out the resource alloc & clean-up for these functions
   fun loop {i, nrTDs: nat | nrTDs > 0} {rl: agz} (
-        rxfer_v: usb_transfer_status i,
-        pfrbuf: !rxbuf_v rl |
+        rxfer_v: usb_transfer_status i |
         usbd: !usb_device_vt i,
         rurb: !urb_vt (i, nrTDs, true) >> urb_vt (i, 0, false),
-        rbuf: ptr rl,
+        rbuf: !usb_mem_vt (rl, 1600),
         periodic_timer: &uip_timer_t,
         arp_timer: &uip_timer_t
       ): #[s: int | s != 0] status s =
@@ -1080,31 +949,39 @@ implement smsclan_uip_loop {i} (usbd) = let
   in
     if s = OK then begin // No Rx
       uip_periodic_check (usbd, periodic_timer, arp_timer);
-      loop (rxfer_v, pfrbuf | usbd, rurb, rbuf, periodic_timer, arp_timer)
+      loop (rxfer_v | usbd, rurb, rbuf, periodic_timer, arp_timer)
     end else // Rx one packet
       let
+        val lbody_start = clock_time ()
         val _ = urb_transfer_completed (rxfer_v | rurb)
-        val (rxfer_v' | s) = loop_body (pfrbuf | usbd, rurb, rbuf)
+        val (rxfer_v' | s) = loop_body (usbd, rurb, rbuf)
+        val lbody_end = clock_time ()
+        val lbody_dur = lbody_end - lbody_start
+        //val _ = $extfcall (void, "debuglog", 0, 1, "lbody_dur=%d\n", lbody_dur)
       in
         if s != 0 then s where { val _ = urb_transfer_abort (rxfer_v' | rurb)
                                  val _ = urb_detach_and_free_ rurb }
-        else loop (rxfer_v', pfrbuf | usbd, rurb, rbuf, periodic_timer, arp_timer)
+        else loop (rxfer_v' | usbd, rurb, rbuf, periodic_timer, arp_timer)
       end
   end
 
   var start_loop = lam@ (usbd: !usb_device_vt i, rurb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
-    var rxbuf = @[uint8][1600]($UN.cast{uint8}(0))
+    val rxbuf = usb_buf_alloc 1600
+  in if ptrcast rxbuf = 0 then ENOSPACE where { prval _ = usb_buf_release_null rxbuf } else let
     var periodic_timer: uip_timer_t
     var arp_timer: uip_timer_t
     val _ = uip_preamble (periodic_timer, arp_timer)
-    val (rxfer_v | s) = urb_begin_bulk_read (view@ rxbuf | rurb, 1536, addr@ rxbuf)
+    val (rxfer_v | s) = urb_begin_bulk_read (rurb, 1536, rxbuf)
   in
     if s != OK then
-      s where { val _ = urb_transfer_abort (rxfer_v | rurb) }
-    else begin
-      loop (rxfer_v, view@ rxbuf | usbd, rurb, addr@ rxbuf, periodic_timer, arp_timer)
+      s where { val _ = urb_transfer_abort (rxfer_v | rurb)
+                val _ = usb_buf_release rxbuf }
+    else let
+      val s = loop (rxfer_v | usbd, rurb, rxbuf, periodic_timer, arp_timer)
+    in
+      usb_buf_release rxbuf; s
     end
-  end
+  end end
 in
   usb_with_urb (usbd, 1, 512, start_loop)
 end
@@ -1140,120 +1017,6 @@ void network_setup (void)
   uip_setnetmask(ipaddr);
 }
 
-void test_uip(usb_device_t *usbd)
-{
-  int i,s;
-  uip_ipaddr_t ipaddr;
-  urb_t urb1, urb2;
-  struct timer periodic_timer, arp_timer;
-
-  timer_set(&periodic_timer, CLOCK_SECOND / 2);
-  timer_set(&arp_timer, CLOCK_SECOND * 10);
-
-  uip_init();
-  struct uip_eth_addr eaddr = {{0x02,0xac,0x6f,0x3a,0x0d,0xdf}};
-  uip_setethaddr(eaddr);
-
-  uip_ipaddr(ipaddr, 10,0,0,2);
-  uip_sethostaddr(ipaddr);
-  uip_ipaddr(ipaddr, 10,0,0,1);
-  uip_setdraddr(ipaddr);
-  uip_ipaddr(ipaddr, 255,255,255,0);
-  uip_setnetmask(ipaddr);
-
-  if(usb_device_alloc_urb(usbd, 1, 512, (void **)&urb1) != 0) return;
-  if(usb_device_alloc_urb(usbd, 1, 512, (void **)&urb2) != 0) {
-    usb_device_release_urb (usbd, urb1);
-    return;
-  }
-  DLOG(1, "buf1=%#x buf2=%#x\n", buf1, buf2);
-
-  s = do_one_read_1(usbd, &urb1, buf1);
-  if(s != 0) { goto error; }
-  //s = do_one_read_1(usbd, &urb2, buf2);
-  //if(s != 0) { goto error; }
-
-  while(1) {
-    //dump_urb(urb1,0);
-    //dump_urb(urb2,0);
-    if(urb_transfer_chain_active(urb1) != OK) {
-      uip_len = do_one_read_2(usbd, urb1, buf1, s);
-      //dump_urb(urb1,0);
-      s = do_one_read_1(usbd, &urb1, buf1);
-      if(s != 0) { goto error; }
-    //} else if(urb_transfer_chain_active(urb2) != OK) {
-      //uip_len = do_one_read_2(usbd, urb2, buf2, s);
-      //s = do_one_read_1(usbd, &urb2, buf2);
-      //if(s != 0) { goto error; }
-    } else uip_len = 0;
-
-    if(uip_len > 0) {
-      //DLOG(1,"do_one_read_2 returned %d\n", uip_len);
-      //DLOG(1, "seq=%d\n", ntohs(((u16 *) uip_buf)[0x28 >> 1]));
-      if(BUF->type == htons(UIP_ETHTYPE_IP)) {
-        uip_arp_ipin();
-        uip_input();
-        /* If the above function invocation resulted in data that
-           should be sent out on the network, the global variable
-           uip_len is set to a value > 0. */
-        if(uip_len > 0) {
-          uip_arp_out();
-          do_one_send(usbd);
-        }
-      } else if(BUF->type == htons(UIP_ETHTYPE_ARP)) {
-        //DLOG(1, "ETHTYPE_ARP\n");
-        uip_arp_arpin();
-        /* If the above function invocation resulted in data that
-           should be sent out on the network, the global variable
-           uip_len is set to a value > 0. */
-        if(uip_len > 0) {
-          do_one_send(usbd);
-        }
-      }
-
-    } else if(timer_expired(&periodic_timer)) {
-      timer_reset(&periodic_timer);
-      for(i = 0; i < UIP_CONNS; i++) {
-        uip_periodic(i);
-        /* If the above function invocation resulted in data that
-           should be sent out on the network, the global variable
-           uip_len is set to a value > 0. */
-        if(uip_len > 0) {
-          uip_arp_out();
-          do_one_send(usbd);
-        }
-      }
-
-#if UIP_UDP
-      for(i = 0; i < UIP_UDP_CONNS; i++) {
-        uip_udp_periodic(i);
-        /* If the above function invocation resulted in data that
-           should be sent out on the network, the global variable
-           uip_len is set to a value > 0. */
-        if(uip_len > 0) {
-          uip_arp_out();
-          do_one_send(usb);
-        }
-      }
-#endif /* UIP_UDP */
-
-      /* Call the ARP timer function every 10 seconds. */
-      if(timer_expired(&arp_timer)) {
-        timer_reset(&arp_timer);
-        uip_arp_timer();
-      }
-    }
-  }
-
-error:
-  do_one_read_2(usbd, urb1, buf1, s);
-  do_one_read_2(usbd, urb2, buf2, s);
-  usb_device_release_urb(usbd, urb1);
-  usb_device_release_urb(usbd, urb2);
-  return;
-
-}
-
 int main(void)
 {
   svc3("SMSCLAN\n", 9, 0);
@@ -1262,19 +1025,48 @@ int main(void)
 
 
   //while(*((volatile u32 *) (_ipcmappings[1].address)) == 0)   ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));
-  while(__atomic_load_n((u32 *) _ipcmappings[1].address, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));
-  usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
-  DLOG(1, "smsclan ****************** &usbdevices[0]=%#x\n", &usbd[0]);
+  //while(__atomic_load_n((u32 *) _ipcmappings[1].address, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));
+  //usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
+  //DLOG(1, "smsclan ****************** &usbdevices[0]=%#x\n", &usbd[0]);
   //while(*((volatile u32 *) (&usbd[1].flags)) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
-  while(__atomic_load_n(&usbd[1].flags, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
-  DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", QH( *usbd,0).capabilities);
+  //while(__atomic_load_n(&usbd[1].flags, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"(&usbd[1].flags));
+  //DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", QH( *usbd,0).capabilities);
   //test(); // Test USB
   //DLOG(1, "SMSCLAN timer=%d\n", clock_time());
-  DLOG(1, "smsclan ****************** invoking smsclan_operate\n");
-  smsclan_operate (); // Test ATS version of USB code
+  //DLOG(1, "smsclan ****************** invoking smsclan_operate\n");
+  //DLOG(1, "smsclan ****************** &__ehci_td_pool_array=%#x &__ehci_td_pool_bitmap=%#x\n", get_ehci_td_pool_addr (), get_ehci_td_bitmap_addr ());
+
+#if 0
+  // Test memory reads
+  u32 *ptr = (u32 *) 0x8007a040;
+  for(;;) {
+    //__atomic_load_n(&usbd[2].qh[0].capabilities, __ATOMIC_SEQ_CST);
+    //__atomic_load_n(&usbd[2].qh[1].capabilities, __ATOMIC_SEQ_CST);
+    //__atomic_load_n(&usbd[2].qh[2].capabilities, __ATOMIC_SEQ_CST);
+    //__atomic_load_n(&usbd[2].qh[3].capabilities, __ATOMIC_SEQ_CST);
+    __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
+    __atomic_load_n(ptr+8, __ATOMIC_SEQ_CST);
+    __atomic_load_n(ptr+16, __ATOMIC_SEQ_CST);
+    __atomic_load_n(ptr+24, __ATOMIC_SEQ_CST);
+  }
+#endif
+
+  DLOG(1, "smsclan ****************** wait_for_ehci_info\n");
+  wait_for_ehci_info ();
+
+  usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
+  DLOG(1, "smsclan ****************** &usbdevices[0]=%#x\n", &usbd[0]);
+  DLOG(1, "smsclan ****************** usbd->qh.capabilities=%#x\n", QH( *usbd,0).capabilities);
+  DLOG(1, "smsclan ****************** usbd->dev_desc.idVendor=%#x .idProduct=%#x\n", usbd->dev_desc.idVendor, usbd->dev_desc.idProduct);
+
+  DLOG(1, "smsclan ****************** smsclan_operate\n");
+  smsclan_operate (); // Run uIP with SMSCLAN
+
+
   //DLOG(1, "SMSCLAN timer=%d\n", clock_time());
-  DLOG(1, "smsclan ****************** invoking atsmain\n");
-  return atsmain();
+  //DLOG(1, "smsclan ****************** invoking atsmain\n");
+  //return atsmain();
+  return 0;
 }
 
 %}

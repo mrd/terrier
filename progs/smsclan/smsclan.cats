@@ -22,7 +22,7 @@ unsigned int _scheduler_affinity = 1;
 
 ipcmapping_t _ipcmappings[] = {
   { IPC_SEEK, "ehci_info", IPC_READ, "fixedslot", 1, NULL },
-  { IPC_SEEK, "ehci_usbdevices", IPC_READ | IPC_WRITE, "usbdevices", 1, NULL },
+  { IPC_SEEK, "ehci_usbdevices", IPC_READ | IPC_WRITE | IPC_DEVICEMEM, "usbdevices", 1, NULL },
   {0}
 };
 

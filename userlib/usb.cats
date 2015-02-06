@@ -264,6 +264,8 @@ static void usb_buf_release(void *p)
 #define usb_buf_set_uint_at(b,i,v) (((u32 *) (b))[i] = (v))
 #define usb_buf_get_uint16(b) (*((u16 *) (b)))
 #define usb_buf_get_uint8(b) (*((u8 *) (b)))
+#define _usb_buf_copy_from_array(dst,src,size) memcpy(dst,src,size)
+#define _usb_buf_copy_into_array(dst,src,size) memcpy(dst,src,size)
 
 
 /* ************************************************** */

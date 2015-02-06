@@ -63,6 +63,15 @@ in
   ehci_td_chain_free tds
 end
 
+extern fun _usb_buf_copy_into_array {n: nat} {src,dst: agz}
+    (ptr dst, !usb_mem_vt (src, n), int): void = "mac#_usb_buf_copy_into_array"
+implement{a} usb_buf_copy_into_array (pf | dst, src, count) =
+  _usb_buf_copy_into_array (dst, src, $UN.cast{int}(sizeof<a>) * count)
+extern fun _usb_buf_copy_from_array {n: nat} {src,dst: agz}
+    (!usb_mem_vt (dst, n), ptr src, int): void = "mac#_usb_buf_copy_from_array"
+implement{a} usb_buf_copy_from_array (pf | dst, src, count) =
+  _usb_buf_copy_from_array (dst, src, $UN.cast{int}(sizeof<a>) * count)
+
 // Allocate a device request and a starting TDs. Returns OK if success, ENOSPACE otherwise, and cleans up.
 implement{} usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength) =
 let

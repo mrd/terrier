@@ -66,6 +66,12 @@ fun usb_buf_get_uint16 {l: agz} {n: nat | 2 <= n} (!usb_mem_vt (l, n)): uint16 =
 praxi lemma_sizeof_uint16 (): [sizeof(uint16) == 2] void
 fun usb_buf_get_uint8 {l: agz} {n: nat | 1 <= n} (!usb_mem_vt (l, n)): uint8 = "mac#usb_buf_get_uint8"
 praxi lemma_sizeof_uint8 (): [sizeof(uint8) == 1] void
+fun{a:t@ype} usb_buf_copy_into_array {n,m: nat} {src,dst: agz} (
+    !(@[a][m]) @ dst | ptr dst, !usb_mem_vt (src, n), int m
+  ): void
+fun{a:t@ype} usb_buf_copy_from_array {n,m: nat} {src,dst: agz} (
+    !(@[a][m]) @ src | !usb_mem_vt (dst, n), ptr src, int m
+  ): void
 
 
 // URB wrapper

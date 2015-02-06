@@ -732,7 +732,6 @@ in if ptrcast txbuf = 0 then () where { val   _ = usb_device_release_urb (usbd, 
   // txlen does not include command word lengths
   val tx_cmd_a = (txlen lor TX_CMD_A_LAST_SEG_) lor TX_CMD_A_FIRST_SEG_
   val tx_cmd_b = txlen
-  val mask8:uint = g0int2uint 0xff
 in
   usb_buf_set_uint_at (txbuf, 0, tx_cmd_a);
   usb_buf_set_uint_at (txbuf, 1, tx_cmd_b);
@@ -777,8 +776,8 @@ fun do_nothing (): void = do_nothing ()
 implement smsclan_operate () =
 let
   val usbd = usb_acquire_device 1
-  val () = print_dev_desc usbd
-  val () = print_cfg_desc (usbd, 0)
+  //val () = print_dev_desc usbd
+  //val () = print_cfg_desc (usbd, 0)
 
   val s = usb_set_configuration (usbd, 1)
   val () = $extfcall (void, "debuglog", 0, 1, "usb_set_configuration returned %d\n", s)

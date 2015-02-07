@@ -941,26 +941,31 @@ implement smsclan_uip_loop {i} (usbd) = let
         rurb: !urb_vt (i, nrTDs, true) >> urb_vt (i, 0, false),
         rbuf: !usb_mem_vt (rl, 1600),
         periodic_timer: &uip_timer_t,
-        arp_timer: &uip_timer_t
+        arp_timer: &uip_timer_t,
+        cyc_prev: int
       ): #[s: int | s != 0] status s =
   let
     val s = urb_transfer_chain_active (rxfer_v | rurb)
   in
     if s = OK then begin // No Rx
-      uip_periodic_check (usbd, periodic_timer, arp_timer);
-      loop (rxfer_v | usbd, rurb, rbuf, periodic_timer, arp_timer)
+      //uip_periodic_check (usbd, periodic_timer, arp_timer);
+      loop (rxfer_v | usbd, rurb, rbuf, periodic_timer, arp_timer, cyc_prev)
     end else // Rx one packet
       let
         val lbody_start = clock_time ()
+        val cyc_start = $extfcall (int, "arm_read_cycle_counter", ())
         val _ = urb_transfer_completed (rxfer_v | rurb)
         val (rxfer_v' | s) = loop_body (usbd, rurb, rbuf)
         val lbody_end = clock_time ()
+        val cyc_end = $extfcall (int, "arm_read_cycle_counter", ())
         val lbody_dur = lbody_end - lbody_start
-        //val _ = $extfcall (void, "debuglog", 0, 1, "lbody_dur=%d\n", lbody_dur)
+        val cyc_dur = cyc_end - cyc_start
+        //val _ = $extfcall (void, "debuglog", 0, 1, "lbody_dur=%d cyc_dur=%d cyc_loop=%d\n", lbody_dur, cyc_dur, cyc_end - cyc_prev)
+        val cyc_next = $extfcall (int, "arm_read_cycle_counter", ())
       in
         if s != 0 then s where { val _ = urb_transfer_abort (rxfer_v' | rurb)
                                  val _ = urb_detach_and_free_ rurb }
-        else loop (rxfer_v' | usbd, rurb, rbuf, periodic_timer, arp_timer)
+        else loop (rxfer_v' | usbd, rurb, rbuf, periodic_timer, arp_timer, cyc_next)
       end
   end
 
@@ -976,7 +981,7 @@ implement smsclan_uip_loop {i} (usbd) = let
       s where { val _ = urb_transfer_abort (rxfer_v | rurb)
                 val _ = usb_buf_release rxbuf }
     else let
-      val s = loop (rxfer_v | usbd, rurb, rxbuf, periodic_timer, arp_timer)
+      val s = loop (rxfer_v | usbd, rurb, rxbuf, periodic_timer, arp_timer, $extfcall (int, "arm_read_cycle_counter", ()))
     in
       usb_buf_release rxbuf; s
     end

@@ -214,7 +214,7 @@ fun urb_attach {i, nTDs: nat | nTDs > 0} {l: agz} (
 abst@ype usb_RequestType_t = int
 abst@ype usb_Request_t = int
 
-fun{} usb_device_request_allocate (
+fun usb_device_request_allocate (
     & usb_dev_req_ptr0 ? >> usb_dev_req_optr s,
     & ehci_td_ptr0 ? >> ehci_td_ptr l2,
     usb_RequestType_t,
@@ -354,7 +354,7 @@ fun urb_transfer_result_status {i, nTDs: nat | nTDs > 0} (
 // ** USB control operations
 
 // control nodata
-fun{} urb_begin_control_nodata {i: nat} (
+fun urb_begin_control_nodata {i: nat} (
     !urb_vt (i, 0, false) >> urb_vt (i, nTDs, active),
     usb_RequestType_t,
     usb_Request_t,

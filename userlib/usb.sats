@@ -79,15 +79,15 @@ fun usb_with_urb {i, endpt, maxpkt: nat | (endpt < 16 && 7 < maxpkt && maxpkt < 
     !usb_device_vt i, int endpt, int maxpkt, f: &((!usb_device_vt i, !urb_vt (i, 0, false)) -<clo1> [s: int] status s)
   ): [s: int] status s;
 
+
 (*
 fun usb_with_urb_and_buf
-    {l: agz}
-    {n,i: nat}
+    {n,i: nat | n < USB_BUF_SIZE}
     {endpt, maxpkt: nat | (endpt < 16 && 7 < maxpkt && maxpkt < 2048) || (endpt == 0 && maxpkt == 0)}
 
     (
-    !usb_device_vt i, int endpt, int maxpkt, !usb_mem_vt (l, n),
-    f: &((!usb_device_vt i, !urb_vt (i, 0, false), !usb_mem_vt (l, n)) -<clo1> [s: int] (status s))
+    !usb_device_vt i, int endpt, int maxpkt, int n,
+    f: &({l: agz} (!usb_device_vt i, !urb_vt (i, 0, false), !usb_mem_vt (l, n)) -<clo1> [s: int] (status s))
   ): [s: int] status s;
 *)
 
@@ -337,10 +337,14 @@ fun urb_transfer_abort {i, nTDs: nat} {active: bool} (
     !urb_vt (i, nTDs, active) >> urb_vt (i, nTDs, false)
   ): void = "mac#urb_transfer_abort"
 
-fun urb_transfer_chain_active {i, nTDs: nat | nTDs > 0} (
+fun urb_has_transfer_chain {i, nTDs: nat} {active: bool} (
+      !urb_vt (i, nTDs, active)
+    ): [nTDs != 0 || active == false] bool (nTDs > 0) = "mac#urb_has_transfer_chain"
+
+fun urb_transfer_chain_active {i, nTDs: nat | nTDs > 0} {active: bool} (
     !usb_transfer_status i |
-    !urb_vt (i, nTDs, true) >> urb_vt (i, nTDs, active)
-  ): #[s: int] #[active: bool | (s == 0) == active] status s = "mac#urb_transfer_chain_active"
+    !urb_vt (i, nTDs, active) >> urb_vt (i, nTDs, active')
+  ): #[s: int] #[active': bool | (s == 0) == active'] status s = "mac#urb_transfer_chain_active"
 
 fun urb_transfer_result_status {i, nTDs: nat | nTDs > 0} (
     !urb_vt (i, nTDs, false)
@@ -390,14 +394,19 @@ fun urb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
      (usb_transfer_status i | status s)
 
 // USB helper control operations
-fun urb_wait_while_active {i, nTDs: nat | nTDs > 0} (
+fun urb_wait_while_active {i, nTDs: nat | nTDs > 0} {active: bool} (
     xfer_v: !usb_transfer_status i |
-    usbd: !urb_vt (i, nTDs, true) >> urb_vt (i, nTDs, false)
+    usbd: !urb_vt (i, nTDs, active) >> urb_vt (i, nTDs, false)
   ): void
 
-fun urb_wait_while_active_with_timeout {i, nTDs: nat | nTDs > 0} (
+fun urb_wait_if_active {i, nTDs: nat} {active: bool} (
+    xfer_v: !usb_transfer_status i |
+    usbd: !urb_vt (i, nTDs, active) >> urb_vt (i, nTDs, false)
+  ): void
+
+fun urb_wait_while_active_with_timeout {i, nTDs: nat | nTDs > 0} {active: bool} (
     xfer_v: usb_transfer_status i |
-    usbd: !urb_vt (i, nTDs, true) >> urb_vt (i, nTDs, false),
+    usbd: !urb_vt (i, nTDs, active) >> urb_vt (i, nTDs, false),
     timeout: int
   ): void
 

@@ -239,6 +239,7 @@ typedef struct _usb_device_t usb_device_t;
 #define ATTACHED(usbd,i) ((ehci_td_t *) ((usbd).qh[(i)].priv1))
 #define SET_ATTACHED(usbd,i,v) ((usbd).qh[(i)].priv1) = (u32) (v)
 #define URB_ATTACHED(urb) ((ehci_td_t *) ((*(urb)).priv1))
+#define urb_has_transfer_chain(urb) (URB_ATTACHED((urb_t) urb) != NULL)
 #define SET_URB_ATTACHED(urb,v)  ((*(urb)).priv1) = (u32) (v)
 #define URB_QH(urb) (*(urb))
 
@@ -481,7 +482,6 @@ static void NO_INLINE _incr_td_page (int cpage, ats_ref_type *_addr, ats_ref_typ
 /* USB transfer */
 #define urb_transfer_completed(d) //do { dump_td(URB_ATTACHED((urb_t) d), 8); } while (0)
 #define urb_transfer_abort(d) //dump_td(URB_ATTACHED((urb_t) d), 10)
-
 
 static inline status urb_transfer_chain_active(urb_t urb)
 {

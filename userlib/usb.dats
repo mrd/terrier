@@ -73,7 +73,7 @@ implement{a} usb_buf_copy_from_array (pf | dst, src, count) =
   _usb_buf_copy_from_array (dst, src, $UN.cast{int}(sizeof<a>) * count)
 
 // Allocate a device request and a starting TDs. Returns OK if success, ENOSPACE otherwise, and cleans up.
-implement{} usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength) =
+implement usb_device_request_allocate (devr, startTD, bmRequestType, bRequest, wValue, wIndex, wLength) =
 let
   val devr0 = usb_dev_req_pool_alloc ()
 in
@@ -220,7 +220,7 @@ implement ehci_td_step_fill1 (fill_v | need_empty, startTD, trav, pid, data, len
   else OK
 
 // iteratively fills TDs from a given buffer of data
-fun{} data_stage {lstart: agz} {nTDs, len: nat} {ldata: agez | len == 0 || ldata > null} {p: pidcode} (
+fun data_stage {lstart: agz} {nTDs, len: nat} {ldata: agez | len == 0 || ldata > null} {p: pidcode} (
     fill_v: !ehci_td_filling_v (lstart, 0, nTDs) >> ehci_td_filling_v (lstart, s, nTDs') |
     startTD: !ehci_td_ptr lstart,
     trav: &ehci_td_traversal1 lstart >> ehci_td_traversal_optr (lstart, s),
@@ -392,7 +392,7 @@ in
   end end end end end // flattened
 end
 
-implement{} urb_begin_control_nodata (urb, bmRequestType, bRequest, wValue, wIndex) =
+implement urb_begin_control_nodata (urb, bmRequestType, bRequest, wValue, wIndex) =
 let
   var startTD: ehci_td_ptr0?
   var devr: usb_dev_req_ptr0?

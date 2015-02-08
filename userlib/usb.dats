@@ -453,12 +453,14 @@ let val s = urb_transfer_chain_active (xfer_v | urb) in
     if s = OK then urb_wait_while_active (xfer_v | urb) else ()
 end // [usb_wait_while_active]
 
+implement urb_wait_if_active (xfer_v | urb) = if urb_has_transfer_chain urb then urb_wait_while_active (xfer_v | urb) else ()
+
 implement urb_wait_while_active_with_timeout (xfer_v | urb, timeout) =
 if timeout > 0 then let val s = urb_transfer_chain_active (xfer_v | urb) in
   if s = OK then urb_wait_while_active_with_timeout (xfer_v | urb, timeout - 1)
             else urb_transfer_completed (xfer_v | urb)
 end else urb_transfer_abort (xfer_v | urb)
-// [usb_wait_while_active]
+// [usb_wait_while_active_with_timeout]
 
 implement usb_with_urb (usbd, endpt, maxpkt, f) =
 let
@@ -495,19 +497,19 @@ where {
 }
 
 (*
-implement usb_with_urb_and_buf {n} (usbd, endpt, maxpkt, n, f) =
+implement usb_with_urb_and_buf (usbd, endpt, maxpkt, n, f) =
 let
-  val buf = usb_buf_alloc_vt n
-in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null_vt buf } else let
+  val buf = usb_buf_alloc n
+in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf } else let
   var urb: urb0?
   val s = usb_device_alloc_urb (usbd, endpt, maxpkt, urb)
 in
   if s != OK
   then s where { prval _ = usb_device_release_null_urb urb
-                 val   _ = usb_buf_release_vt buf }
+                 val   _ = usb_buf_release buf }
   else let val s = f (usbd, urb, buf)
            val _ = usb_device_release_urb (usbd, urb)
-           val _ = usb_buf_release_vt buf
+           val _ = usb_buf_release buf
        in s end
 end end
 *)

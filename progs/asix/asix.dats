@@ -156,6 +156,41 @@ in
   }
 end // [fun wait_for_ehci_info]
 
+extern fun wait_for_ehci_info2 (): void = "ext#wait_for_ehci_info2"
+implement wait_for_ehci_info2 (): void = let
+  fun loop {l: addr} {n, i: nat}
+           (pf_ms: ! mslot_v (l, n, int, false, i) | ms: ptr l, i: int i): void = let
+    val x = multireader_read<int> (pf_ms | ms, i)
+  in
+    if x > 0 then () else loop (pf_ms | ms, i)
+  end // end [loop]
+
+  var pages: int?
+  val (opt_pf | ms) = ipcmem_get_view (0, pages)
+in
+  if ms > 0 then
+    let
+      prval Some_v pf_ipcmem = opt_pf
+      var index: int
+      val (e_pf | s) = multireader_initialize_reader<int> (pf_ipcmem | ms, pages, index)
+    in
+      if s = 0 then () where {
+        prval Right_v (pf_ms) = e_pf
+
+        val _ = loop (pf_ms | ms, index)
+
+        prval pf_ipcmem = multireader_release pf_ms
+        prval _         = ipcmem_put_view pf_ipcmem
+      } else () where {
+        prval Left_v pf_ipcmem = e_pf
+        prval _                = ipcmem_put_view pf_ipcmem
+      }
+    end else () where {
+    // failed to acquire ipcmem
+    prval None_v () = opt_pf
+  }
+end // [fun wait_for_ehci_info]
+
 // //////////////////////////////////////////////////
 
 extern fun dump_usb_dev_desc (&usb_dev_desc_t): void = "mac#dump_usb_dev_desc"
@@ -931,7 +966,7 @@ int main(void)
     svc3("0NULL\n", 7, 0);
 
   DLOG(1, "asix ****************** wait_for_ehci_info\n");
-  wait_for_ehci_info ();
+  wait_for_ehci_info2 ();
 
   //while(*((volatile u32 *) (_ipcmappings[1].address)) == 0)   ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));
   //while(__atomic_load_n((u32 *) _ipcmappings[1].address, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));

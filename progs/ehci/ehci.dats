@@ -131,7 +131,7 @@ in
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, A)
     in
-      if s = 0 then test_fixedslot () where {
+      if s = 0 then test_multireader () where {
         prval Right_v pf_uart = pf_ipcmem
 
         (* ... *)

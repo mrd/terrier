@@ -261,6 +261,7 @@ static void usb_buf_release(void *p)
 
 #define usb_buf_takeout(b) (b)
 #define usb_buf_get_uint(b) (*((u32 *) (b)))
+#define usb_buf_get_uint_at(b,i) (((u32 *) (b))[i])
 #define usb_buf_set_uint(b,v) (*((u32 *) (b)) = (v))
 #define usb_buf_set_uint_at(b,i,v) (((u32 *) (b))[i] = (v))
 #define usb_buf_get_uint16(b) (*((u16 *) (b)))

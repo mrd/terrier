@@ -16,7 +16,7 @@
 
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */
-unsigned int _scheduler_capacity = 10 << 1;
+unsigned int _scheduler_capacity = 18 << 1;
 unsigned int _scheduler_period = 20 << 1;
 unsigned int _scheduler_affinity = 1;
 

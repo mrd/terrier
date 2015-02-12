@@ -45,8 +45,8 @@
 #include <pool.h>
 #include <user.h>
 
-unsigned int _scheduler_capacity = 1 << 10;
-unsigned int _scheduler_period = 7 << 10;
+unsigned int _scheduler_capacity = 1 << 5;
+unsigned int _scheduler_period = 20 << 5;
 unsigned int _scheduler_affinity = 2;
 
 mapping_t _mappings[] = {
@@ -1331,7 +1331,7 @@ static status setup_hub(usb_device_t *d, u32 cfgval, u32 ept)
   retval = usb_hub_get_descriptor(d, &hubd);
   if(retval != OK) return retval;
 
-  dump_usb_hub_desc(&hubd);
+  //dump_usb_hub_desc(&hubd);
 
   /* power on port */
 
@@ -1392,7 +1392,7 @@ static status probe_hub(usb_device_t *d)
       DLOG(1, "Get configuration descriptor retval=%d\n", retval);
 
     cfgd = (usb_cfg_desc_t *) sb;
-    dump_usb_cfg_desc(cfgd);
+    //dump_usb_cfg_desc(cfgd);
 
     if(cfgd->wTotalLength > sizeof(scratch_buf_t)) {
       /* FIXME: figure out a better way to handle really long config descriptors */
@@ -1412,11 +1412,11 @@ static status probe_hub(usb_device_t *d)
 
     for(ifidx=0; ifidx<cfgd->bNumInterfaces; ifidx++) {
       usb_if_desc_t *ifd = (usb_if_desc_t *) ptr;
-      dump_usb_if_desc(ifd);
+      //dump_usb_if_desc(ifd);
       ptr += sizeof(usb_if_desc_t);
       for(eptidx=0; eptidx<ifd->bNumEndpoints; eptidx++) {
         usb_ept_desc_t *eptd = (usb_ept_desc_t *) ptr;
-        dump_usb_ept_desc(eptd);
+        //dump_usb_ept_desc(eptd);
 
         if(ifd->bInterfaceClass == 9) {
           u32 cv = cfgd->bConfigurationValue;
@@ -1477,7 +1477,7 @@ status ehci_setup_new_device(usb_device_t *usbd)
   }
 
   DLOG(1, "usb_dev_desc=%#x\n", &usbd->dev_desc);
-  dump_usb_dev_desc(&usbd->dev_desc);
+  //dump_usb_dev_desc(&usbd->dev_desc);
 
   /* FIXME: for now */
   status s = probe_hub(usbd);

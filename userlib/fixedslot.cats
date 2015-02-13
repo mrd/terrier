@@ -114,6 +114,10 @@ static inline void _set_wfilled (unsigned int *fs, unsigned int wi)
   {                                                             \
     memcpy (((void *) fs) + CACHE_LINE_SIZE + (wi * size), &src, size); \
   }
+#define _write_data_ptr(fs, wi, src, size)                      \
+  {                                                             \
+    memcpy (((void *) fs) + CACHE_LINE_SIZE + (wi * size), src, size);  \
+  }
 
 static inline int _intset_nil (void) { return 0; }
 static inline int _intset_cons (int x, int s) { return ((1 << x) | s); }

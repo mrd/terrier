@@ -63,7 +63,7 @@ static inline void _check_previous (unsigned int *fs)
   /* if (S == 0 && rcount[p] == 0) p = t; else p = p; */
 
   register int w, rc, status, fs0 = (int) fs;
-  register int t, p, f;
+  register int p, t;
 
   ASM("1: LDREX %[w], [%[fs]]\n"        /* load link... */
       "MOVW %[status], #0xFFFF\n"
@@ -77,11 +77,11 @@ static inline void _check_previous (unsigned int *fs)
       "BICEQ %[w], %[w], #3 << 20\n" /* if (S == 0 && rcount[p] == 0) clear bits 20:21 */
       "ANDEQ %[t], %[w], #3 << 18\n" /* if (S == 0 && rcount[p] == 0) t = w & (3 << 18) */
       "ORREQ %[w], %[w], %[t], LSL #2\n" /* if (...) w |= (t << 2) // because (t << 2) overwrites p */
-
+      "MOV r0,r0\n"
       "2: STREX %[status], %[w], [%[fs]]\n" /* ...store conditional */
       "CMP %[status], #0\nBNE 1b"
 
-      :[w] "=r" (w), [status] "=r" (status), [rc] "=r" (rc), [t] "=r" (t), [p] "=r" (p), [f] "=r" (f):[fs] "r" (fs0):"cc"
+      : [w] "=&r" (w), [status] "=&r" (status), [rc] "=&r" (rc), [p] "=&r" (p), [t] "=&r" (t): [fs] "r" (fs0): "cc"
       );
 }
 

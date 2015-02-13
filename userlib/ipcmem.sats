@@ -14,7 +14,7 @@ stadef either_v = either_view_bool_view
 
 absview ipcmem_v (l: addr, pages: int)
 
-fun ipcmem_get_view (id: int, pages: &int? >> int pages): #[pages:nat] [l:addr] (option_v (ipcmem_v (l, pages), l > null) | ptr l)
+fun ipcmem_get_view (id: int, pages: &int? >> int pages): #[pages:nat] [l:agez] (option_v (ipcmem_v (l, pages), l > null) | ptr l)
   = "mac#_ipcmem_get_view_c"
 prfun ipcmem_put_view {l:addr} {pages:int} (_: ipcmem_v (l, pages)): void
 

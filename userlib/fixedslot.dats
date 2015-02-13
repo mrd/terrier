@@ -49,6 +49,13 @@ extern fun read_data {a: t@ype} {rc: int -> int} {S, p, t, f, ri: nat | rc ri > 
   ): #[rc': int -> int | rc' ri >= rc ri] void
   = "mac#_read_data"
 
+extern fun read_data_ptr {a: t@ype} {l: agz} {rc: int -> int} {S, p, t, f, ri: nat | rc ri > 0 && (ri == p || ri == t)} (
+    !a @ l,
+    !read_data_v ri |
+    !fixedslot_vt (S, p, t, f, rc) >> fixedslot__rc rc', int ri, ptr l, size_t (sizeof a)
+  ): #[rc': int -> int | rc' ri >= rc ri] void
+  = "mac#_read_data"
+
 extern fun decr_rcount {i: int} {rc: int -> int | rc i > 0} (
     read_data_v i | !fixedslot__rc rc >> fixedslot__rc rc', int i
   ): #[rc': int -> int | rc' i == rc i - 1 ] void
@@ -76,6 +83,20 @@ implement{a} fixedslot_read (fs) = buf where {
   val () = check_previous fs // atomic
 }
 
+implement fixedslot_readptr (pf | fs, p, len) = () where {
+  val ri = pick_ri fs // atomic
+
+  val (rd_v | ())  = incr_rcount (fs, ri) // atomic
+
+  val () = decr_S (rd_v | fs) // atomic
+
+  val () = read_data_ptr (pf, rd_v | fs, ri, p, len)
+
+  val () = decr_rcount (rd_v | fs, ri) // atomic
+
+  val () = check_previous fs // atomic
+}
+
 // --------------------------------------------------
 // writer
 
@@ -87,6 +108,13 @@ extern fun write_data {a: t@ype} {S, p, t, f: nat} {rc: int -> int}
     int wi, a, size_t (sizeof a)
   ): #[S', p', t': nat] #[rc': int -> int] void
   = "mac#_write_data"
+extern fun write_data_ptr {a: t@ype} {S, p, t, f: nat} {rc: int -> int} {l: agz}
+                          {wi: nat | wi <> p && wi <> f && wi <> t} (
+    !a @ l |
+    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f, rc'),
+    int wi, ptr l, size_t (sizeof a)
+  ): #[S', p', t': nat] #[rc': int -> int] void
+  = "mac#_write_data_ptr"
 
 // requires splitting up an atomic word into three component parts
 extern fun get_triple {S, p, t, f: nat} {rc: int -> int} (
@@ -147,5 +175,11 @@ implement pick_wi (fs) = wi where {
 implement{a} fixedslot_write (fs, item) = let
   val wi = pick_wi fs
   val () = write_data (fs, wi, item, sizeof<a>)
+  val () = set_wfilled (fs, wi)
+in () end
+
+implement fixedslot_writeptr (pf | fs, p, len) = let
+  val wi = pick_wi fs
+  val () = write_data_ptr (pf | fs, wi, p, len)
   val () = set_wfilled (fs, wi)
 in () end

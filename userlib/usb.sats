@@ -370,7 +370,7 @@ fun urb_begin_control_read {i, n, len: nat | len <= n} {l: agz} (
     usb_Request_t,
     int, // wValue
     int, // wIndex
-    int len, // number of elements
+    int len, // wLength
     !usb_mem_vt (l, n) // data
   ): #[s: int]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]
@@ -384,7 +384,7 @@ fun urb_begin_control_write {i, n, len: nat | len <= n} {l: agz} (
     usb_Request_t,
     int, // wValue
     int, // wIndex
-    int len, // number of elements
+    int len, // wLength
     !usb_mem_vt (l, n) // data
   ): #[s: int]
      #[nTDs: int | (s == 0 || nTDs == 0) && (s <> 0 || nTDs > 0)]

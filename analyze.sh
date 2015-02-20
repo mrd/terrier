@@ -127,3 +127,28 @@ paste \
     <(grep -A2 "\& sudo ping -c 10000 -f -i 0.001 10.0.0.3$" $FILES |grep rtt|sed -n 'g;n;p'|cut -d / -f 6) \
     <(grep -A2 "\& sudo ping -c 10000 -f -i 0.001 10.0.0.3$" $FILES |grep rtt|sed -n 'g;n;p'|cut -d / -f 7) \
     | sort -n | tee results/ping-1ms-vary-capacity-parallel-asix10.tsv
+
+
+FILES="logs/2015-02-16_19:38:34-05:00.log logs/2015-02-16_20:29:54-05:00.log
+logs/2015-02-16_20:33:43-05:00.log logs/2015-02-16_20:38:58-05:00.log
+logs/2015-02-16_20:41:54-05:00.log logs/2015-02-16_19:50:54-05:00.log
+logs/2015-02-16_20:31:17-05:00.log logs/2015-02-16_20:35:41-05:00.log
+logs/2015-02-16_20:39:48-05:00.log logs/2015-02-16_20:42:31-05:00.log
+logs/2015-02-16_19:56:44-05:00.log logs/2015-02-16_20:32:05-05:00.log
+logs/2015-02-16_20:36:27-05:00.log logs/2015-02-16_20:40:27-05:00.log
+logs/2015-02-16_20:43:26-05:00.log logs/2015-02-16_20:10:35-05:00.log
+logs/2015-02-16_20:32:45-05:00.log logs/2015-02-16_20:37:37-05:00.log
+logs/2015-02-16_20:41:14-05:00.log"
+
+paste \
+    <(grep smsclan $FILES | cut -d , -f 8) \
+    <(grep -A1 "^sudo ping -c 10000 -f -i 0.000 10.0.0.2$" $FILES |grep rtt|cut -d / -f 5 | cut -d ' ' -f 3) \
+    <(grep -A1 "^sudo ping -c 10000 -f -i 0.000 10.0.0.2$" $FILES |grep rtt|cut -d / -f 6) \
+    <(grep -A1 "^sudo ping -c 10000 -f -i 0.000 10.0.0.2$" $FILES |grep rtt|cut -d / -f 7) \
+    | sort -n | tee results/ping-0ms-vary-capacity-nic1-direct.tsv
+
+paste \
+    <(grep smsclan $FILES | cut -d , -f 8) \
+    <(grep -A1 "^sudo ping -c 10000 -f -i 0.000 10.0.0.2$" $FILES |grep rtt|cut -d / -f 6) \
+    <(grep -A1 "^sudo ping -c 10000 -f -i 0.001 10.0.0.2$" $FILES |grep rtt|cut -d / -f 6) \
+    | sort -n | tee results/ping-0ms-1ms-vary-capacity-nic1-direct.tsv

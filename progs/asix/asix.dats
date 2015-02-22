@@ -516,9 +516,9 @@ in
   ()
 end
 
-extern fun smsclan_uip_loop {i: nat} {l:agz} (
+extern fun asix_uip_loop {i: nat} {l:agz} (
     pfmac: !(@[uint8][6]) @ l | usbd: !usb_device_vt i, mac: ptr l
-  ): [s: int] status s = "ext#smsclan_uip_loop"
+  ): [s: int] status s = "ext#asix_uip_loop"
 
 fun asix_init {i: nat} (usbd: !usb_device_vt i): void = let
   val s = usb_set_configuration (usbd, 1)
@@ -546,7 +546,7 @@ fun asix_init {i: nat} (usbd: !usb_device_vt i): void = let
   val s = asix_read_cmd (view@ v | usbd, AX_CMD_READ_RX_CTL, 0, 0, 1, addr@ v)
   val _ = $extfcall (void, "debuglog", 0, 1, "AX_CMD_READ_RX_CTL returned %d (v=%#x)\n", s, array_get_at (v, 0))
 in
-  () where { val _ = smsclan_uip_loop (view@ mac | usbd, addr@ mac) };
+  () where { val _ = asix_uip_loop (view@ mac | usbd, addr@ mac) };
 end
 
 fun asix_operate {i: nat} (usbd: !usb_device_vt i): void = begin
@@ -615,7 +615,7 @@ extern fun clock_time (): int = "mac#clock_time"
 
 // //////////////////////////////////////////////////
 
-implement smsclan_uip_loop {i} (pfmac | usbd, mac) = let
+implement asix_uip_loop {i} (pfmac | usbd, mac) = let
   fun uip_preamble (periodic_timer: &uip_timer_t? >> uip_timer_t, arp_timer: &uip_timer_t? >> uip_timer_t): void =
   let
     var ipaddr: uip_ipaddr_t

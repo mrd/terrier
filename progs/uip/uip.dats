@@ -29,7 +29,6 @@ infix <==>
 stadef <==> (p: bool, q: bool) = (~p || q) && (p || ~q)
 
 macdef byte0 = $extval(uint8, "0")
-macdef word0 = $extval(uint16, "0")
 
 fun{a:vt0p} sizeofGEZ (): [s: nat] int s = $UN.cast{intGte(0)}(g1ofg0 (sizeof<a>))
 
@@ -44,6 +43,7 @@ stadef USBNET_BUF_NUM_UINTS = 400
 macdef USBNET_BUF_NUM_UINTS = 400
 
 typedef buf_t = (@[uint][USBNET_BUF_NUM_UINTS])
+extern praxi lemma_sizeof_buf_t (): [sizeof (buf_t) == USBNET_BUFSIZE] void
 
 // //////////////////////////////////////////////////
 
@@ -54,11 +54,13 @@ extern fun uip_loop {i: nat} {l:agz} (
 extern fun copy_into_uip_buf {n: nat | n <= UIP_BUFSIZE} (
     & buf_t, uint n
   ): void = "mac#copy_into_uip_buf"
-extern fun copy_from_uip_buf {m: nat} {l: agz} (
+extern fun copy_from_uip_buf (
     & buf_t
-  ): [n: nat | n <= m && n <= UIP_BUFSIZE] uint n = "mac#copy_from_uip_buf"
+  ): [n: nat | n <= UIP_BUFSIZE] uint n = "mac#copy_from_uip_buf"
 extern fun do_one_send (
-    ! fixedslot >> _
+    ! fixedslot >> _,
+    ! fixedslot >> _,
+    & uint, & uint
   ): void = "ext#do_one_send"
 
 // //////////////////////////////////////////////////
@@ -106,7 +108,46 @@ macdef UIP_CONNS = $extval(int, "UIP_CONNS")
 extern fun clock_time (): int = "mac#clock_time"
 
 extern fun get_itag (! fixedslot >> _): uint
-extern fun set_itag (! fixedslot >> _, uint): void
+//extern fun set_itag (! fixedslot >> _, uint): void
+extern fun get_otag (! fixedslot >> _): uint
+
+//implement get_itag (ifs) = fixedslot_readfn<uint> (ifs, f) where {
+//  var f = lam@ {l: agz} (rbuf: & buf_t): uint =<clo1> 0ul
+//}
+
+implement get_itag (ifs) = let
+  var buf = @[uint][USBNET_BUF_NUM_UINTS](0u)
+  prval _ = lemma_sizeof_buf_t ()
+in
+  if 1 = 0 then () else
+  fixedslot_readptr (view@ buf | ifs, addr@ buf, g1int2uint (USBNET_BUFSIZE));
+  $UN.cast{uint}(array_get_at (buf, 0))
+end
+
+implement get_otag (ifs) = let
+  var buf = @[uint][USBNET_BUF_NUM_UINTS](0u)
+  prval _ = lemma_sizeof_buf_t ()
+in
+  fixedslot_readptr (view@ buf | ifs, addr@ buf, g1int2uint (USBNET_BUFSIZE));
+  $UN.cast{uint}(array_get_at (buf, 1))
+end
+
+fun wait_for_otag (ifs: ! fixedslot >> _, otag: uint): void =
+  if get_otag ifs != otag then wait_for_otag (ifs, otag) else ()
+
+implement do_one_send (ifs, ofs, itag, otag) = let
+  var tbuf = @[uint][USBNET_BUF_NUM_UINTS](g1int2uint 0)
+  prval _ = lemma_sizeof_buf_t ()
+  val pktlen = copy_from_uip_buf tbuf
+in
+  wait_for_otag (ifs, otag);
+
+  array_set_at (tbuf, 0, itag);
+  otag := otag + g1int2uint 1;
+  array_set_at (tbuf, 1, otag);
+  array_set_at (tbuf, 2, pktlen);
+  fixedslot_writeptr (view@ tbuf | ofs, addr@ tbuf, g1int2uint (USBNET_BUFSIZE))
+end
 
 implement uip_loop {i} (pfmac | usbd, mac) = let
   fun uip_preamble (periodic_timer: &uip_timer_t? >> uip_timer_t, arp_timer: &uip_timer_t? >> uip_timer_t): void =
@@ -127,22 +168,29 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
 
 
   fun uip_periodic_check (
+      ifs: ! fixedslot >> _,
       ofs: ! fixedslot >> _,
+      itag: & uint,
+      otag: & uint,
       periodic_timer: &uip_timer_t,
       arp_timer: &uip_timer_t
     ): void =
     if timer_expired periodic_timer then
       let
         fun loop1 (
-            ofs: ! fixedslot >> _, j: int
+            ifs: ! fixedslot >> _,
+            ofs: ! fixedslot >> _,
+            itag: & uint,
+            otag: & uint,
+            j: int
           ): void =
           if j >= UIP_CONNS then () else begin
             uip_periodic j;
             if get_uip_len () > 0 then begin
               uip_arp_out ();
-              do_one_send (ofs)
+              do_one_send (ifs, ofs, itag, otag)
             end else ();
-            loop1 (ofs, j + 1)
+            loop1 (ifs, ofs, itag, otag, j + 1)
           end
 (*
         // UDP
@@ -157,7 +205,7 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
 *)
       in
         timer_reset periodic_timer;
-        loop1 (ofs, 0);
+        loop1 (ifs, ofs, itag, otag, 0);
         //loop2 (usbd, 0);
         if timer_expired arp_timer then begin
           timer_reset arp_timer;
@@ -167,7 +215,10 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
     else ()
 
   fun loop_body (
+        ifs: ! fixedslot >> _,
         ofs: ! fixedslot >> _,
+        itag: & uint,
+        otag: & uint,
         rbuf: & buf_t
       ): void =
     let
@@ -184,12 +235,12 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
           uip_input ();
           if get_uip_len () > 0 then begin
             uip_arp_out ();
-            do_one_send (ofs)
+            do_one_send (ifs, ofs, itag, otag)
           end else ()
         end else if get_uip_buftype () = htons (UIP_ETHTYPE_ARP) then begin
           uip_arp_arpin ();
           if get_uip_len () > 0 then
-            do_one_send (ofs)
+            do_one_send (ifs, ofs, itag, otag)
           else ()
         end;
         ()
@@ -200,8 +251,8 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
   fun loop (
         ifs: ! fixedslot >> _,
         ofs: ! fixedslot >> _,
-        itag: uint,
-        otag: uint,
+        itag: & uint,
+        otag: & uint,
         periodic_timer: & uip_timer_t,
         arp_timer: & uip_timer_t,
         cyc_prev: int
@@ -211,15 +262,19 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
     val itag' = get_itag ifs
   in
     if itag = itag' then begin // No Rx
-      uip_periodic_check (ofs, periodic_timer, arp_timer);
+      uip_periodic_check (ifs, ofs, itag, otag, periodic_timer, arp_timer);
       loop (ifs, ofs, itag, otag, periodic_timer, arp_timer, cyc_prev)
     end else // Rx one packet
       let
+        val _ = itag := itag'
         val lbody_start = clock_time ()
         val cyc_start = $extfcall (int, "arm_read_cycle_counter", ())
-        val _ = fixedslot_readptr (view@ rbuf | ifs, addr@ rbuf, sizeof<buf_t>)
-        val _ = set_itag (ofs, itag')
-        val _ = loop_body (ofs, rbuf)
+        prval _ = lemma_sizeof_buf_t () // 'proof' that sizeof (buf_t) = USBNET_BUFSIZE
+        val _ = fixedslot_readptr (view@ rbuf | ifs, addr@ rbuf, g1int2uint (USBNET_BUFSIZE))
+        val _ = $extfcall (void, "debuglog", 0, 1, "uip rbuf=%d %d %d\n",
+                                                   array_get_at (rbuf, 0), array_get_at (rbuf, 1), array_get_at (rbuf, 2))
+        //val _ = set_itag (ofs, itag) // is this necessary
+        val _ = loop_body (ifs, ofs, itag, otag, rbuf)
         val lbody_end = clock_time ()
         val cyc_end = $extfcall (int, "arm_read_cycle_counter", ())
         val lbody_dur = lbody_end - lbody_start
@@ -227,7 +282,7 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
         //val _ = $extfcall (void, "debuglog", 0, 1, "lbody_dur=%d cyc_dur=%d cyc_loop=%d\n", lbody_dur, cyc_dur, cyc_end - cyc_prev)
         val cyc_next = $extfcall (int, "arm_read_cycle_counter", ())
       in
-        loop (ifs, ofs, itag', otag, periodic_timer, arp_timer, cyc_prev)
+        loop (ifs, ofs, itag, otag, periodic_timer, arp_timer, cyc_prev)
       end
   end
 
@@ -248,8 +303,10 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
     var periodic_timer: uip_timer_t
     var arp_timer: uip_timer_t
     val _ = uip_preamble (periodic_timer, arp_timer)
+    var itag: uint = g0int2uint 0
+    var otag: uint = g0int2uint 0
 
-    val _ = loop (ifs, ofs, g0int2uint 0, g0int2uint 0, periodic_timer, arp_timer, $extfcall (int, "arm_read_cycle_counter", ()))
+    val _ = loop (ifs, ofs, itag, otag, periodic_timer, arp_timer, $extfcall (int, "arm_read_cycle_counter", ()))
 
     val (pf | _) = fixedslot_free ifs
     prval _ = ipcmem_put_view pf
@@ -261,7 +318,7 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
     ()
   end end end
 
-(*    
+(*
     var turb: urb0?
     val s = usb_device_alloc_urb (usbd, 3, 512, turb)
   in if s != OK then s where { prval _ = usb_device_release_null_urb turb } else let

@@ -56,6 +56,12 @@ extern fun read_data_ptr {a: t@ype} {l: agz} {rc: int -> int} {S, p, t, f, ri: n
   ): #[rc': int -> int | rc' ri >= rc ri] void
   = "mac#_read_data"
 
+extern fun takeout_read_data_ptr {a: t@ype} {rc: int -> int} {S, p, t, f, ri: nat | rc ri > 0 && (ri == p || ri == t)} (
+    !read_data_v ri |
+    !fixedslot_vt (S, p, t, f, rc) >> fixedslot__rc rc', int ri
+  ): #[rc': int -> int | rc' ri >= rc ri] [l: agz] ((a @ l, (a @ l) -<lin,prf> void) | ptr l)
+  = "mac#_read_data"
+
 extern fun decr_rcount {i: int} {rc: int -> int | rc i > 0} (
     read_data_v i | !fixedslot__rc rc >> fixedslot__rc rc', int i
   ): #[rc': int -> int | rc' i == rc i - 1 ] void
@@ -97,6 +103,27 @@ implement fixedslot_readptr (pf | fs, p, len) = () where {
   val () = check_previous fs // atomic
 }
 
+(*
+implement{b} fixedslot_readfn {a} (fs, f) = let
+  val ri = pick_ri fs // atomic
+
+  val (rd_v | ())  = incr_rcount (fs, ri) // atomic
+
+  val () = decr_S (rd_v | fs) // atomic
+
+  val ((pf, fpf) | p) = takeout_read_data_ptr (rd_v | fs, ri)
+
+  val x = f (p)
+
+  prval _ = fpf pf
+
+  val () = decr_rcount (rd_v | fs, ri) // atomic
+
+  val () = check_previous fs // atomic
+in x end
+*)
+
+
 // --------------------------------------------------
 // writer
 
@@ -115,6 +142,12 @@ extern fun write_data_ptr {a: t@ype} {S, p, t, f: nat} {rc: int -> int} {l: agz}
     int wi, ptr l, size_t (sizeof a)
   ): #[S', p', t': nat] #[rc': int -> int] void
   = "mac#_write_data_ptr"
+
+//extern fun takeout_data_ptr {a: t@ype} {S, p, t, f: nat} {rc: int -> int} {l: agz}
+//                            {wi: nat | wi <> p && wi <> f && wi <> t} (
+//    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f, rc'),
+//    int wi)
+//  ): #[S', p', t': nat] #[rc': int -> int] ((a @ l, (a @ l) -<lin,prf> ()) | ptr l)
 
 // requires splitting up an atomic word into three component parts
 extern fun get_triple {S, p, t, f: nat} {rc: int -> int} (

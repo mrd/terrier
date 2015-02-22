@@ -132,15 +132,15 @@ int counterv = 0;
 // UIP support
 void copy_into_uip_buf(u8 *buf, u32 len)
 {
-  // Assume buf has a 4-byte USB Ethernet header (not counted in len)
-  memcpy(uip_buf, buf + 4, len);
+  // buf layout in words: [itag, otag, pkt size, data...]
+  memcpy(uip_buf, buf + 12, len);
   uip_len = len;
 }
 
-u32 copy_from_uip_buf(u8 *buf)
+u32 copy_from_uip_buf(void *buf)
 {
-  // We must leave space for one status word
-  memcpy(buf + 4, uip_buf, uip_len);
+  // buf layout in words: [itag, otag, pkt size, data...]
+  memcpy(((u8 *) buf) + 12, uip_buf, uip_len);
   return uip_len;
 }
 

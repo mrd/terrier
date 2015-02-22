@@ -37,7 +37,7 @@ static inline int _pick_ri (unsigned int *fs)
       "STREX %[status], %[w], [%[fs]]\n" /* ...store conditional */
       "CMP %[status], #0\nBNE 1b\n"
 
-      :[w] "=r" (w), [status] "=r" (status), [t] "=r" (t), [p] "=r" (p), [f] "=r" (f):[fs] "r" (fs0):"cc"
+      :[w] "=&r" (w), [status] "=&r" (status), [t] "=&r" (t), [p] "=&r" (p), [f] "=&r" (f):[fs] "r" (fs0):"cc"
       );
   return GETBITS(t,18,2);
 }
@@ -77,7 +77,6 @@ static inline void _check_previous (unsigned int *fs)
       "BICEQ %[w], %[w], #3 << 20\n" /* if (S == 0 && rcount[p] == 0) clear bits 20:21 */
       "ANDEQ %[t], %[w], #3 << 18\n" /* if (S == 0 && rcount[p] == 0) t = w & (3 << 18) */
       "ORREQ %[w], %[w], %[t], LSL #2\n" /* if (...) w |= (t << 2) // because (t << 2) overwrites p */
-      "MOV r0,r0\n"
       "2: STREX %[status], %[w], [%[fs]]\n" /* ...store conditional */
       "CMP %[status], #0\nBNE 1b"
 

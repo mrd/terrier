@@ -111,18 +111,19 @@ extern fun get_itag (! fixedslot >> _): uint
 //extern fun set_itag (! fixedslot >> _, uint): void
 extern fun get_otag (! fixedslot >> _): uint
 
-//implement get_itag (ifs) = fixedslot_readfn<uint> (ifs, f) where {
-//  var f = lam@ {l: agz} (rbuf: & buf_t): uint =<clo1> 0ul
-//}
-
-implement get_itag (ifs) = let
-  var buf = @[uint][USBNET_BUF_NUM_UINTS](0u)
+implement get_itag (ifs) = fixedslot_readfn<uint> (ifs, f, g1int2uint USBNET_BUFSIZE) where {
   prval _ = lemma_sizeof_buf_t ()
-in
-  if 1 = 0 then () else
-  fixedslot_readptr (view@ buf | ifs, addr@ buf, g1int2uint (USBNET_BUFSIZE));
-  $UN.cast{uint}(array_get_at (buf, 0))
-end
+  var f = lam@ (rbuf: & buf_t): uint =<clo1> 0u
+}
+
+//implement get_itag (ifs) = let
+//  var buf = @[uint][USBNET_BUF_NUM_UINTS](0u)
+//  prval _ = lemma_sizeof_buf_t ()
+//in
+//  if 1 = 0 then () else
+//  fixedslot_readptr (view@ buf | ifs, addr@ buf, g1int2uint (USBNET_BUFSIZE));
+//  $UN.cast{uint}(array_get_at (buf, 0))
+//end
 
 implement get_otag (ifs) = let
   var buf = @[uint][USBNET_BUF_NUM_UINTS](0u)

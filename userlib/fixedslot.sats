@@ -40,7 +40,7 @@ vtypedef fixedslot__f_rc (f: int, rc: int -> int) = [S, p, t: nat] fixedslot_vt 
 fun{a:t@ype} fixedslot_read (!fixedslot >> fixedslot): a
 fun{a:t@ype} fixedslot_write (!fixedslot >> fixedslot, a): void
 fun fixedslot_readptr {a:t@ype} {l: agz} (!INV(a) @ l | !fixedslot >> fixedslot, ptr l, size_t (sizeof a)): void
-fun{b:t@ype} fixedslot_readfn {a:t@ype} (!fixedslot >> fixedslot, & ((& a) -<clo1> b)): b
+fun{b:t@ype} fixedslot_readfn {a:t@ype} (!fixedslot >> fixedslot, & ((& INV(a)) -<clo1> b), size_t (sizeof a)): b
 fun fixedslot_writeptr {a:t@ype} {l: agz} (!INV(a) @ l | !fixedslot >> fixedslot, ptr l, size_t (sizeof a)): void
 fun fixedslot_initialize_reader {l: addr} {n: nat} (ipcmem_v (l, n) | ptr l, int n): fixedslot = "mac#_fixedslot_initialize_reader"
 fun fixedslot_initialize_writer {l: addr} {n: nat} (ipcmem_v (l, n) | ptr l, int n): fixedslot = "mac#_fixedslot_initialize_writer"

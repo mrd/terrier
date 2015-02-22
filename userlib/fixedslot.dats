@@ -58,9 +58,9 @@ extern fun read_data_ptr {a: t@ype} {l: agz} {rc: int -> int} {S, p, t, f, ri: n
 
 extern fun takeout_read_data_ptr {a: t@ype} {rc: int -> int} {S, p, t, f, ri: nat | rc ri > 0 && (ri == p || ri == t)} (
     !read_data_v ri |
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot__rc rc', int ri
+    !fixedslot_vt (S, p, t, f, rc) >> fixedslot__rc rc', int ri, size_t (sizeof a)
   ): #[rc': int -> int | rc' ri >= rc ri] [l: agz] ((a @ l, (a @ l) -<lin,prf> void) | ptr l)
-  = "mac#_read_data"
+  = "mac#_takeout_read_data_ptr"
 
 extern fun decr_rcount {i: int} {rc: int -> int | rc i > 0} (
     read_data_v i | !fixedslot__rc rc >> fixedslot__rc rc', int i
@@ -103,17 +103,17 @@ implement fixedslot_readptr (pf | fs, p, len) = () where {
   val () = check_previous fs // atomic
 }
 
-(*
-implement{b} fixedslot_readfn {a} (fs, f) = let
+
+implement{b} fixedslot_readfn {a} (fs, f, len) = let
   val ri = pick_ri fs // atomic
 
   val (rd_v | ())  = incr_rcount (fs, ri) // atomic
 
   val () = decr_S (rd_v | fs) // atomic
 
-  val ((pf, fpf) | p) = takeout_read_data_ptr (rd_v | fs, ri)
+  val ((pf, fpf) | p) = takeout_read_data_ptr (rd_v | fs, ri, len)
 
-  val x = f (p)
+  val x = f (!p)
 
   prval _ = fpf pf
 
@@ -121,7 +121,7 @@ implement{b} fixedslot_readfn {a} (fs, f) = let
 
   val () = check_previous fs // atomic
 in x end
-*)
+
 
 
 // --------------------------------------------------

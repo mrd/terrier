@@ -123,6 +123,9 @@ in
 end
 
 implement atsmain () = let
+  val _ = hsusbhc_init ()
+  val _ = test_multireader ()
+
   var pages: int?
   val (opt_pf | uart) = ipcmem_get_view (0, pages)
 in
@@ -131,7 +134,7 @@ in
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, A)
     in
-      if s = 0 then test_multireader () where {
+      if s = 0 then 0 where {
         prval Right_v pf_uart = pf_ipcmem
 
         (* ... *)
@@ -140,7 +143,6 @@ in
         //val _ = write_string_uart (pf_uart | utoken, uart, "b")
 
 
-        val _ = hsusbhc_init ()
         //val _ = write_string_uart (pf_uart | utoken, uart, "c")
 
         val _ = put_uart_token_vt utoken

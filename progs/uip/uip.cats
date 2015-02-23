@@ -16,13 +16,13 @@
 
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */
-unsigned int _scheduler_capacity = 18 << 1;
+unsigned int _scheduler_capacity = 20 << 1;
 unsigned int _scheduler_period = 20 << 1;
-unsigned int _scheduler_affinity = 2;
+unsigned int _scheduler_affinity = 1;
 
 ipcmapping_t _ipcmappings[] = {
   { IPC_OFFER, "uip-in", IPC_READ, "fixedslot", 4, NULL },
-  { IPC_SEEK, "uip-out", IPC_READ, "fixedslot", 4, NULL },
+  { IPC_SEEK, "uip-out", IPC_WRITE, "fixedslot", 4, NULL },
   {0}
 };
 

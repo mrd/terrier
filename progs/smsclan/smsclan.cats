@@ -16,13 +16,15 @@
 
 /* unsigned int _scheduler_capacity = 3 << 14;
  * unsigned int _scheduler_period = 12 << 14; */
-unsigned int _scheduler_capacity = 18 << 1;
+unsigned int _scheduler_capacity = 19 << 1;
 unsigned int _scheduler_period = 20 << 1;
-unsigned int _scheduler_affinity = 1;
+unsigned int _scheduler_affinity = 2;
 
 ipcmapping_t _ipcmappings[] = {
   { IPC_SEEK, "ehci_info", IPC_READ, "multireader", 1, NULL },
   { IPC_SEEK, "ehci_usbdevices", IPC_READ | IPC_WRITE | IPC_DEVICEMEM, "usbdevices", 1, NULL },
+  { IPC_SEEK, "uip-in", IPC_WRITE, "fixedslot", 4, NULL },
+  { IPC_OFFER, "uip-out", IPC_READ, "fixedslot", 4, NULL },
   {0}
 };
 
@@ -263,6 +265,9 @@ static inline void uip_eth_addr(struct uip_eth_addr *eaddr, int a, int b, int c,
 
 #define get_uip_len() uip_len
 #define get_uip_buftype() (((struct uip_eth_hdr *)&uip_buf[0])->type)
+
+#define copy_from_uip_array(tbuf, arr, txlen) memcpy(((u8 *) (tbuf)) + 8, ((u8 *) (arr)) + 12, txlen)
+#define copy_into_uip_array(arr, rbuf, rxlen) memcpy(((u8 *) (arr)) + 12, ((u8 *) (rbuf)) + 4, rxlen)
 
 /*
  * Local Variables:

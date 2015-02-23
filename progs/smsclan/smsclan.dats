@@ -754,19 +754,19 @@ fun dump_statistics {i: nat} (usbd: !usb_device_vt i): void =
 
 extern castfn g1uint2int {x: int} (uint x): int x
 
-extern fun do_one_send {i, ntTDs: nat} {tactive: bool} {tl: agz} (
+extern fun do_one_send {i, n, ntTDs: nat | n < USBNET_BUFSIZE - 8} {tactive: bool} {tl: agz} (
     txfer_v: !usb_transfer_status i |
     usbd: !usb_device_vt (i),
     turb: !urb_vt (i, ntTDs, tactive) >> urb_vt (i, ntTDs', tactive'),
-    tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE)
+    tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE), // leave 8 bytes at beginning for header
+    txlen: uint n
   ): #[ntTDs': nat] #[tactive': bool] void = "ext#do_one_send"
 
-implement do_one_send (txfer_v | usbd, turb, tbuf) =
+implement do_one_send (txfer_v | usbd, turb, tbuf, txlen) =
 let
   val _ = urb_wait_if_active (txfer_v | turb);
   val _ = urb_transfer_completed (txfer_v | turb);
   val _ = urb_detach_and_free_ turb
-  val txlen = copy_from_uip_buf (tbuf) // will leave 8 bytes for Tx Cmd A & B
   // txlen does not include command word lengths
   val tx_cmd_a = (txlen lor TX_CMD_A_LAST_SEG_) lor TX_CMD_A_FIRST_SEG_
   val tx_cmd_b = txlen
@@ -865,83 +865,65 @@ extern fun clock_time (): int = "mac#clock_time"
 
 // //////////////////////////////////////////////////
 
+stadef USBNET_BUFSIZE = 1600
+macdef USBNET_BUFSIZE = 1600
+
+stadef USBNET_BUF_NUM_UINTS = 400
+macdef USBNET_BUF_NUM_UINTS = 400
+
+typedef buf_t = (@[uint][USBNET_BUF_NUM_UINTS])
+extern praxi lemma_sizeof_buf_t (): [sizeof (buf_t) == USBNET_BUFSIZE] void
+
+// //////////////////////////////////////////////////
+
+// quick memcpy macros that just copy data from fixedslot <--> usb_mem
+extern fun copy_from_uip_array {l,tl: agz} (
+    !(@[uint][USBNET_BUF_NUM_UINTS]) @ l |
+    !usb_mem_vt (tl, USBNET_BUFSIZE), ptr l, uint
+  ): void = "mac#copy_from_uip_array"
+
+extern fun copy_into_uip_array {l,rl: agz} (
+    !(@[uint][USBNET_BUF_NUM_UINTS]) @ l |
+    ptr l, !usb_mem_vt (rl, USBNET_BUFSIZE), uint
+  ): void = "mac#copy_into_uip_array"
+
 implement smsclan_uip_loop {i} (usbd) = let
-  fun uip_preamble (periodic_timer: &uip_timer_t? >> uip_timer_t, arp_timer: &uip_timer_t? >> uip_timer_t): void =
+  fun ipc_loop_body_tx {i, ntTDs: nat} {tl: agz} {tactive: bool} (
+        txfer_v: !usb_transfer_status i |
+        usbd: !usb_device_vt i,
+        turb: !urb_vt (i, ntTDs, tactive) >> urb_vt (i, ntTDs', tactive'),
+        tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE),
+        ofs: !fixedslot >> _,
+        otag: &uint
+      ): #[ntTDs': nat] #[tactive': bool] void =
   let
-    var ethaddr: uip_eth_addr_t
-    var ipaddr: uip_ipaddr_t
+    prval _ = lemma_sizeof_buf_t ()
+    var f = lam@ (buf: & buf_t): uint =<clo1> array_get_at (buf, 1)
+    val otag' = fixedslot_readfn<uint> (ofs, f, g1int2uint USBNET_BUFSIZE)
   in
-    timer_set (periodic_timer, CLOCK_SECOND / 2);
-    timer_set (arp_timer, CLOCK_SECOND * 10);
-    uip_init ();
-
-    uip_eth_addr (ethaddr,0x02,0xac,0x6f,0x3a,0x0d,0xdf);
-    uip_setethaddr ethaddr;
-
-    uip_ipaddr (ipaddr, 10,0,0,2);
-    uip_sethostaddr ipaddr;
-    uip_ipaddr (ipaddr, 10,0,0,1);
-    uip_setdraddr ipaddr;
-    uip_ipaddr (ipaddr, 255,255,255,0);
-    uip_setnetmask ipaddr
+    if otag = otag' then // No new TX
+      ()
+    else let // New TX packet
+      var tmp = @[uint][USBNET_BUF_NUM_UINTS](0u)
+      val _ = fixedslot_readptr (view@ tmp | ofs, addr@ tmp, g1int2uint USBNET_BUFSIZE)
+      val otag' = array_get_at (tmp, 1) // to be sure
+      val txlen = $UN.cast{uintLt (USBNET_BUFSIZE - 8)}(array_get_at (tmp, 2)) // presume that txlen is right
+      val _ = copy_from_uip_array (view@ tmp | tbuf, addr@ tmp, txlen) // leaves 8 bytes in tbuf header
+      val _ = do_one_send (txfer_v | usbd, turb, tbuf, txlen)
+    in
+      otag := otag'
+    end
   end
 
-
-  fun uip_periodic_check {i, ntTDs: nat} {tactive: bool} {tl: agz} (
-      txfer_v: !usb_transfer_status i |
-      usbd: !usb_device_vt i,
-      turb: !urb_vt (i, ntTDs, tactive) >> urb_vt (i, ntTDs', tactive'),
-      tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE),
-      periodic_timer: &uip_timer_t,
-      arp_timer: &uip_timer_t
-    ): #[ntTDs': nat] #[tactive': bool] void =
-    if timer_expired periodic_timer then
-      let
-        fun loop1 {i, ntTDs: nat} {tactive: bool} {tl: agz} (
-            txfer_v: !usb_transfer_status i |
-            usbd: !usb_device_vt i,
-            turb: !urb_vt (i, ntTDs, tactive) >> urb_vt (i, ntTDs', tactive'),
-            tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE),
-            j: int
-          ): #[ntTDs': nat] #[tactive': bool] void =
-          if j >= UIP_CONNS then () else begin
-            uip_periodic j;
-            if get_uip_len () > 0 then begin
-              uip_arp_out ();
-              do_one_send (txfer_v | usbd, turb, tbuf)
-            end else ();
-            loop1 (txfer_v | usbd, turb, tbuf, j + 1)
-          end
-(*
-        // UDP
-        fun loop2 {i: nat} (usbd: !usb_device_vt i, j: int): void =
-          if j >= UIP_CONNS then () else begin
-            uip_udp_periodic j;
-            if get_uip_len () > 0 then
-              do_one_send (txfer_v | usbd, turb, tbuf) where { val _ = uip_arp_out () }
-            else ();
-            loop2 (usbd, j + 1)
-          end
-*)
-      in
-        timer_reset periodic_timer;
-        loop1 (txfer_v | usbd, turb, tbuf, 0);
-        //loop2 (usbd, 0);
-        if timer_expired arp_timer then begin
-          timer_reset arp_timer;
-          uip_arp_timer ();
-        end else ()
-      end
-    else ()
-
-  fun loop_body {i, ntTDs, nrTDs: nat | nrTDs > 0} {rl, tl: agz} {tactive: bool} (
+  fun ipc_loop_body_rx {i, nrTDs: nat | nrTDs > 0} {rl: agz} (
         txfer_v: !usb_transfer_status i |
         usbd: !usb_device_vt i,
         rurb: !urb_vt (i, nrTDs, false) >> urb_vt (i, nrTDs', ractive'),
-        turb: !urb_vt (i, ntTDs, tactive) >> urb_vt (i, ntTDs', tactive'),
         rbuf: !usb_mem_vt (rl, USBNET_BUFSIZE),
-        tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE)
-      ): #[s: int] #[ntTDs', nrTDs': nat | (s == 0) <==> (nrTDs' > 0)] #[tactive', ractive': bool | ractive' == (s == 0)]
+        ifs: !fixedslot >> _,
+        itag: &uint,
+        otag: &uint
+      ): #[s: int] #[nrTDs': nat | (s == 0) <==> (nrTDs' > 0)] #[ractive': bool | ractive' == (s == 0)]
          (usb_transfer_status i | status s) =
   let val s = urb_detach_and_free rurb in if s != OK then (usb_transfer_aborted | s) else
     let
@@ -951,30 +933,25 @@ implement smsclan_uip_loop {i} (usbd) = let
       if size > UIP_BUFSIZE
       then (usb_transfer_aborted | EINVALID)
       else let
-        val _ = copy_into_uip_buf (rbuf, size);
+        //val _ = $extfcall (void, "debuglog", 0, 1, "smsclan rx size=%d itag=%d\n", size, itag)
+        var tmp = @[uint][USBNET_BUF_NUM_UINTS](0u)
+        val _ = copy_into_uip_array (view@ tmp | addr@ tmp, rbuf, size);
+        val _ = itag := itag + 1u
+        val _ = array_set_at (tmp, 0, itag)
+        val _ = array_set_at (tmp, 1, otag)
+        val _ = array_set_at (tmp, 2, size)
         val (rxfer_v' | s) = urb_begin_bulk_read (rurb, 1536, rbuf); // begin next read
+        prval _ = lemma_sizeof_buf_t ()
       in
         // process current read
-        if get_uip_buftype () = htons (UIP_ETHTYPE_IP) then begin
-          uip_arp_ipin ();
-          uip_input ();
-          if get_uip_len () > 0 then begin
-            uip_arp_out ();
-            do_one_send (txfer_v | usbd, turb, tbuf)
-          end else ()
-        end else if get_uip_buftype () = htons (UIP_ETHTYPE_ARP) then begin
-          uip_arp_arpin ();
-          if get_uip_len () > 0 then
-            do_one_send (txfer_v | usbd, turb, tbuf)
-          else ()
-        end;
+        fixedslot_writeptr (view@ tmp | ifs, addr@ tmp, g1int2uint USBNET_BUFSIZE);
         (rxfer_v' | s)
       end
     end
   end
 
   // ATS helped sort out the resource alloc & clean-up for these functions
-  fun loop {i, nrTDs, ntTDs: nat | nrTDs > 0} {rl, tl: agz} {tactive: bool} (
+  fun ipc_loop {i, nrTDs, ntTDs: nat | nrTDs > 0} {rl, tl: agz} {tactive: bool} (
         rxfer_v: usb_transfer_status i,
         txfer_v: usb_transfer_status i |
         usbd: !usb_device_vt i,
@@ -982,36 +959,32 @@ implement smsclan_uip_loop {i} (usbd) = let
         turb: !urb_vt (i, ntTDs, tactive) >> urb_vt (i, 0, false),
         rbuf: !usb_mem_vt (rl, USBNET_BUFSIZE),
         tbuf: !usb_mem_vt (tl, USBNET_BUFSIZE),
-        periodic_timer: &uip_timer_t,
-        arp_timer: &uip_timer_t,
+        ifs: !fixedslot >> _,
+        ofs: !fixedslot >> _,
+        itag: &uint,
+        otag: &uint,
         cyc_prev: int
       ): #[s: int | s != 0] status s =
   let
     val s = urb_transfer_chain_active (rxfer_v | rurb)
   in
     if s = OK then begin // No Rx
-      uip_periodic_check (txfer_v | usbd, turb, tbuf, periodic_timer, arp_timer);
-      loop (rxfer_v, txfer_v | usbd, rurb, turb, rbuf, tbuf, periodic_timer, arp_timer, cyc_prev)
+      ipc_loop_body_tx (txfer_v | usbd, turb, tbuf, ofs, otag);
+      ipc_loop (rxfer_v, txfer_v | usbd, rurb, turb, rbuf, tbuf, ifs, ofs, itag, otag, cyc_prev)
     end else // Rx one packet
       let
-        val lbody_start = clock_time ()
-        val cyc_start = $extfcall (int, "arm_read_cycle_counter", ())
         val _ = urb_transfer_completed (rxfer_v | rurb)
-        val (rxfer_v' | s) = loop_body (txfer_v | usbd, rurb, turb, rbuf, tbuf)
-        val lbody_end = clock_time ()
-        val cyc_end = $extfcall (int, "arm_read_cycle_counter", ())
-        val lbody_dur = lbody_end - lbody_start
-        val cyc_dur = cyc_end - cyc_start
-        //val _ = $extfcall (void, "debuglog", 0, 1, "lbody_dur=%d cyc_dur=%d cyc_loop=%d\n", lbody_dur, cyc_dur, cyc_end - cyc_prev)
+        val (rxfer_v' | s) = ipc_loop_body_rx (txfer_v | usbd, rurb, rbuf, ifs, itag, otag)
         val cyc_next = $extfcall (int, "arm_read_cycle_counter", ())
       in
         if s != 0 then s where { val _ = urb_transfer_abort (rxfer_v' | rurb)
                                  val _ = urb_transfer_abort (txfer_v | turb)
                                  val _ = urb_detach_and_free_ rurb
                                  val _ = urb_detach_and_free_ turb }
-        else loop (rxfer_v', txfer_v | usbd, rurb, turb, rbuf, tbuf, periodic_timer, arp_timer, cyc_next)
+        else ipc_loop (rxfer_v', txfer_v | usbd, rurb, turb, rbuf, tbuf, ifs, ofs, itag, otag, cyc_next)
       end
   end
+
 
   var start_loop = lam@ (usbd: !usb_device_vt i, rurb: !urb_vt (i, 0, false)): [s: int] status s =<clo1> let
     var turb: urb0?
@@ -1024,24 +997,52 @@ implement smsclan_uip_loop {i} (usbd) = let
   in if ptrcast txbuf = 0 then ENOSPACE where { prval _ = usb_buf_release_null txbuf
                                                 val   _ = usb_buf_release rxbuf
                                                 val   _ = usb_device_release_urb (usbd, turb) } else let
-    var periodic_timer: uip_timer_t
-    var arp_timer: uip_timer_t
-    val _ = uip_preamble (periodic_timer, arp_timer)
+
+    var ipages: int?
+    val (opt_pf | iipc) = ipcmem_get_view (2, ipages)
+  in if iipc = 0 then EINVALID where { prval None_v () = opt_pf
+                                       val _ = usb_buf_release txbuf // ATS caught error in releasing resource
+                                       val _ = usb_buf_release rxbuf
+                                       val _ = usb_device_release_urb (usbd, turb) } else let
+    prval Some_v pf_ipcmem = opt_pf
+    val ifs = fixedslot_initialize_reader (pf_ipcmem | iipc, ipages)
+    var opages: int?
+    val (opt_pf | oipc) = ipcmem_get_view (3, opages)
+  in if oipc = 0 then EINVALID where { prval None_v () = opt_pf
+                                       val (pf | _) = fixedslot_free ifs
+                                       prval _ = ipcmem_put_view pf
+                                       val _ = usb_buf_release txbuf
+                                       val _ = usb_buf_release rxbuf
+                                       val _ = usb_device_release_urb (usbd, turb) } else let
+    prval Some_v pf_ipcmem = opt_pf
+    val ofs = fixedslot_initialize_writer (pf_ipcmem | oipc, opages)
+
     val (rxfer_v | s) = urb_begin_bulk_read (rurb, 1536, rxbuf)
   in
     if s != OK then
       s where { val _ = urb_transfer_abort (rxfer_v | rurb)
                 val _ = usb_device_detach_and_release_urb_ (usbd, turb)
                 val _ = usb_buf_release rxbuf
-                val _ = usb_buf_release txbuf }
+                val _ = usb_buf_release txbuf
+                val (pf | _) = fixedslot_free ifs
+                prval _ = ipcmem_put_view pf
+                val (pf | _) = fixedslot_free ofs
+                prval _ = ipcmem_put_view pf }
     else let
+      var itag: uint = 0u
+      var otag: uint = 0u
       prval txfer_v = usb_transfer_aborted
-      val s = loop (rxfer_v, txfer_v | usbd, rurb, turb, rxbuf, txbuf, periodic_timer, arp_timer,
-                    $extfcall (int, "arm_read_cycle_counter", ()))
+      val s = ipc_loop (rxfer_v, txfer_v | usbd, rurb, turb, rxbuf, txbuf, ifs, ofs, itag, otag,
+                        $extfcall (int, "arm_read_cycle_counter", ()))
+      val (pf | _) = fixedslot_free ifs
+      prval _ = ipcmem_put_view pf
+
+      val (pf | _) = fixedslot_free ofs
+      prval _ = ipcmem_put_view pf
     in
       usb_buf_release rxbuf; usb_buf_release txbuf; usb_device_detach_and_release_urb_ (usbd, turb); s
     end
-  end end end end
+  end end end end end end
 in
   usb_with_urb (usbd, 1, 512, start_loop)
 end

@@ -48,9 +48,7 @@ extern praxi lemma_sizeof_buf_t (): [sizeof (buf_t) == USBNET_BUFSIZE] void
 // //////////////////////////////////////////////////
 
 extern fun atsmain (): int = "ext#atsmain"
-extern fun uip_loop {i: nat} {l:agz} (
-    pfmac: !(@[uint8][6]) @ l | usbd: !usb_device_vt i, mac: ptr l
-  ): [s: int] status s = "ext#uip_loop"
+extern fun uip_loop (): void = "ext#uip_loop"
 extern fun copy_into_uip_buf {n: nat | n <= UIP_BUFSIZE} (
     & buf_t, uint n
   ): void = "mac#copy_into_uip_buf"
@@ -65,7 +63,7 @@ extern fun do_one_send (
 
 // //////////////////////////////////////////////////
 
-implement atsmain () = 0
+implement atsmain () = begin uip_loop (); 0 end
 
 // //////////////////////////////////////////////////
 
@@ -113,7 +111,7 @@ extern fun get_otag (! fixedslot >> _): uint
 
 implement get_itag (ifs) = fixedslot_readfn<uint> (ifs, f, g1int2uint USBNET_BUFSIZE) where {
   prval _ = lemma_sizeof_buf_t ()
-  var f = lam@ (rbuf: & buf_t): uint =<clo1> 0u
+  var f = lam@ (rbuf: & buf_t): uint =<clo1> array_get_at (rbuf, 0)
 }
 
 //implement get_itag (ifs) = let
@@ -144,22 +142,26 @@ in
   wait_for_otag (ifs, otag);
 
   array_set_at (tbuf, 0, itag);
-  otag := otag + g1int2uint 1;
+  otag := otag + 1u;
   array_set_at (tbuf, 1, otag);
   array_set_at (tbuf, 2, pktlen);
   fixedslot_writeptr (view@ tbuf | ofs, addr@ tbuf, g1int2uint (USBNET_BUFSIZE))
 end
 
-implement uip_loop {i} (pfmac | usbd, mac) = let
+implement uip_loop () = let
   fun uip_preamble (periodic_timer: &uip_timer_t? >> uip_timer_t, arp_timer: &uip_timer_t? >> uip_timer_t): void =
   let
+    var ethaddr: uip_eth_addr_t
     var ipaddr: uip_ipaddr_t
   in
     timer_set (periodic_timer, CLOCK_SECOND / 2);
     timer_set (arp_timer, CLOCK_SECOND * 10);
     uip_init ();
 
-    uip_ipaddr (ipaddr, 10,0,0,3);
+    uip_eth_addr (ethaddr,0x02,0xac,0x6f,0x3a,0x0d,0xdf); // from SMSCLAN, for experiment
+    uip_setethaddr ethaddr;
+
+    uip_ipaddr (ipaddr, 10,0,0,2);
     uip_sethostaddr ipaddr;
     uip_ipaddr (ipaddr, 10,0,0,1);
     uip_setdraddr ipaddr;
@@ -224,6 +226,7 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
       ): void =
     let
       val size = g1ofg0 (array_get_at (rbuf, 2))
+      //val _ = $extfcall (void, "debuglog", 0, 1, "uip rx size=%d\n", size)
     in
       if size > UIP_BUFSIZE
       then ()
@@ -259,7 +262,7 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
         cyc_prev: int
       ): #[s: int | s != 0] status s =
   let
-    var rbuf = @[uint][USBNET_BUF_NUM_UINTS](g0int2uint 0)
+    var rbuf = @[uint][USBNET_BUF_NUM_UINTS](0u)
     val itag' = get_itag ifs
   in
     if itag = itag' then begin // No Rx
@@ -272,8 +275,7 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
         val cyc_start = $extfcall (int, "arm_read_cycle_counter", ())
         prval _ = lemma_sizeof_buf_t () // 'proof' that sizeof (buf_t) = USBNET_BUFSIZE
         val _ = fixedslot_readptr (view@ rbuf | ifs, addr@ rbuf, g1int2uint (USBNET_BUFSIZE))
-        val _ = $extfcall (void, "debuglog", 0, 1, "uip rbuf=%d %d %d\n",
-                                                   array_get_at (rbuf, 0), array_get_at (rbuf, 1), array_get_at (rbuf, 2))
+        //val _ = $extfcall (void, "debuglog", 0, 1, "uip rbuf=%d %d %d\n", array_get_at (rbuf, 0), array_get_at (rbuf, 1), array_get_at (rbuf, 2))
         //val _ = set_itag (ofs, itag) // is this necessary
         val _ = loop_body (ifs, ofs, itag, otag, rbuf)
         val lbody_end = clock_time ()
@@ -304,8 +306,8 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
     var periodic_timer: uip_timer_t
     var arp_timer: uip_timer_t
     val _ = uip_preamble (periodic_timer, arp_timer)
-    var itag: uint = g0int2uint 0
-    var otag: uint = g0int2uint 0
+    var itag: uint = 0u
+    var otag: uint = 0u
 
     val _ = loop (ifs, ofs, itag, otag, periodic_timer, arp_timer, $extfcall (int, "arm_read_cycle_counter", ()))
 
@@ -346,12 +348,9 @@ implement uip_loop {i} (pfmac | usbd, mac) = let
     end
   end end end end
 *)
-  var ethaddr: uip_eth_addr_t
 in
-  uip_eth_addr_array (pfmac | ethaddr, mac);
-  uip_setethaddr ethaddr;
-  OK
-end
+  start_loop ()
+end // end [uip_loop]
 
 
 %{$

@@ -10,5 +10,5 @@ _start: CMP     r13, #0         /* r13==0 iff initial entry */
         LDMIA   r13, {r0-r15}   /* load context, branch to it */
 
         .section .bss
-        .space  4096
+        .space  8192
 _stack:

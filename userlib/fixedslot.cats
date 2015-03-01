@@ -105,7 +105,7 @@ static inline void _set_wfilled (unsigned int *fs, unsigned int wi)
       "ORR %[w], %[w], %[f], LSL #16\n"  /* w |= (f << 16) */
       "STREX %[status], %[w], [%[fs]]\n" /* ... store conditional */
       "CMP %[status], #0\nBNE 1b"
-      :[w] "=r" (w), [status] "=r" (status): [f] "r" (f), [fs] "r" (fs0):"cc"
+      :[w] "=&r" (w), [status] "=&r" (status): [f] "r" (f), [fs] "r" (fs0):"cc"
       );
 }
 
@@ -132,7 +132,7 @@ static inline int _intset_ffz (int s)
       "TST %[s], #8\n"
       "MOVEQ %[i], #3\n"
       "1:"
-      :[i] "=r" (i):[s] "r" (s):"cc");
+      :[i] "=&r" (i):[s] "r" (s):"cc");
   return i;
 }
 
@@ -163,7 +163,7 @@ static inline void _check_previous (unsigned int *fs)
       "STREX %[status], %[w], [%[fs]]\n" /* ...store conditional */
       "CMP %[status], #0\nBNE 1b"
 
-      :[w] "=r" (w), [status] "=r" (status), [t] "=r" (t):[fs] "r" (fs0):"cc"
+      :[w] "=&r" (w), [status] "=&r" (status), [t] "=&r" (t):[fs] "r" (fs0):"cc"
       );
 }
 #endif

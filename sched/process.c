@@ -1170,8 +1170,12 @@ void interpret_ipcmappings(void)
       rl->elt.vstart = (void *) rl->elt.pstart; /* identity map */
 #endif
 
-      DLOG(1, "interpret_ipcmappings: pid=%d frame=%#x address=%#x\n",
-           db->elt.p->pid, db->elt.frame, rl->elt.vstart);
+      DLOG(1, "interpret_ipcmappings: pid=%d frame=%#x address=%#x (%s%s%s%s)\n",
+           db->elt.p->pid, db->elt.frame, rl->elt.vstart,
+           (rl->elt.cache_buf & R_C) ? "C" : "c",
+           (rl->elt.cache_buf & R_B) ? "B" : "b",
+           (rl->elt.shared_ng & R_S) ? "S" : "s",
+           (rl->elt.shared_ng & R_NG) ? "NG" : "ng");
 
       /* *** cheat ***, switch to process and use its mapping */
       process_switch_to(p);

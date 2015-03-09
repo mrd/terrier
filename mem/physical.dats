@@ -83,6 +83,9 @@ in
   else if bitmap_tst (m, byt, bit) then
     // found an allocated page - reset count
     search (n, align, n, curr', @(~1, 0, 0))
+  else if m <> curr'.0 then
+    // cannot have ranges spanning bitmaps - reset count
+    search (n, align, n, curr', @(~1, 0, 0))
   else if count = n && is_aligned (bit, align) then
     // found an unallocated, aligned page - start span
     search (n, align, count - 1, curr', @(m, byt, bit))

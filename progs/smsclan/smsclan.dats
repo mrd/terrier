@@ -39,7 +39,7 @@ typedef ehci_info_t = int
 
 extern fun wait_for_ehci_info (): void = "ext#wait_for_ehci_info"
 implement wait_for_ehci_info (): void = let
-  fun loop (fs: !fixedslot >> _): void = let
+  fun loop (fs: !fixedslotr int >> _): void = let
     val x = fixedslot_read<int> fs
   in
     if x > 0 then () else loop fs
@@ -101,7 +101,7 @@ end // [fun wait_for_ehci_info]
 
 fun test_fixedslot():int = let
   fun do_nothing (): void = do_nothing ()
-  fun loop (fs: !fixedslot >> _, p: int): void = let
+  fun loop (fs: !fixedslotr int >> _, p: int): void = let
     val x = fixedslot_read<int> fs
   in
     if x > 40 then printnum x else

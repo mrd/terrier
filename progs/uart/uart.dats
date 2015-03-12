@@ -26,7 +26,7 @@ typedef uart_ipc_t = @(int,buf_t)
 
 fun test_fixedslot():int = let
   fun do_nothing (): void = do_nothing ()
-  fun loop (fs: !fixedslot >> _, p: int): void = let
+  fun loop (fs: !fixedslotr int >> _, p: int): void = let
     val x = fixedslot_read<int> fs
   in
     if x > 40 then printnum x else

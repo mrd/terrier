@@ -7,18 +7,39 @@ staload "fixedslot.sats"
 infix ==>
 stadef ==> (p: bool, q: bool) = (~p || q)
 
+
+// Helper viewtypedefs
+vtypedef fixedslot__p    (a: t@ype, wr: bool, p: int) = [S, t, f: nat] [rc: int -> int]      fixedslot_vt (a, wr, S, p, t, f, rc)
+vtypedef fixedslot__t    (a: t@ype, wr: bool, t: int) = [S, p, f: nat] [rc: int -> int]      fixedslot_vt (a, wr, S, p, t, f, rc)
+vtypedef fixedslot__f    (a: t@ype, wr: bool, f: int) = [S, p, t: nat] [rc: int -> int]      fixedslot_vt (a, wr, S, p, t, f, rc)
+vtypedef fixedslot__t_f  (a: t@ype, wr: bool, t: int, f: int) = [S, p: nat] [rc: int -> int] fixedslot_vt (a, wr, S, p, t, f, rc)
+vtypedef fixedslot__p_f  (a: t@ype, wr: bool, p: int, f: int) = [S, t: nat] [rc: int -> int] fixedslot_vt (a, wr, S, p, t, f, rc)
+vtypedef fixedslot__rc   (a: t@ype, wr: bool, rc: int -> int) = [S, p, t, f: nat]            fixedslot_vt (a, wr, S, p, t, f, rc)
+vtypedef fixedslot__f_rc (a: t@ype, wr: bool, f: int, rc: int -> int) = [S, p, t: nat]       fixedslot_vt (a, wr, S, p, t, f, rc)
+
+vtypedef rfixedslot (a: t@ype, S: int, p: int, t: int, rc: int -> int) = [f: nat] fixedslot_vt (a, false, S, p, t, f, rc)
+vtypedef wfixedslot (a: t@ype, f: int) = [S, p, t: nat] [rc: int -> int] fixedslot_vt (a, true, S, p, t, f, rc)
+
+// Frequently used post-condition for writer steps:
+// ((p1 == p0 && t1 == t0) || (p1 == t0 && t1 == t0) || (p1 == t0 && t1 == f) || (p1 == f && t1 == f))
+
+vtypedef wfixedslot_post (a: t@ype, p: int, t: int, f: int, rc: int -> int) =
+  [S', p', t': nat | ((p' == p && t' == t) || (p' == t && t' == t) || (p' == t && t' == f) || (p' == f && t' == f))]
+  [rc': int -> int] fixedslot_vt (a, true, S', p', t', f, rc')
+
+
 // --------------------------------------------------
 // reader
 
-extern fun rcount {rc: int -> int} {i: nat} (
-    !fixedslot__rc rc >> fixedslot__rc rc', int i
+extern fun rcount {a: t@ype} {rc: int -> int} {i: nat} (
+    !fixedslot__rc (a, false, rc) >> fixedslot__rc (a, false, rc'), int i
   ): #[rc': int -> int]
       [j: nat | rc' i == j ] int j
   = "mac#_rcount"
 
 // atomic
-extern fun pick_ri {S, p, t, f: nat} {rc: int -> int} (
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f', rc')
+extern fun pick_ri {a: t@ype} {S, p, t, f: nat} {rc: int -> int} (
+    !fixedslot_vt (a, false, S, p, t, f, rc) >> fixedslot_vt (a, false, S', p', t', f', rc')
   ): #[rc': int -> int]
      #[S', p', f', t': nat | ((p == t) ==> (t' == f')) && (S' == S + 1)]
       [ri: int | rc' ri >= 0 && ri == t'] int ri
@@ -28,16 +49,16 @@ absview read_data_v (ri: int) // view to ensure an incremented count is decremen
 
 // thanks to S > 0 I don't have to consider that p' might become equal to t or t'
 // and all the combinations from that
-extern fun incr_rcount {S, p, t, f: nat | S > 0} {rc: int -> int} {ri: int | ri == t} (
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f', rc'), int ri
+extern fun incr_rcount {a: t@ype} {S, p, t, f: nat | S > 0} {rc: int -> int} {ri: int | ri == t} (
+    !fixedslot_vt (a, false, S, p, t, f, rc) >> fixedslot_vt (a, false, S', p', t', f', rc'), int ri
   ): #[S': nat | S' > 0]
      #[p', t', f': nat | (p' == p && t' == t) || (p == t && p' == p && t' == f')]
      #[rc': int -> int | rc' ri == rc ri + 1] (read_data_v ri | void)
   = "mac#_incr_rcount"
 
-extern fun decr_S {S, p, t, f: nat | S > 0} {rc: int -> int} {ri: int | ri == p || ri == t} (
+extern fun decr_S {a: t@ype} {S, p, t, f: nat | S > 0} {rc: int -> int} {ri: int | ri == p || ri == t} (
     !read_data_v ri |
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f', rc')
+    !fixedslot_vt (a, false, S, p, t, f, rc) >> fixedslot_vt (a, false, S', p', t', f', rc')
   ): #[S': nat | S' == S - 1]
      #[p', t', f': nat | (p' == p && t' == t) || (p == t && p' == p && t' == f')]
      #[rc': int -> int | rc' ri >= rc ri ] void
@@ -45,24 +66,24 @@ extern fun decr_S {S, p, t, f: nat | S > 0} {rc: int -> int} {ri: int | ri == p 
 
 extern fun read_data {a: t@ype} {rc: int -> int} {S, p, t, f, ri: nat | rc ri > 0 && (ri == p || ri == t)} (
     !read_data_v ri |
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot__rc rc', int ri, &a? >> a, size_t (sizeof a)
+    !fixedslot_vt (a, false, S, p, t, f, rc) >> fixedslot__rc (a, false, rc'), int ri, &a? >> a, size_t (sizeof a)
   ): #[rc': int -> int | rc' ri >= rc ri] void
   = "mac#_read_data"
 
 extern fun read_data_ptr {a: t@ype} {l: agz} {rc: int -> int} {S, p, t, f, ri: nat | rc ri > 0 && (ri == p || ri == t)} (
     !a @ l,
     !read_data_v ri |
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot__rc rc', int ri, ptr l, size_t (sizeof a)
+    !fixedslot_vt (a, false, S, p, t, f, rc) >> fixedslot__rc (a, false, rc'), int ri, ptr l, size_t (sizeof a)
   ): #[rc': int -> int | rc' ri >= rc ri] void
   = "mac#_read_data"
 
-extern fun decr_rcount {i: int} {rc: int -> int | rc i > 0} (
-    read_data_v i | !fixedslot__rc rc >> fixedslot__rc rc', int i
+extern fun decr_rcount {a: t@ype} {i: int} {rc: int -> int | rc i > 0} (
+    read_data_v i | !fixedslot__rc (a, false, rc) >> fixedslot__rc (a, false, rc'), int i
   ): #[rc': int -> int | rc' i == rc i - 1 ] void
   = "mac#_decr_rcount"
 
-extern fun check_previous {S, p, t, f: nat} {rc: int -> int} (
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f', rc')
+extern fun check_previous {a: t@ype} {S, p, t, f: nat} {rc: int -> int} (
+    !fixedslot_vt (a, false, S, p, t, f, rc) >> fixedslot_vt (a, false, S', p', t', f', rc')
   ): #[S', p', t', f': nat]
      #[rc': int -> int] void
   = "mac#_check_previous"
@@ -100,25 +121,25 @@ implement fixedslot_readptr (pf | fs, p, len) = () where {
 // --------------------------------------------------
 // writer
 
-extern fun set_wfilled {f, f': nat} (!wfixedslot f >> wfixedslot f', int f'): void
+extern fun set_wfilled {a: t@ype} {f, f': nat} (!wfixedslot (a, f) >> wfixedslot (a, f'), int f'): void
   = "mac#_set_wfilled"
 extern fun write_data {a: t@ype} {S, p, t, f: nat} {rc: int -> int}
                       {wi: nat | wi <> p && wi <> f && wi <> t} (  // can we prove rc wi == 0 ? (is it needed?)
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f, rc'),
+    !fixedslot_vt (a, true, S, p, t, f, rc) >> fixedslot_vt (a, true, S', p', t', f, rc'),
     int wi, a, size_t (sizeof a)
   ): #[S', p', t': nat] #[rc': int -> int] void
   = "mac#_write_data"
 extern fun write_data_ptr {a: t@ype} {S, p, t, f: nat} {rc: int -> int} {l: agz}
                           {wi: nat | wi <> p && wi <> f && wi <> t} (
     !a @ l |
-    !fixedslot_vt (S, p, t, f, rc) >> fixedslot_vt (S', p', t', f, rc'),
+    !fixedslot_vt (a, true, S, p, t, f, rc) >> fixedslot_vt (a, true, S', p', t', f, rc'),
     int wi, ptr l, size_t (sizeof a)
   ): #[S', p', t': nat] #[rc': int -> int] void
   = "mac#_write_data_ptr"
 
 // requires splitting up an atomic word into three component parts
-extern fun get_triple {S, p, t, f: nat} {rc: int -> int} (
-    !fixedslot_vt (S, p, t, f, rc) >> wfixedslot_post (p, t, f, rc), &int? >> int p, &int? >> int t, &int? >> int f
+extern fun get_triple {a: t@ype} {S, p, t, f: nat} {rc: int -> int} (
+    !fixedslot_vt (a, true, S, p, t, f, rc) >> wfixedslot_post (a, p, t, f, rc), &int? >> int p, &int? >> int t, &int? >> int f
   ): void
   = "mac#_get_triple"
 
@@ -150,8 +171,8 @@ prfun in_set_ne_not_in_set {x, y: int} {s: set} .<s>. (pf1: in_set (x, s), pf2: 
   | (in_set_cons pf1', not_in_set_cons pf2') => in_set_ne_not_in_set (pf1', pf2')
 
 // Pick value of $w_i\geq 0$ with proven property that $w_i \not\in \{p, t, f\}$.
-extern fun pick_wi {S, p, t, f: nat} {rc: int -> int} (
-    !fixedslot_vt (S, p, t, f, rc) >> wfixedslot_post (p, t, f, rc)
+extern fun pick_wi {a: t@ype} {S, p, t, f: nat} {rc: int -> int} (
+    !fixedslot_vt (a, true, S, p, t, f, rc) >> wfixedslot_post (a, p, t, f, rc)
   ): #[wi: nat | wi <> p && wi <> f && wi <> t]
      int wi
 implement pick_wi (fs) = wi where {

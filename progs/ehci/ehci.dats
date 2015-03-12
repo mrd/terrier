@@ -77,7 +77,7 @@ in
   if ms > 0 then let
       prval Some_v pf_ipcmem = opt_pf
       val fs = fixedslot_initialize_writer (pf_ipcmem | ms, pages)
-      fun loop (fs: !fixedslot >> _, n: int): void = if n = 43 then () else loop (fs, n + 1) where {
+      fun loop (fs: !fixedslotw int >> _, n: int): void = if n = 43 then () else loop (fs, n + 1) where {
         val _  = fixedslot_write<int> (fs, n)
       }
       val _ = loop (fs, 0)

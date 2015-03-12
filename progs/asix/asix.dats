@@ -131,7 +131,7 @@ fun{a:vt0p} sizeofGEZ (): [s: nat] int s = $UN.cast{intGte(0)}(g1ofg0 (sizeof<a>
 
 extern fun wait_for_ehci_info (): void = "ext#wait_for_ehci_info"
 implement wait_for_ehci_info (): void = let
-  fun loop (fs: !fixedslot >> _): void = let
+  fun loop (fs: !fixedslotr int >> _): void = let
     val x = fixedslot_read<int> fs
   in
     if x > 0 then () else loop fs

@@ -21,7 +21,7 @@ unsigned int _scheduler_period = 20 << 1;
 unsigned int _scheduler_affinity = 2;
 
 ipcmapping_t _ipcmappings[] = {
-  { IPC_SEEK, "ehci_info", IPC_READ, "multireader", 1, NULL },
+  { IPC_SEEK, "ehci_info", IPC_READ, "fixedslot", 1, NULL },
   { IPC_SEEK, "ehci_usbdevices", IPC_READ | IPC_WRITE | IPC_DEVICEMEM, "usbdevices", 1, NULL },
   {0}
 };

@@ -966,7 +966,7 @@ int main(void)
     svc3("0NULL\n", 7, 0);
 
   DLOG(1, "asix ****************** wait_for_ehci_info\n");
-  wait_for_ehci_info2 ();
+  wait_for_ehci_info ();
 
   //while(*((volatile u32 *) (_ipcmappings[1].address)) == 0)   ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));
   //while(__atomic_load_n((u32 *) _ipcmappings[1].address, __ATOMIC_SEQ_CST) == 0) ASM("MCR p15, #0, %0, c7, c14, #1"::"r"((_ipcmappings[1].address) ));

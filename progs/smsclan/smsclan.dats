@@ -1112,7 +1112,7 @@ int main(void)
 #endif
 
   DLOG(1, "smsclan ****************** wait_for_ehci_info\n");
-  wait_for_ehci_info2 ();
+  wait_for_ehci_info ();
 
   usb_device_t *usbd = (usb_device_t *) _ipcmappings[1].address;
   DLOG(1, "smsclan ****************** &usbdevices[0]=%#x\n", &usbd[0]);

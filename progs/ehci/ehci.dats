@@ -77,11 +77,11 @@ in
   if ms > 0 then let
       prval Some_v pf_ipcmem = opt_pf
       val fs = fixedslot_initialize_writer (pf_ipcmem | ms, pages)
+      val _ = $extfcall (void, "debuglog", 0, 1, "setting ehci_info > 0\n")
       fun loop (fs: !fixedslotw int >> _, n: int): void = if n = 43 then () else loop (fs, n + 1) where {
         val _  = fixedslot_write<int> (fs, n)
       }
       val _ = loop (fs, 0)
-      val _ = do_nothing ()
       val (pf_ipcmem | ms) = fixedslot_free fs
       prval _              = ipcmem_put_view pf_ipcmem
   in 0 end else 1 where {
@@ -122,6 +122,12 @@ in
     }
 end
 
+implement atsmain () = begin
+  hsusbhc_init ();
+  test_fixedslot () // really, indicates ready-to-go on ehci_info
+end
+
+(*
 implement atsmain () = let
   var pages: int?
   val (opt_pf | uart) = ipcmem_get_view (0, pages)
@@ -131,10 +137,10 @@ in
       prval Some_v pf_ipcmem = opt_pf
       val s = fourslot2w_init<int,uart_ipc_t> (pf_ipcmem | uart, pages, A)
     in
-      if s = 0 then test_multireader () where {
+      if s = 0 then test_fixedslot () where {
         prval Right_v pf_uart = pf_ipcmem
 
-        (* ... *)
+
         var utoken = get_uart_token_vt ()
         //val _ = write_string_uart (pf_uart | utoken, uart, "a")
         //val _ = write_string_uart (pf_uart | utoken, uart, "b")
@@ -163,13 +169,15 @@ in
     val _           = do_nothing ()
   }
 end // [atsmain]
-
+*)
 
 %{$
 
 int main(void)
 {
-  return atsmain();
+  atsmain();
+  for (;;);
+  return 0;
 }
 
 %}

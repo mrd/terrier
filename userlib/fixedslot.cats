@@ -95,6 +95,8 @@ static inline void _read_data(fixedslot_t fs, unsigned int ri, void *dest, unsig
   memcpy (dest, ((void *) fs.p) + CACHE_LINE_SIZE + (ri * size), size);
 }
 
+#define _takeout_read_data_ptr(fs,ri,size) (((void *) (fs).p) + CACHE_LINE_SIZE + ((ri) * (size)))
+
 static inline void _get_triple (fixedslot_t fs, int *p, int *t, int *f)
 {
   u32 w = __atomic_load_n(&fs.p[0], __ATOMIC_MODEL);

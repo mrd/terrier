@@ -24,29 +24,21 @@ fun{a:t@ype} fourslot_write {l:addr} {n: nat} (pf_fs: !fourslot_v (l, n, a, true
 (* ************************************************** *)
 
 fun{a:t@ype} fourslot_ipc_writer_init {l:addr | l > null} {pages: nat} (
-    pf: ipcmem_v (l, pages) | p: ptr l, pages: int pages
-  ): [s:int] (option_v (fourslot_v (l, pages, a, true), s == 0) | status s)
-
-fun{a:t@ype} fourslot_ipc_writer_init2 {l:addr | l > null} {pages: nat} (
     pf: !ipcmem_v (l, pages) >> either_v (ipcmem_v (l, pages), fourslot_v (l, pages, a, true), s == 0) |
     p: ptr l, pages: int pages
   ): #[s:int] status s
 
-fun fourslot_ipc_writer_init_c {a:t@ype} {l:addr | l > null} {pages: nat} (
-    pf: ipcmem_v (l, pages) | p: ptr l, pages: int pages, elsz: size_t (sizeof a)
-  ): [s:int] (option_v (fourslot_v (l, pages, a, true), s == 0) | status s)
-  = "mac#_fourslot_ipc_writer_init_c"
+fun{a:t@ype} fourslot_ipc_reader_init {l:addr | l > null} {pages: nat} (
+    pf: !ipcmem_v (l, pages) >> either_v (ipcmem_v (l, pages), fourslot_v (l, pages, a, false), s == 0) |
+    p: ptr l, pages: int pages
+  ): #[s:int] status s
+  = "mac#_fourslot_ipc_reader_init_c"
 
-fun fourslot_ipc_writer_init2_c {a:t@ype} {l:addr | l > null} {pages, e: nat | e == sizeof a} (
+fun fourslot_ipc_writer_init_c {a:t@ype} {l:addr | l > null} {pages: nat} {e: int | e == sizeof a} (
     pf: !ipcmem_v (l, pages) >> either_v (ipcmem_v (l, pages), fourslot_v (l, pages, a, true), s == 0) |
     p: ptr l, pages: int pages, elsz: size_t e
   ): #[s:int] status s
   = "mac#_fourslot_ipc_writer_init_c"
-
-fun fourslot_ipc_reader_init {a:t@ype} {l:addr | l > null} {pages: nat} (
-    pf: ipcmem_v (l, pages) | p: ptr l, pages: int pages
-  ): [s:int] (option_v (fourslot_v (l, pages, a, false), s == 0) | status s)
-  = "mac#_fourslot_ipc_reader_init_c"
 
 
 (*

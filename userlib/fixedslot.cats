@@ -12,16 +12,22 @@
 #define CACHE_LINE_SIZE (1<<CACHE_LINE_SIZE_LOG2)
 #define __ATOMIC_MODEL __ATOMIC_SEQ_CST
 
+// layout of fixedslot region in IPC memory:
+// [status word], [rcount0] ... [rcount3], ... cache line offset ..., [data]
+
 // fs status word: p=2 bits, t=2 bits, f=2 bits, S=16 least significant bits
 // data starts at cache-line-size offset
 // probably should separate slots into separate cache lines too
 
-static inline int _pick_ri (unsigned int *fs)
+struct fixedslot { u32 *p; };
+typedef struct fixedslot fixedslot_t;
+
+static inline int _pick_ri (fixedslot_t fs)
 {
   /* incr S
    * if(p == t) t <- f
    * ri <- t */
-  register int w, status, fs0 = (int) fs;
+  register int w, status, fs0 = (int) fs.p;
   register int t, p, f;
   ASM("1: LDREX %[w], [%[fs]]\n"        /* load link... */
       "AND %[t], %[w], #3 << 18\n"      /* t = w & (3 << 18) */
@@ -43,26 +49,26 @@ static inline int _pick_ri (unsigned int *fs)
 }
 
 /* rcount comes after the first word */
-static inline void _incr_rcount (unsigned int *fs, int i)
+static inline void _incr_rcount (fixedslot_t fs, int i)
 {
-  __atomic_add_fetch (&fs[1 + i], 1, __ATOMIC_MODEL);
+  __atomic_add_fetch (&fs.p[1 + i], 1, __ATOMIC_MODEL);
 }
 
-static inline void _decr_rcount (unsigned int *fs, int i)
+static inline void _decr_rcount (fixedslot_t fs, int i)
 {
-  __atomic_sub_fetch (&fs[1 + i], 1, __ATOMIC_MODEL);
+  __atomic_sub_fetch (&fs.p[1 + i], 1, __ATOMIC_MODEL);
 }
 
-static inline void _decr_S (unsigned int *fs)
+static inline void _decr_S (fixedslot_t fs)
 {
-  __atomic_sub_fetch (&fs[0], 1, __ATOMIC_MODEL);
+  __atomic_sub_fetch (&fs.p[0], 1, __ATOMIC_MODEL);
 }
 
-static inline void _check_previous (unsigned int *fs)
+static inline void _check_previous (fixedslot_t fs)
 {
   /* if (S == 0 && rcount[p] == 0) p = t; else p = p; */
 
-  register int w, rc, status, fs0 = (int) fs;
+  register int w, rc, status, fs0 = (int) fs.p;
   register int p, t;
 
   ASM("1: LDREX %[w], [%[fs]]\n"        /* load link... */
@@ -84,22 +90,22 @@ static inline void _check_previous (unsigned int *fs)
       );
 }
 
-static inline void _read_data(void *fs, unsigned int ri, void *dest, unsigned int size)
+static inline void _read_data(fixedslot_t fs, unsigned int ri, void *dest, unsigned int size)
 {
-  memcpy (dest, fs + CACHE_LINE_SIZE + (ri * size), size);
+  memcpy (dest, ((void *) fs.p) + CACHE_LINE_SIZE + (ri * size), size);
 }
 
-static inline void _get_triple (unsigned int *fs, int *p, int *t, int *f)
+static inline void _get_triple (fixedslot_t fs, int *p, int *t, int *f)
 {
-  u32 w = __atomic_load_n(&fs[0], __ATOMIC_MODEL);
+  u32 w = __atomic_load_n(&fs.p[0], __ATOMIC_MODEL);
   *p = GETBITS(w,20,2);
   *t = GETBITS(w,18,2);
   *f = GETBITS(w,16,2);
 }
 
-static inline void _set_wfilled (unsigned int *fs, unsigned int wi)
+static inline void _set_wfilled (fixedslot_t fs, unsigned int wi)
 {
-  register int w, status, fs0 = (int) fs, f = wi & 3;
+  register int w, status, fs0 = (int) fs.p, f = wi & 3;
   ASM("1: LDREX %[w], [%[fs]]\n"       /* load link ... */
       "BIC %[w], %[w], #3 << 16\n"     /* clear bits 16:17 */
       "ORR %[w], %[w], %[f], LSL #16\n"  /* w |= (f << 16) */
@@ -111,11 +117,11 @@ static inline void _set_wfilled (unsigned int *fs, unsigned int wi)
 
 #define _write_data(fs, wi, src, size)                          \
   {                                                             \
-    memcpy (((void *) fs) + CACHE_LINE_SIZE + (wi * size), &src, size); \
+    memcpy (((void *) fs.p) + CACHE_LINE_SIZE + (wi * size), &src, size); \
   }
 #define _write_data_ptr(fs, wi, src, size)                      \
   {                                                             \
-    memcpy (((void *) fs) + CACHE_LINE_SIZE + (wi * size), src, size);  \
+    memcpy (((void *) fs.p) + CACHE_LINE_SIZE + (wi * size), src, size);  \
   }
 
 static inline int _intset_nil (void) { return 0; }
@@ -136,21 +142,21 @@ static inline int _intset_ffz (int s)
   return i;
 }
 
-#define _fixedslot_initialize_reader(x,n) x
-#define _fixedslot_initialize_writer(x,n) x
-#define _fixedslot_free(x) x
+#define _fixedslot_initialize_reader(x,n) ((struct fixedslot) { .p = x })
+#define _fixedslot_initialize_writer(x,n) ((struct fixedslot) { .p = x })
+#define _fixedslot_free(fs) (fs).p
 
 #if 0
-static inline void _check_previous (unsigned int *fs)
+static inline void _check_previous (fixedslot_t fs)
 {
   /* if (S == 0 && rcount[p] == 0) p = t; else p = p; */
 
-  register int t, w, status, fs0 = (int) fs;
+  register int t, w, status, fs0 = (int) fs.p;
 
   /* FIXME: verify this */
-  { u32 w = __atomic_load_n(&fs[0], __ATOMIC_MODEL);
+  { u32 w = __atomic_load_n(&fs.p[0], __ATOMIC_MODEL);
     u32 p = GETBITS(w,20,2);
-    u32 rc_p = __atomic_load_n (&fs[1 + p], __ATOMIC_MODEL);
+    u32 rc_p = __atomic_load_n (&fs.p[1 + p], __ATOMIC_MODEL);
     if (rc_p != 0) return;
   }
 

@@ -10,7 +10,7 @@ staload "ipcmem.sats"
 
 // Primary abstract viewtype definition
 // (datatype, writer?, S-value, previous, target, freshest, rcount)
-absvtype fixedslot_vt (a: t@ype, wr: bool, S: int, p: int, t: int, f: int, rc: int -> int) = ptr
+absvtype fixedslot_vt (a: t@ype, wr: bool, S: int, p: int, t: int, f: int, rc: int -> int) = $extype "struct fixedslot"
 
 // Common shortcuts
 vtypedef fixedslot (a: t@ype, wr: bool) = [S, p, t, f: nat] [rc: int -> int] fixedslot_vt (a, wr, S, p, t, f, rc)

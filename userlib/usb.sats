@@ -47,10 +47,10 @@ overload ptrcast with usb_mem_ptr2ptr
 //fun usb_mem_vt_split {l: addr} {n: int} (usb_mem_vt (l,n)): (usb_mem_v (l,n) | ptr l)
 //fun usb_mem_vt_unsplit {l: addr} {n: int} (usb_mem_v (l,n) | ptr l): usb_mem_vt (l,n)
 
-stadef USB_BUF_SIZE = 4096
-fun usb_buf_alloc {n: nat | n < USB_BUF_SIZE} (int n): [l: agez] usb_mem_vt (l, n) = "mac#usb_buf_alloc"
+stadef USB_BUF_MAX_SIZE = 4096
+fun usb_buf_alloc {n: nat | n <= USB_BUF_MAX_SIZE} (int n): [l: agez] usb_mem_vt (l, n) = "mac#usb_buf_alloc"
 fun usb_buf_release {l: agz} {n: int} (usb_mem_vt (l, n)): void = "mac#usb_buf_release"
-prfun usb_buf_release_null {a: t@ype} {n: int} (usb_mem_vt (null, n)): void
+prfun usb_buf_release_null {n: int} (usb_mem_vt (null, n)): void
 fun usb_buf_takeout {a: t@ype} {l: agz} {n: nat | sizeof a <= n} (
     usb_mem_vt (l, n)
   ): (a @ l, a @ l -<lin,prf> usb_mem_vt (l, n) | ptr l) = "mac#usb_buf_takeout"

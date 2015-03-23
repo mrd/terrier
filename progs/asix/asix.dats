@@ -240,7 +240,7 @@ fun{a:t@ype} asix_write_cmd {i, n: nat} {l: agz} (
     usbd: !usb_device_vt (i), cmd: uint, wValue: int, wIndex: int, count: int n, data: ptr l
   ): [s: int] status s =
 let
-  val wLength = $UN.cast{natLt USB_BUF_SIZE}(sizeofGEZ<a>() * count)
+  val wLength = $UN.cast{natLt USB_BUF_MAX_SIZE}(sizeofGEZ<a>() * count)
   val buf = usb_buf_alloc (wLength)
 in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf } else
 let
@@ -274,7 +274,7 @@ fun{a:t@ype} asix_read_cmd {i, n: nat} {l: agz} (
     usbd: !usb_device_vt (i), cmd: uint, wValue: int, wIndex: int, count: int n, data: ptr l
   ): [s: int] status s =
 let
-  val wLength = $UN.cast{natLt USB_BUF_SIZE}(sizeofGEZ<a>() * count)
+  val wLength = $UN.cast{natLt USB_BUF_MAX_SIZE}(sizeofGEZ<a>() * count)
   val buf = usb_buf_alloc wLength
 in if ptrcast buf = 0 then ENOSPACE where { prval _ = usb_buf_release_null buf } else
 let
